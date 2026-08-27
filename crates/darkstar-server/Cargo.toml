@@ -1,0 +1,9 @@
+[package]
+name = "darkstar-server"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+darkstar-core = { path = "../darkstar-core" }
+serde_json.workspace = true
