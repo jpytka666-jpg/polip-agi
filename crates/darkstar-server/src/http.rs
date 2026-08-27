@@ -16,14 +16,19 @@
 //! GITHUB METADATA: jpytka666-jpg/polip-agi, branch Darkstar
 //! ==========================================
 
-use std::{collections::HashMap, env, sync::Arc, time::{SystemTime, UNIX_EPOCH}};
+use std::{
+    collections::HashMap,
+    env,
+    sync::Arc,
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 use axum::{
+    Json, Router,
     extract::State,
-    http::{header::AUTHORIZATION, HeaderMap, StatusCode},
+    http::{HeaderMap, StatusCode, header::AUTHORIZATION},
     response::IntoResponse,
     routing::{get, post},
-    Json, Router,
 };
 use darkstar_core::session::{Principal, Session};
 use serde::Serialize;
@@ -72,9 +77,15 @@ pub struct CreateSessionRequest {
     pub capabilities: Vec<String>,
 }
 
-fn default_principal_kind() -> String { "agent".into() }
-fn default_owner_id() -> String { "unknown".into() }
-fn default_source() -> String { "remote".into() }
+fn default_principal_kind() -> String {
+    "agent".into()
+}
+fn default_owner_id() -> String {
+    "unknown".into()
+}
+fn default_source() -> String {
+    "remote".into()
+}
 
 fn now_unix_ms() -> i64 {
     SystemTime::now()
@@ -113,9 +124,12 @@ async fn create_session(
     Json(request): Json<CreateSessionRequest>,
 ) -> impl IntoResponse {
     if !authenticated(&state, &headers) {
-        return (StatusCode::UNAUTHORIZED, Json(serde_json::json!({
-            "error": "authentication_required"
-        })));
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(serde_json::json!({
+                "error": "authentication_required"
+            })),
+        );
     }
 
     let now = now_unix_ms();
@@ -133,9 +147,16 @@ async fn create_session(
     };
 
     let session_id = session.session_id;
-    state.sessions.write().await.insert(session_id, session.clone());
+    state
+        .sessions
+        .write()
+        .await
+        .insert(session_id, session.clone());
 
-    (StatusCode::CREATED, Json(serde_json::json!({ "session": session })))
+    (
+        StatusCode::CREATED,
+        Json(serde_json::json!({ "session": session })),
+    )
 }
 
 fn authenticated(state: &AppState, headers: &HeaderMap) -> bool {
@@ -143,11 +164,16 @@ fn authenticated(state: &AppState, headers: &HeaderMap) -> bool {
         return false;
     };
 
-    let Some(value) = headers.get(AUTHORIZATION).and_then(|value| value.to_str().ok()) else {
+    let Some(value) = headers
+        .get(AUTHORIZATION)
+        .and_then(|value| value.to_str().ok())
+    else {
         return false;
     };
 
-    value.strip_prefix("Bearer ").is_some_and(|token| token == expected)
+    value
+        .strip_prefix("Bearer ")
+        .is_some_and(|token| token == expected)
 }
 
 #[cfg(test)]
@@ -166,7 +192,12 @@ mod tests {
     #[tokio::test]
     async fn health_is_public() {
         let response = router(test_state("secret"))
-            .oneshot(Request::builder().uri("/health").body(Body::empty()).unwrap())
+            .oneshot(
+                Request::builder()
+                    .uri("/health")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::OK);
@@ -197,7 +228,9 @@ mod tests {
                     .uri("/v1/sessions")
                     .header("authorization", "Bearer secret")
                     .header("content-type", "application/json")
-                    .body(Body::from(r#"{"principal_id":"agent-1","capabilities":["github.read"]}"#))
+                    .body(Body::from(
+                        r#"{"principal_id":"agent-1","capabilities":["github.read"]}"#,
+                    ))
                     .unwrap(),
             )
             .await
