@@ -21,6 +21,7 @@ pub mod event;
 pub mod plugin;
 pub mod plugin_host;
 pub mod policy;
+pub mod registry;
 pub mod session;
 pub mod stdio;
 
