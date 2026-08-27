@@ -16,6 +16,7 @@
 //! GITHUB METADATA: jpytka666-jpg/polip-agi, branch feat/darkstar-system-graph
 //! ==========================================
 
+#[path = "run_stream.rs"]
 mod run_stream;
 #[path = "system_graph_view.rs"]
 mod system_graph_view;
@@ -30,7 +31,7 @@ use std::{
 use axum::{
     Json, Router,
     extract::{Path, State},
-    http::{HeaderMap, StatusCode, header::AUTHORIZATION},
+    http::{header::AUTHORIZATION, HeaderMap, StatusCode},
     response::{Html, IntoResponse, Sse, sse::Event},
     routing::{get, post},
 };
@@ -145,17 +146,22 @@ async fn system_graph_page() -> Html<&'static str> {
     Html(system_graph_view::SYSTEM_GRAPH_HTML)
 }
 
-async fn system_graph_json(State(state): State<AppState>, headers: HeaderMap) -> impl IntoResponse {
+async fn system_graph_json(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> impl IntoResponse {
     if !authenticated(&state, &headers) {
         return (
             StatusCode::UNAUTHORIZED,
-            Json(serde_json::json!({"error": "authentication_required"})),
-        );
+            Json(serde_json::json!({ "error": "authentication_required" })),
+        )
+            .into_response();
     }
     (
         StatusCode::OK,
-        Json(darkstar_core::system_graph::current_snapshot()),
+        Json(serde_json::json!(darkstar_core::system_graph::current_snapshot())),
     )
+        .into_response()
 }
 
 async fn start_demo_run(
@@ -166,8 +172,9 @@ async fn start_demo_run(
     if !authenticated(&state, &headers) {
         return (
             StatusCode::UNAUTHORIZED,
-            Json(serde_json::json!({"error": "authentication_required"})),
-        );
+            Json(serde_json::json!({ "error": "authentication_required" })),
+        )
+            .into_response();
     }
 
     let run_id = request.run_id;
@@ -239,6 +246,7 @@ async fn start_demo_run(
             status: "started",
         }),
     )
+        .into_response()
 }
 
 async fn run_events(
@@ -249,7 +257,7 @@ async fn run_events(
     if !authenticated(&state, &headers) {
         return (
             StatusCode::UNAUTHORIZED,
-            Json(serde_json::json!({"error": "authentication_required"})),
+            Json(serde_json::json!({ "error": "authentication_required" })),
         )
             .into_response();
     }
@@ -276,7 +284,7 @@ async fn create_session(
     if !authenticated(&state, &headers) {
         return (
             StatusCode::UNAUTHORIZED,
-            Json(serde_json::json!({"error": "authentication_required"})),
+            Json(serde_json::json!({ "error": "authentication_required" })),
         );
     }
     let now = now_unix_ms();
