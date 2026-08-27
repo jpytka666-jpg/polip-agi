@@ -6,7 +6,7 @@
 //! AI MODEL: GPT-5.6 Luna
 //! TIMESTAMP: 2026-08-27 21:30:00
 //! REASON FOR CREATION: Provide the first real plug-and-play transport for external plugin processes.
-//! MECHANICS: Spawn one child process, send one JSON request line to stdin, read one JSON result line from stdout, and reject malformed protocol responses.
+//! MECHANICS: Spawn one child process, write one JSON request line to stdin, close stdin, read one JSON result line from stdout, and reject malformed protocol responses.
 //! SYSTEM PART: Darkstar Core / Plugin Transport
 //! ARCHITECTURE FUNCTION: Allow Rust, Python, C, C++, PowerShell and other executable runtimes to implement the same plugin contract without linking into Darkstar.
 //! DEPENDENCIES/LINKS: crate::plugin, crate::plugin_host, serde_json; OS process stdin/stdout.
@@ -16,9 +16,13 @@
 //! GITHUB METADATA: jpytka666-jpg/polip-agi, branch Darkstar
 //! ==========================================
 
+use std::io::Write;
 use std::process::{Command, Stdio};
 
-use crate::{plugin::{PluginManifest, PluginRequest, PluginResult}, plugin_host::{PluginAdapter, PluginHostError, TransportKind}};
+use crate::{
+    plugin::{PluginManifest, PluginRequest, PluginResult},
+    plugin_host::{PluginAdapter, PluginHostError, TransportKind},
+};
 
 pub struct StdioPluginAdapter {
     manifest: PluginManifest,
@@ -49,13 +53,22 @@ impl PluginAdapter for StdioPluginAdapter {
         let input = serde_json::to_string(&request)
             .map_err(|error| PluginHostError::Protocol(format!("encode request: {error}")))?;
 
-        let output = Command::new(&self.program)
+        let mut child = Command::new(&self.program)
             .args(&self.args)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
-            .output()
+            .spawn()
             .map_err(|error| PluginHostError::Unavailable(format!("spawn plugin: {error}")))?;
+
+        if let Some(mut stdin) = child.stdin.take() {
+            writeln!(stdin, "{input}")
+                .map_err(|error| PluginHostError::Unavailable(format!("write plugin stdin: {error}")))?;
+        }
+
+        let output = child
+            .wait_with_output()
+            .map_err(|error| PluginHostError::Unavailable(format!("wait for plugin: {error}")))?;
 
         if !output.status.success() {
             return Err(PluginHostError::Rejected(
