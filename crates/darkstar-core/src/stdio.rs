@@ -62,8 +62,9 @@ impl PluginAdapter for StdioPluginAdapter {
             .map_err(|error| PluginHostError::Unavailable(format!("spawn plugin: {error}")))?;
 
         if let Some(mut stdin) = child.stdin.take() {
-            writeln!(stdin, "{input}")
-                .map_err(|error| PluginHostError::Unavailable(format!("write plugin stdin: {error}")))?;
+            writeln!(stdin, "{input}").map_err(|error| {
+                PluginHostError::Unavailable(format!("write plugin stdin: {error}"))
+            })?;
         }
 
         let output = child
@@ -76,8 +77,9 @@ impl PluginAdapter for StdioPluginAdapter {
             ));
         }
 
-        let response_line = String::from_utf8(output.stdout)
-            .map_err(|error| PluginHostError::Protocol(format!("plugin stdout is not UTF-8: {error}")))?;
+        let response_line = String::from_utf8(output.stdout).map_err(|error| {
+            PluginHostError::Protocol(format!("plugin stdout is not UTF-8: {error}"))
+        })?;
         let response_line = response_line.lines().next().unwrap_or_default();
 
         serde_json::from_str(response_line)
@@ -137,7 +139,9 @@ mod tests {
             input: serde_json::json!({"message": "hello darkstar"}),
         };
 
-        let result = adapter.invoke(request.clone()).expect("python plugin result");
+        let result = adapter
+            .invoke(request.clone())
+            .expect("python plugin result");
         assert_eq!(result.request_id, request.request_id);
         assert!(result.success);
         assert_eq!(result.output["echo"]["message"], "hello darkstar");
