@@ -4,16 +4,16 @@
 //! ==========================================
 //! AUTHOR: M. SZUL
 //! AI MODEL: GPT-5.6 Luna
-//! TIMESTAMP: 2026-08-27 20:54:30
+//! TIMESTAMP: 2026-08-27 22:20:00
 //! REASON FOR CREATION: Establish the stable Rust control-plane contract for Darkstar.
-//! MECHANICS: Re-exports versioned domain contracts for sessions, plugins, events, policy, audit, discovery, capability indexing and external plugin transports.
+//! MECHANICS: Re-exports versioned domain contracts for sessions, plugins, events, policy, audit, discovery, capability indexing, system graph projection and external plugin transports.
 //! SYSTEM PART: Darkstar Core
 //! ARCHITECTURE FUNCTION: Model-agnostic control-plane foundation shared by all transports, plugins and workflows.
 //! DEPENDENCIES/LINKS: serde, serde_json, uuid, thiserror, tracing; consumed by Darkstar server and adapters.
 //! TECH STACK: Rust 2024; selected for memory safety, concurrency and a stable infrastructure core.
 //! LOCAL WORKSPACE: N/A - GitHub-first workspace.
 //! GIT COMMIT: PENDING
-//! GITHUB METADATA: jpytka666-jpg/polip-agi, branch Darkstar
+//! GITHUB METADATA: jpytka666-jpg/polip-agi, branch feat/darkstar-system-graph
 //! ==========================================
 
 pub mod audit;
@@ -28,5 +28,6 @@ pub mod policy;
 pub mod registry;
 pub mod session;
 pub mod stdio;
+pub mod system_graph;
 
 pub const API_VERSION: &str = "darkstar.core/v1";
