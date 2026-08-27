@@ -1,0 +1,16 @@
+{
+  "api_version": "darkstar.core/v1",
+  "plugin": {
+    "name": "example.echo",
+    "version": "0.1.0"
+  },
+  "runtime": "python",
+  "platform": "any",
+  "capabilities": [
+    {
+      "name": "echo",
+      "description": "Return the supplied JSON value.",
+      "read_only": true
+    }
+  ]
+}
