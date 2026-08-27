@@ -91,8 +91,8 @@ impl PluginAdapter for StdioPluginAdapter {
 mod tests {
     use super::*;
     use crate::{
-        plugin::{Capability, PluginId},
         API_VERSION,
+        plugin::{Capability, PluginId},
     };
     use uuid::Uuid;
 
