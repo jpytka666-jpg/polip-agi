@@ -4,9 +4,9 @@
 //! ==========================================
 //! AUTHOR: M. SZUL
 //! AI MODEL: GPT-5.6 Luna
-//! TIMESTAMP: 2026-08-27 22:30:00
+//! TIMESTAMP: 2026-08-27 22:55:00
 //! REASON FOR CREATION: Expose the stable Rust control-plane contracts used by Darkstar.
-//! MECHANICS: Re-exports versioned domain contracts for identity, sessions, plugins, events, policy, audit, discovery, capabilities, system graph and the Ghost Gate boundary.
+//! MECHANICS: Re-exports versioned domain contracts for identity, sessions, plugins, events, policy, audit, discovery, capabilities and the Ghost Gate boundary.
 //! SYSTEM PART: Darkstar Core
 //! ARCHITECTURE FUNCTION: Shared trusted-core foundation for all transports, plugins and workflows.
 //! DEPENDENCIES/LINKS: serde, serde_json, uuid, thiserror, tracing; consumed by Darkstar server and adapters.
@@ -29,6 +29,5 @@ pub mod policy;
 pub mod registry;
 pub mod session;
 pub mod stdio;
-pub mod system_graph;
 
 pub const API_VERSION: &str = "darkstar.core/v1";
