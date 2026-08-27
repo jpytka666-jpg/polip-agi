@@ -1,16 +1,16 @@
-//! HTTP transport and first authenticated session boundary for Darkstar.
+//! HTTP transport and live execution boundary for Darkstar.
 //!
 //! THIS IS VERY IMPORTANT!!!
 //! ==========================================
 //! AUTHOR: M. SZUL
 //! AI MODEL: GPT-5.6 Luna
-//! TIMESTAMP: 2026-08-27 22:20:00
-//! REASON FOR CREATION: Expose the real Darkstar HTTP surface while keeping health public and architecture inspection authenticated.
-//! MECHANICS: Axum routes health/readiness publicly; authenticated clients can create sessions and read the architecture graph. Credentials are read from the process environment and are never returned by the API.
-//! SYSTEM PART: Darkstar Server / Layer 02 Connection
-//! ARCHITECTURE FUNCTION: Provide the transport boundary between remote clients and Darkstar's session, policy and inspection core.
-//! DEPENDENCIES/LINKS: axum, tokio, serde_json, uuid, darkstar-core session/system_graph models, system_graph_view.
-//! TECH STACK: Rust 2024 + Axum 0.8 + Tokio; selected for a small asynchronous HTTP control plane consistent with the Rust-first architecture.
+//! TIMESTAMP: 2026-08-27 22:45:00
+//! REASON FOR CREATION: Expose authenticated control routes plus a live, read-only execution stream for the browser System Graph.
+//! MECHANICS: Axum serves health, sessions, architecture inspection and run events. A Tokio broadcast hub carries structured run events; the demo runner only exercises the visualization path and does not execute external tools.
+//! SYSTEM PART: Darkstar Server / Layer 02 Connection + Live Run Graph
+//! ARCHITECTURE FUNCTION: Transport boundary between clients, Darkstar control-plane state and the human-facing execution observer.
+//! DEPENDENCIES/LINKS: axum, tokio, tokio-stream, serde_json, uuid, darkstar-core session/system_graph models, system_graph_view, run_stream.
+//! TECH STACK: Rust 2024 + Axum 0.8 + Tokio; selected for a small asynchronous control plane and native server-sent events.
 //! LOCAL WORKSPACE: N/A - GitHub-first workspace.
 //! GIT COMMIT: PENDING
 //! GITHUB METADATA: jpytka666-jpg/polip-agi, branch feat/darkstar-system-graph
@@ -18,37 +18,42 @@
 
 #[path = "system_graph_view.rs"]
 mod system_graph_view;
+mod run_stream;
 
 use std::{
     collections::HashMap,
     env,
     sync::Arc,
-    time::{SystemTime, UNIX_EPOCH},
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
 use axum::{
     Json, Router,
     extract::State,
     http::{HeaderMap, StatusCode, header::AUTHORIZATION},
-    response::{Html, IntoResponse},
+    response::{Html, IntoResponse, Sse, sse::Event},
     routing::{get, post},
 };
 use darkstar_core::session::{Principal, Session};
+use run_stream::{RunEvent, RunStreamHub};
 use serde::Serialize;
-use tokio::sync::RwLock;
+use tokio::{spawn, time::sleep};
+use tokio_stream::{StreamExt, wrappers::BroadcastStream};
 use uuid::Uuid;
 
 #[derive(Clone)]
 pub struct AppState {
     pub api_token: Option<Arc<str>>,
-    pub sessions: Arc<RwLock<HashMap<Uuid, Session>>>,
+    pub sessions: Arc<tokio::sync::RwLock<HashMap<Uuid, Session>>>,
+    pub run_streams: RunStreamHub,
 }
 
 impl AppState {
     pub fn from_env() -> Self {
         Self {
             api_token: env::var("DARKSTAR_API_TOKEN").ok().map(Arc::<str>::from),
-            sessions: Arc::new(RwLock::new(HashMap::new())),
+            sessions: Arc::new(tokio::sync::RwLock::new(HashMap::new())),
+            run_streams: RunStreamHub::default(),
         }
     }
 }
@@ -80,6 +85,17 @@ pub struct CreateSessionRequest {
     pub capabilities: Vec<String>,
 }
 
+#[derive(Debug, serde::Deserialize)]
+struct StartRunRequest {
+    pub run_id: Uuid,
+}
+
+#[derive(Debug, Serialize)]
+struct StartRunResponse {
+    run_id: Uuid,
+    status: &'static str,
+}
+
 fn default_principal_kind() -> String {
     "agent".into()
 }
@@ -103,6 +119,8 @@ pub fn router(state: AppState) -> Router {
         .route("/ready", get(ready))
         .route("/system-graph", get(system_graph_page))
         .route("/v1/system-graph", get(system_graph_json))
+        .route("/v1/runs/start", post(start_demo_run))
+        .route("/v1/runs/{run_id}/events", get(run_events))
         .route("/v1/sessions", post(create_session))
         .with_state(state)
 }
@@ -139,6 +157,76 @@ async fn system_graph_json(
     }
 
     (StatusCode::OK, Json(darkstar_core::system_graph::current_snapshot()))
+}
+
+async fn start_demo_run(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(request): Json<StartRunRequest>,
+) -> impl IntoResponse {
+    if !authenticated(&state, &headers) {
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(serde_json::json!({"error": "authentication_required"})),
+        );
+    }
+
+    let run_id = request.run_id;
+    let hub = state.run_streams.clone();
+    spawn(async move {
+        let steps = [
+            ("session", "session.created", "running", "Session established"),
+            ("policy", "policy.checked", "allow", "Policy allowed github.read"),
+            ("capability-selector", "capability.selected", "selected", "Selected github.read"),
+            ("capability-gate", "authorization.allowed", "allow", "Authorization allowed"),
+            ("echo-python", "plugin.started", "running", "Python tentacle started"),
+            ("echo-python", "plugin.completed", "success", "Python tentacle returned"),
+            ("audit", "audit.appended", "recorded", "Audit record appended"),
+        ];
+
+        for (sequence, (node_id, event_type, status, message)) in steps.into_iter().enumerate() {
+            sleep(Duration::from_millis(250)).await;
+            hub.publish(RunEvent {
+                run_id,
+                sequence: sequence as u64 + 1,
+                node_id: node_id.into(),
+                event_type: event_type.into(),
+                status: status.into(),
+                message: Some(message.into()),
+                timestamp_unix_ms: now_unix_ms(),
+            })
+            .await;
+        }
+    });
+
+    (
+        StatusCode::ACCEPTED,
+        Json(StartRunResponse {
+            run_id,
+            status: "started",
+        }),
+    )
+}
+
+async fn run_events(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    axum::extract::Path(run_id): axum::extract::Path<Uuid>,
+) -> impl IntoResponse {
+    if !authenticated(&state, &headers) {
+        return Sse::new(tokio_stream::empty()).into_response();
+    }
+
+    let receiver = state.run_streams.subscribe(run_id).await;
+    let stream = BroadcastStream::new(receiver).filter_map(|item| async move {
+        let event = item.ok()?;
+        let json = serde_json::to_string(&event).ok()?;
+        Some(Ok::<Event, std::convert::Infallible>(Event::default().data(json)))
+    });
+
+    Sse::new(stream)
+        .keep_alive(axum::response::sse::KeepAlive::default())
+        .into_response()
 }
 
 async fn create_session(
@@ -211,7 +299,8 @@ mod tests {
     fn test_state(token: &str) -> AppState {
         AppState {
             api_token: Some(Arc::<str>::from(token)),
-            sessions: Arc::new(RwLock::new(HashMap::new())),
+            sessions: Arc::new(tokio::sync::RwLock::new(HashMap::new())),
+            run_streams: RunStreamHub::default(),
         }
     }
 
@@ -256,6 +345,40 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn demo_run_requires_bearer_token() {
+        let response = router(test_state("secret"))
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/v1/runs/start")
+                    .header("content-type", "application/json")
+                    .body(Body::from(format!(r#"{{"run_id":"{}"}}"#, Uuid::new_v4())))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn valid_token_starts_demo_run() {
+        let run_id = Uuid::new_v4();
+        let response = router(test_state("secret"))
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/v1/runs/start")
+                    .header("authorization", "Bearer secret")
+                    .header("content-type", "application/json")
+                    .body(Body::from(format!(r#"{{"run_id":"{}"}}"#, run_id)))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::ACCEPTED);
     }
 
     #[tokio::test]
