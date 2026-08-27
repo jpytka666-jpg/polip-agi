@@ -35,7 +35,9 @@ pub struct CapabilityIndex {
 }
 
 impl CapabilityIndex {
-    pub fn from_registry(registry: &PluginRegistry) -> Result<Self, crate::plugin_host::PluginHostError> {
+    pub fn from_registry(
+        registry: &PluginRegistry,
+    ) -> Result<Self, crate::plugin_host::PluginHostError> {
         let manifests = registry.list()?;
         let mut by_name: BTreeMap<String, Vec<CapabilityMatch>> = BTreeMap::new();
 
@@ -91,8 +93,8 @@ impl CapabilityIndex {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::plugin::{Capability, PluginId};
     use crate::API_VERSION;
+    use crate::plugin::{Capability, PluginId};
 
     fn manifest(name: &str, version: &str, capabilities: &[&str]) -> PluginManifest {
         PluginManifest {
