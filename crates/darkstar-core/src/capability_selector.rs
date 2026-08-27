@@ -47,11 +47,7 @@ impl CapabilitySelector {
 
         candidates.sort_by(|left, right| {
             preference_rank(left, preferred_runtime, preferred_platform)
-                .cmp(&preference_rank(
-                    right,
-                    preferred_runtime,
-                    preferred_platform,
-                ))
+                .cmp(&preference_rank(right, preferred_runtime, preferred_platform))
                 .then_with(|| left.plugin.name.cmp(&right.plugin.name))
                 .then_with(|| left.plugin.version.cmp(&right.plugin.version))
                 .then_with(|| left.runtime.cmp(&right.runtime))
@@ -116,13 +112,7 @@ mod tests {
         let registry = PluginRegistry::new();
 
         registry
-            .register(manifest(
-                "example.python",
-                "0.1.0",
-                "python",
-                "any",
-                "echo",
-            ))
+            .register(manifest("example.python", "0.1.0", "python", "any", "echo"))
             .expect("register python");
         registry
             .register(manifest(
@@ -135,13 +125,10 @@ mod tests {
             .expect("register rust");
 
         let index = CapabilityIndex::from_registry(&registry).expect("build index");
-        let selection =
-            CapabilitySelector::select(&index, "echo", Some("rust"), Some("linux-x86_64"));
+        let selection = CapabilitySelector::select(&index, "echo", Some("rust"), Some("linux-x86_64"));
 
         assert_eq!(
-            selection
-                .first()
-                .map(|candidate| candidate.plugin.name.as_str()),
+            selection.first().map(|candidate| candidate.plugin.name.as_str()),
             Some("example.rust")
         );
     }
@@ -151,22 +138,10 @@ mod tests {
         let registry = PluginRegistry::new();
 
         registry
-            .register(manifest(
-                "example.beta",
-                "0.1.0",
-                "python",
-                "any",
-                "echo",
-            ))
+            .register(manifest("example.beta", "0.1.0", "python", "any", "echo"))
             .expect("register beta");
         registry
-            .register(manifest(
-                "example.alpha",
-                "0.1.0",
-                "python",
-                "any",
-                "echo",
-            ))
+            .register(manifest("example.alpha", "0.1.0", "python", "any", "echo"))
             .expect("register alpha");
 
         let index = CapabilityIndex::from_registry(&registry).expect("build index");
