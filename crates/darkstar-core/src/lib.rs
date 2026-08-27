@@ -18,6 +18,7 @@ pub mod plugin;
 pub mod plugin_host;
 pub mod policy;
 pub mod registry;
+pub mod round_table;
 pub mod session;
 pub mod stdio;
 pub mod system_graph;
