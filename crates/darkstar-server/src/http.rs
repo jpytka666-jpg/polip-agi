@@ -29,7 +29,7 @@ use std::{
 
 use axum::{
     Json, Router,
-    extract::State,
+    extract::{Path, State},
     http::{HeaderMap, StatusCode, header::AUTHORIZATION},
     response::{Html, IntoResponse, Sse, sse::Event},
     routing::{get, post},
@@ -96,21 +96,12 @@ struct StartRunResponse {
     status: &'static str,
 }
 
-fn default_principal_kind() -> String {
-    "agent".into()
-}
-fn default_owner_id() -> String {
-    "unknown".into()
-}
-fn default_source() -> String {
-    "remote".into()
-}
+fn default_principal_kind() -> String { "agent".into() }
+fn default_owner_id() -> String { "unknown".into() }
+fn default_source() -> String { "remote".into() }
 
 fn now_unix_ms() -> i64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("system clock before UNIX epoch")
-        .as_millis() as i64
+    SystemTime::now().duration_since(UNIX_EPOCH).expect("system clock before UNIX epoch").as_millis() as i64
 }
 
 pub fn router(state: AppState) -> Router {
@@ -126,49 +117,25 @@ pub fn router(state: AppState) -> Router {
 }
 
 async fn health() -> Json<StatusResponse<'static>> {
-    Json(StatusResponse {
-        service: "darkstar",
-        api_version: darkstar_core::API_VERSION,
-        status: "ok",
-    })
+    Json(StatusResponse { service: "darkstar", api_version: darkstar_core::API_VERSION, status: "ok" })
 }
 
 async fn ready(State(state): State<AppState>) -> Json<ReadyResponse<'static>> {
-    Json(ReadyResponse {
-        service: "darkstar",
-        status: "ready",
-        authentication_configured: state.api_token.is_some(),
-    })
+    Json(ReadyResponse { service: "darkstar", status: "ready", authentication_configured: state.api_token.is_some() })
 }
 
-async fn system_graph_page() -> Html<&'static str> {
-    Html(system_graph_view::SYSTEM_GRAPH_HTML)
-}
+async fn system_graph_page() -> Html<&'static str> { Html(system_graph_view::SYSTEM_GRAPH_HTML) }
 
-async fn system_graph_json(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-) -> impl IntoResponse {
+async fn system_graph_json(State(state): State<AppState>, headers: HeaderMap) -> impl IntoResponse {
     if !authenticated(&state, &headers) {
-        return (
-            StatusCode::UNAUTHORIZED,
-            Json(serde_json::json!({"error": "authentication_required"})),
-        );
+        return (StatusCode::UNAUTHORIZED, Json(serde_json::json!({"error": "authentication_required"})));
     }
-
     (StatusCode::OK, Json(darkstar_core::system_graph::current_snapshot()))
 }
 
-async fn start_demo_run(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-    Json(request): Json<StartRunRequest>,
-) -> impl IntoResponse {
+async fn start_demo_run(State(state): State<AppState>, headers: HeaderMap, Json(request): Json<StartRunRequest>) -> impl IntoResponse {
     if !authenticated(&state, &headers) {
-        return (
-            StatusCode::UNAUTHORIZED,
-            Json(serde_json::json!({"error": "authentication_required"})),
-        );
+        return (StatusCode::UNAUTHORIZED, Json(serde_json::json!({"error": "authentication_required"})));
     }
 
     let run_id = request.run_id;
@@ -183,236 +150,111 @@ async fn start_demo_run(
             ("echo-python", "plugin.completed", "success", "Python tentacle returned"),
             ("audit", "audit.appended", "recorded", "Audit record appended"),
         ];
-
         for (sequence, (node_id, event_type, status, message)) in steps.into_iter().enumerate() {
             sleep(Duration::from_millis(250)).await;
-            hub.publish(RunEvent {
-                run_id,
-                sequence: sequence as u64 + 1,
-                node_id: node_id.into(),
-                event_type: event_type.into(),
-                status: status.into(),
-                message: Some(message.into()),
-                timestamp_unix_ms: now_unix_ms(),
-            })
-            .await;
+            hub.publish(RunEvent { run_id, sequence: sequence as u64 + 1, node_id: node_id.into(), event_type: event_type.into(), status: status.into(), message: Some(message.into()), timestamp_unix_ms: now_unix_ms() }).await;
         }
     });
 
-    (
-        StatusCode::ACCEPTED,
-        Json(StartRunResponse {
-            run_id,
-            status: "started",
-        }),
-    )
+    (StatusCode::ACCEPTED, Json(StartRunResponse { run_id, status: "started" }))
 }
 
-async fn run_events(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-    axum::extract::Path(run_id): axum::extract::Path<Uuid>,
-) -> impl IntoResponse {
+async fn run_events(State(state): State<AppState>, headers: HeaderMap, Path(run_id): Path<Uuid>) -> impl IntoResponse {
     if !authenticated(&state, &headers) {
-        return Sse::new(tokio_stream::empty()).into_response();
+        return (StatusCode::UNAUTHORIZED, Json(serde_json::json!({"error": "authentication_required"}))).into_response();
     }
 
     let receiver = state.run_streams.subscribe(run_id).await;
-    let stream = BroadcastStream::new(receiver).filter_map(|item| async move {
+    let stream = BroadcastStream::new(receiver).filter_map(|item| {
         let event = item.ok()?;
         let json = serde_json::to_string(&event).ok()?;
         Some(Ok::<Event, std::convert::Infallible>(Event::default().data(json)))
     });
 
-    Sse::new(stream)
-        .keep_alive(axum::response::sse::KeepAlive::default())
-        .into_response()
+    Sse::new(stream).keep_alive(axum::response::sse::KeepAlive::default()).into_response()
 }
 
-async fn create_session(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-    Json(request): Json<CreateSessionRequest>,
-) -> impl IntoResponse {
+async fn create_session(State(state): State<AppState>, headers: HeaderMap, Json(request): Json<CreateSessionRequest>) -> impl IntoResponse {
     if !authenticated(&state, &headers) {
-        return (
-            StatusCode::UNAUTHORIZED,
-            Json(serde_json::json!({
-                "error": "authentication_required"
-            })),
-        );
+        return (StatusCode::UNAUTHORIZED, Json(serde_json::json!({"error": "authentication_required"})));
     }
-
     let now = now_unix_ms();
     let session = Session {
         session_id: Uuid::new_v4(),
-        principal: Principal {
-            kind: request.principal_kind,
-            id: request.principal_id,
-        },
+        principal: Principal { kind: request.principal_kind, id: request.principal_id },
         owner_id: request.owner_id,
         source: request.source,
         created_at_unix_ms: now,
         expires_at_unix_ms: now + 3_600_000,
         capabilities: request.capabilities,
     };
-
     let session_id = session.session_id;
-    state
-        .sessions
-        .write()
-        .await
-        .insert(session_id, session.clone());
-
-    (
-        StatusCode::CREATED,
-        Json(serde_json::json!({ "session": session })),
-    )
+    state.sessions.write().await.insert(session_id, session.clone());
+    (StatusCode::CREATED, Json(serde_json::json!({ "session": session })))
 }
 
 fn authenticated(state: &AppState, headers: &HeaderMap) -> bool {
-    let Some(expected) = state.api_token.as_deref() else {
-        return false;
-    };
-
-    let Some(value) = headers
-        .get(AUTHORIZATION)
-        .and_then(|value| value.to_str().ok())
-    else {
-        return false;
-    };
-
-    value
-        .strip_prefix("Bearer ")
-        .is_some_and(|token| token == expected)
+    let Some(expected) = state.api_token.as_deref() else { return false; };
+    let Some(value) = headers.get(AUTHORIZATION).and_then(|value| value.to_str().ok()) else { return false; };
+    value.strip_prefix("Bearer ").is_some_and(|token| token == expected)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use axum::{
-        body::Body,
-        http::{Request, StatusCode},
-    };
+    use axum::{body::Body, http::{Request, StatusCode}};
     use tower::ServiceExt;
 
     fn test_state(token: &str) -> AppState {
-        AppState {
-            api_token: Some(Arc::<str>::from(token)),
-            sessions: Arc::new(tokio::sync::RwLock::new(HashMap::new())),
-            run_streams: RunStreamHub::default(),
-        }
+        AppState { api_token: Some(Arc::<str>::from(token)), sessions: Arc::new(tokio::sync::RwLock::new(HashMap::new())), run_streams: RunStreamHub::default() }
     }
 
     #[tokio::test]
     async fn health_is_public() {
-        let response = router(test_state("secret"))
-            .oneshot(
-                Request::builder()
-                    .uri("/health")
-                    .body(Body::empty())
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
+        let response = router(test_state("secret")).oneshot(Request::builder().uri("/health").body(Body::empty()).unwrap()).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
     }
 
     #[tokio::test]
     async fn system_graph_requires_bearer_token() {
-        let response = router(test_state("secret"))
-            .oneshot(
-                Request::builder()
-                    .uri("/v1/system-graph")
-                    .body(Body::empty())
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
+        let response = router(test_state("secret")).oneshot(Request::builder().uri("/v1/system-graph").body(Body::empty()).unwrap()).await.unwrap();
         assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
     }
 
     #[tokio::test]
     async fn system_graph_is_available_with_valid_token() {
-        let response = router(test_state("secret"))
-            .oneshot(
-                Request::builder()
-                    .uri("/v1/system-graph")
-                    .header("authorization", "Bearer secret")
-                    .body(Body::empty())
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
+        let response = router(test_state("secret")).oneshot(Request::builder().uri("/v1/system-graph").header("authorization", "Bearer secret").body(Body::empty()).unwrap()).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
     }
 
     #[tokio::test]
     async fn demo_run_requires_bearer_token() {
-        let response = router(test_state("secret"))
-            .oneshot(
-                Request::builder()
-                    .method("POST")
-                    .uri("/v1/runs/start")
-                    .header("content-type", "application/json")
-                    .body(Body::from(format!(r#"{{"run_id":"{}"}}"#, Uuid::new_v4())))
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
+        let response = router(test_state("secret")).oneshot(Request::builder().method("POST").uri("/v1/runs/start").header("content-type", "application/json").body(Body::from(format!(r#"{{"run_id":"{}"}}"#, Uuid::new_v4()))).unwrap()).await.unwrap();
         assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
     }
 
     #[tokio::test]
     async fn valid_token_starts_demo_run() {
         let run_id = Uuid::new_v4();
-        let response = router(test_state("secret"))
-            .oneshot(
-                Request::builder()
-                    .method("POST")
-                    .uri("/v1/runs/start")
-                    .header("authorization", "Bearer secret")
-                    .header("content-type", "application/json")
-                    .body(Body::from(format!(r#"{{"run_id":"{}"}}"#, run_id)))
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
+        let response = router(test_state("secret")).oneshot(Request::builder().method("POST").uri("/v1/runs/start").header("authorization", "Bearer secret").header("content-type", "application/json").body(Body::from(format!(r#"{{"run_id":"{}"}}"#, run_id))).unwrap()).await.unwrap();
         assert_eq!(response.status(), StatusCode::ACCEPTED);
     }
 
     #[tokio::test]
+    async fn live_events_require_bearer_token() {
+        let response = router(test_state("secret")).oneshot(Request::builder().uri(format!("/v1/runs/{}/events", Uuid::new_v4())).body(Body::empty()).unwrap()).await.unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
     async fn session_creation_requires_bearer_token() {
-        let response = router(test_state("secret"))
-            .oneshot(
-                Request::builder()
-                    .method("POST")
-                    .uri("/v1/sessions")
-                    .header("content-type", "application/json")
-                    .body(Body::from(r#"{"principal_id":"agent-1"}"#))
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
+        let response = router(test_state("secret")).oneshot(Request::builder().method("POST").uri("/v1/sessions").header("content-type", "application/json").body(Body::from(r#"{"principal_id":"agent-1"}"#)).unwrap()).await.unwrap();
         assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
     }
 
     #[tokio::test]
     async fn valid_token_creates_scoped_session() {
-        let response = router(test_state("secret"))
-            .oneshot(
-                Request::builder()
-                    .method("POST")
-                    .uri("/v1/sessions")
-                    .header("authorization", "Bearer secret")
-                    .header("content-type", "application/json")
-                    .body(Body::from(
-                        r#"{"principal_id":"agent-1","capabilities":["github.read"]}"#,
-                    ))
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
+        let response = router(test_state("secret")).oneshot(Request::builder().method("POST").uri("/v1/sessions").header("authorization", "Bearer secret").header("content-type", "application/json").body(Body::from(r#"{"principal_id":"agent-1","capabilities":["github.read"]}"#)).unwrap()).await.unwrap();
         assert_eq!(response.status(), StatusCode::CREATED);
     }
 }
