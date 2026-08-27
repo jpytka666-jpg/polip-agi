@@ -1,6 +1,9 @@
 name: Darkstar Format Fix (one-shot)
 
 on:
+  push:
+    branches:
+      - feat/darkstar-system-graph
   workflow_dispatch:
 
 permissions:
