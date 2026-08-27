@@ -31,7 +31,7 @@ use std::{
 use axum::{
     Json, Router,
     extract::{Path, State},
-    http::{header::AUTHORIZATION, HeaderMap, StatusCode},
+    http::{HeaderMap, StatusCode, header::AUTHORIZATION},
     response::{Html, IntoResponse, Sse, sse::Event},
     routing::{get, post},
 };
@@ -146,10 +146,7 @@ async fn system_graph_page() -> Html<&'static str> {
     Html(system_graph_view::SYSTEM_GRAPH_HTML)
 }
 
-async fn system_graph_json(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-) -> impl IntoResponse {
+async fn system_graph_json(State(state): State<AppState>, headers: HeaderMap) -> impl IntoResponse {
     if !authenticated(&state, &headers) {
         return (
             StatusCode::UNAUTHORIZED,
@@ -159,7 +156,9 @@ async fn system_graph_json(
     }
     (
         StatusCode::OK,
-        Json(serde_json::json!(darkstar_core::system_graph::current_snapshot())),
+        Json(serde_json::json!(
+            darkstar_core::system_graph::current_snapshot()
+        )),
     )
         .into_response()
 }
