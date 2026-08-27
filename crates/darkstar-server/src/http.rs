@@ -4,17 +4,20 @@
 //! ==========================================
 //! AUTHOR: M. SZUL
 //! AI MODEL: GPT-5.6 Luna
-//! TIMESTAMP: 2026-08-27 21:12:00
-//! REASON FOR CREATION: Expose the first real Darkstar HTTP surface while keeping health public and session creation behind an explicit server credential.
-//! MECHANICS: Axum routes health/readiness publicly; authenticated clients can create an ephemeral scoped session. Authorization credentials are read from the process environment and are never returned by the API.
+//! TIMESTAMP: 2026-08-27 22:20:00
+//! REASON FOR CREATION: Expose the real Darkstar HTTP surface while keeping health public and architecture inspection authenticated.
+//! MECHANICS: Axum routes health/readiness publicly; authenticated clients can create sessions and read the architecture graph. Credentials are read from the process environment and are never returned by the API.
 //! SYSTEM PART: Darkstar Server / Layer 02 Connection
-//! ARCHITECTURE FUNCTION: Provide the transport boundary between remote clients and Darkstar's session/policy core.
-//! DEPENDENCIES/LINKS: axum, tokio, serde_json, uuid, darkstar-core session/audit models.
+//! ARCHITECTURE FUNCTION: Provide the transport boundary between remote clients and Darkstar's session, policy and inspection core.
+//! DEPENDENCIES/LINKS: axum, tokio, serde_json, uuid, darkstar-core session/system_graph models, system_graph_view.
 //! TECH STACK: Rust 2024 + Axum 0.8 + Tokio; selected for a small asynchronous HTTP control plane consistent with the Rust-first architecture.
 //! LOCAL WORKSPACE: N/A - GitHub-first workspace.
 //! GIT COMMIT: PENDING
-//! GITHUB METADATA: jpytka666-jpg/polip-agi, branch Darkstar
+//! GITHUB METADATA: jpytka666-jpg/polip-agi, branch feat/darkstar-system-graph
 //! ==========================================
+
+#[path = "system_graph_view.rs"]
+mod system_graph_view;
 
 use std::{
     collections::HashMap,
@@ -27,7 +30,7 @@ use axum::{
     Json, Router,
     extract::State,
     http::{HeaderMap, StatusCode, header::AUTHORIZATION},
-    response::IntoResponse,
+    response::{Html, IntoResponse},
     routing::{get, post},
 };
 use darkstar_core::session::{Principal, Session};
@@ -98,6 +101,8 @@ pub fn router(state: AppState) -> Router {
     Router::new()
         .route("/health", get(health))
         .route("/ready", get(ready))
+        .route("/system-graph", get(system_graph_page))
+        .route("/v1/system-graph", get(system_graph_json))
         .route("/v1/sessions", post(create_session))
         .with_state(state)
 }
@@ -116,6 +121,24 @@ async fn ready(State(state): State<AppState>) -> Json<ReadyResponse<'static>> {
         status: "ready",
         authentication_configured: state.api_token.is_some(),
     })
+}
+
+async fn system_graph_page() -> Html<&'static str> {
+    Html(system_graph_view::SYSTEM_GRAPH_HTML)
+}
+
+async fn system_graph_json(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> impl IntoResponse {
+    if !authenticated(&state, &headers) {
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(serde_json::json!({"error": "authentication_required"})),
+        );
+    }
+
+    (StatusCode::OK, Json(darkstar_core::system_graph::current_snapshot()))
 }
 
 async fn create_session(
@@ -198,6 +221,35 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .uri("/health")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn system_graph_requires_bearer_token() {
+        let response = router(test_state("secret"))
+            .oneshot(
+                Request::builder()
+                    .uri("/v1/system-graph")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn system_graph_is_available_with_valid_token() {
+        let response = router(test_state("secret"))
+            .oneshot(
+                Request::builder()
+                    .uri("/v1/system-graph")
+                    .header("authorization", "Bearer secret")
                     .body(Body::empty())
                     .unwrap(),
             )
