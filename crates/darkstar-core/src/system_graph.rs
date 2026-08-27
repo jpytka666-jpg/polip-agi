@@ -68,38 +68,152 @@ pub fn current_snapshot() -> ArchitectureSnapshot {
     let nodes = vec![
         repo("polip", "polip-agi", "Darkstar", "active"),
         runtime("session", "Session", "execution context", "Rust", "active"),
-        file("darkstar-core", "crates/darkstar-core/src/lib.rs", "Rust", "control-plane", "2026-08-27T19:54:44Z"),
-        file("policy", "crates/darkstar-core/src/policy.rs", "Rust", "security policy", "2026-08-27T20:00:00Z"),
-        file("discovery", "crates/darkstar-core/src/discovery.rs", "Rust", "plugin discovery", "2026-08-27T20:56:04Z"),
-        file("capability-index", "crates/darkstar-core/src/capability_index.rs", "Rust", "capability index", "2026-08-27T20:56:04Z"),
-        file("capability-selector", "crates/darkstar-core/src/capability_selector.rs", "Rust", "deterministic selector", "2026-08-27T21:27:03Z"),
-        file("capability-gate", "crates/darkstar-core/src/capability_gate.rs", "Rust", "policy gate", "2026-08-27T21:32:53Z"),
-        file("plugin", "crates/darkstar-core/src/plugin.rs", "Rust", "language-neutral plugin contract", "2026-08-27T19:54:59Z"),
-        file("registry", "crates/darkstar-core/src/registry.rs", "Rust", "plugin registry", "2026-08-27T20:21:39Z"),
-        file("http", "crates/darkstar-server/src/http.rs", "Rust", "HTTP transport", "2026-08-27T20:01:52Z"),
-        file("echo-python", "plugins/echo-python/plugin.py", "Python", "example tentacle", "2026-08-27T19:00:00Z"),
+        file(
+            "darkstar-core",
+            "crates/darkstar-core/src/lib.rs",
+            "Rust",
+            "control-plane",
+            "2026-08-27T19:54:44Z",
+        ),
+        file(
+            "policy",
+            "crates/darkstar-core/src/policy.rs",
+            "Rust",
+            "security policy",
+            "2026-08-27T20:00:00Z",
+        ),
+        file(
+            "discovery",
+            "crates/darkstar-core/src/discovery.rs",
+            "Rust",
+            "plugin discovery",
+            "2026-08-27T20:56:04Z",
+        ),
+        file(
+            "capability-index",
+            "crates/darkstar-core/src/capability_index.rs",
+            "Rust",
+            "capability index",
+            "2026-08-27T20:56:04Z",
+        ),
+        file(
+            "capability-selector",
+            "crates/darkstar-core/src/capability_selector.rs",
+            "Rust",
+            "deterministic selector",
+            "2026-08-27T21:27:03Z",
+        ),
+        file(
+            "capability-gate",
+            "crates/darkstar-core/src/capability_gate.rs",
+            "Rust",
+            "policy gate",
+            "2026-08-27T21:32:53Z",
+        ),
+        file(
+            "plugin",
+            "crates/darkstar-core/src/plugin.rs",
+            "Rust",
+            "language-neutral plugin contract",
+            "2026-08-27T19:54:59Z",
+        ),
+        file(
+            "registry",
+            "crates/darkstar-core/src/registry.rs",
+            "Rust",
+            "plugin registry",
+            "2026-08-27T20:21:39Z",
+        ),
+        file(
+            "http",
+            "crates/darkstar-server/src/http.rs",
+            "Rust",
+            "HTTP transport",
+            "2026-08-27T20:01:52Z",
+        ),
+        file(
+            "echo-python",
+            "plugins/echo-python/plugin.py",
+            "Python",
+            "example tentacle",
+            "2026-08-27T19:00:00Z",
+        ),
         runtime("audit", "Audit", "execution trace", "Rust", "active"),
-        runtime("aions-peer", "AIONS / Ionis", "trusted peer", "remote", "active"),
-        runtime("wpc-engine", "WPC Engine", "computational substrate", "Rust", "active"),
-        runtime("aions-server-wiedzy", "AIONS Server Wiedzy", "memory / retrieval", "Python + Rust", "active"),
-        runtime("ghost-gate", "Ghost Gate", "network egress boundary", "Linux", "design-contract"),
+        runtime(
+            "aions-peer",
+            "AIONS / Ionis",
+            "trusted peer",
+            "remote",
+            "active",
+        ),
+        runtime(
+            "wpc-engine",
+            "WPC Engine",
+            "computational substrate",
+            "Rust",
+            "active",
+        ),
+        runtime(
+            "aions-server-wiedzy",
+            "AIONS Server Wiedzy",
+            "memory / retrieval",
+            "Python + Rust",
+            "active",
+        ),
+        runtime(
+            "ghost-gate",
+            "Ghost Gate",
+            "network egress boundary",
+            "Linux",
+            "design-contract",
+        ),
     ];
 
     let edges = vec![
         edge("e1", "repo:polip", "file:darkstar-core", "contains"),
         edge("e2", "runtime:session", "file:policy", "enters"),
-        edge("e3", "file:capability-index", "file:capability-selector", "feeds"),
-        edge("e4", "file:capability-selector", "file:capability-gate", "selects_for"),
+        edge(
+            "e3",
+            "file:capability-index",
+            "file:capability-selector",
+            "feeds",
+        ),
+        edge(
+            "e4",
+            "file:capability-selector",
+            "file:capability-gate",
+            "selects_for",
+        ),
         edge("e5", "file:policy", "file:capability-gate", "authorizes"),
         edge("e6", "file:discovery", "file:capability-index", "indexes"),
         edge("e7", "file:registry", "file:discovery", "registers"),
         edge("e8", "file:plugin", "file:registry", "describes"),
         edge("e9", "file:http", "file:capability-gate", "exposes"),
-        edge("e10", "file:capability-gate", "runtime:aions-peer", "guards"),
-        edge("e11", "file:capability-gate", "runtime:wpc-engine", "guards"),
-        edge("e12", "file:capability-gate", "runtime:aions-server-wiedzy", "guards"),
+        edge(
+            "e10",
+            "file:capability-gate",
+            "runtime:aions-peer",
+            "guards",
+        ),
+        edge(
+            "e11",
+            "file:capability-gate",
+            "runtime:wpc-engine",
+            "guards",
+        ),
+        edge(
+            "e12",
+            "file:capability-gate",
+            "runtime:aions-server-wiedzy",
+            "guards",
+        ),
         edge("e13", "file:http", "file:echo-python", "hosts"),
-        edge("e14", "runtime:aions-peer", "runtime:ghost-gate", "egress_through"),
+        edge(
+            "e14",
+            "runtime:aions-peer",
+            "runtime:ghost-gate",
+            "egress_through",
+        ),
         edge("e15", "file:capability-gate", "runtime:audit", "records"),
     ];
 
@@ -185,7 +299,12 @@ mod tests {
     #[test]
     fn snapshot_contains_darkstar_core_and_external_systems() {
         let snapshot = current_snapshot();
-        assert!(snapshot.nodes.iter().any(|n| n.id == "file:capability-gate"));
+        assert!(
+            snapshot
+                .nodes
+                .iter()
+                .any(|n| n.id == "file:capability-gate")
+        );
         assert!(snapshot.nodes.iter().any(|n| n.id == "runtime:wpc-engine"));
         assert!(snapshot.nodes.iter().any(|n| n.id == "runtime:ghost-gate"));
         assert!(snapshot.edges.iter().any(|e| e.kind == "egress_through"));
