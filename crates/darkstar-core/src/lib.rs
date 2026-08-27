@@ -18,6 +18,7 @@
 
 pub mod audit;
 pub mod capability_index;
+pub mod capability_selector;
 pub mod discovery;
 pub mod event;
 pub mod plugin;
