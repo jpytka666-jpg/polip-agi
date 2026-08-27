@@ -82,8 +82,8 @@ impl PluginRegistry {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::plugin::{Capability, PluginId};
     use crate::API_VERSION;
+    use crate::plugin::{Capability, PluginId};
 
     fn manifest(name: &str, version: &str) -> PluginManifest {
         PluginManifest {
@@ -122,7 +122,9 @@ mod tests {
             .expect("first registration");
 
         let error = registry.register(manifest("example.echo", "0.2.0"));
-        assert!(matches!(error, Err(PluginHostError::Rejected(message)) if message.contains("already registered")));
+        assert!(
+            matches!(error, Err(PluginHostError::Rejected(message)) if message.contains("already registered"))
+        );
     }
 
     #[test]
