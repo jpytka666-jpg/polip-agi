@@ -25,10 +25,15 @@ use crate::registry::PluginRegistry;
 
 const MANIFEST_FILE: &str = "manifest.json";
 
-pub fn discover_manifests(root: impl AsRef<Path>) -> Result<Vec<(PathBuf, PluginManifest)>, PluginHostError> {
+pub fn discover_manifests(
+    root: impl AsRef<Path>,
+) -> Result<Vec<(PathBuf, PluginManifest)>, PluginHostError> {
     let root = root.as_ref();
     let entries = fs::read_dir(root).map_err(|error| {
-        PluginHostError::Unavailable(format!("cannot read plugin directory {}: {error}", root.display()))
+        PluginHostError::Unavailable(format!(
+            "cannot read plugin directory {}: {error}",
+            root.display()
+        ))
     })?;
 
     let mut discovered = Vec::new();
@@ -49,10 +54,16 @@ pub fn discover_manifests(root: impl AsRef<Path>) -> Result<Vec<(PathBuf, Plugin
         }
 
         let content = fs::read_to_string(&manifest_path).map_err(|error| {
-            PluginHostError::Protocol(format!("cannot read {}: {error}", manifest_path.display()))
+            PluginHostError::Protocol(format!(
+                "cannot read {}: {error}",
+                manifest_path.display()
+            ))
         })?;
         let manifest: PluginManifest = serde_json::from_str(&content).map_err(|error| {
-            PluginHostError::Protocol(format!("invalid manifest {}: {error}", manifest_path.display()))
+            PluginHostError::Protocol(format!(
+                "invalid manifest {}: {error}",
+                manifest_path.display()
+            ))
         })?;
         validate_manifest(&manifest)?;
         discovered.push((manifest_path, manifest));
@@ -102,7 +113,8 @@ mod tests {
 
     #[test]
     fn empty_directory_discovers_nothing() {
-        let root = std::env::temp_dir().join(format!("darkstar-discovery-{}", uuid::Uuid::new_v4()));
+        let root =
+            std::env::temp_dir().join(format!("darkstar-discovery-{}", uuid::Uuid::new_v4()));
         fs::create_dir_all(&root).expect("create temp directory");
 
         let discovered = discover_manifests(&root).expect("discover manifests");
@@ -113,7 +125,8 @@ mod tests {
 
     #[test]
     fn discovers_and_registers_manifest() {
-        let root = std::env::temp_dir().join(format!("darkstar-discovery-{}", uuid::Uuid::new_v4()));
+        let root =
+            std::env::temp_dir().join(format!("darkstar-discovery-{}", uuid::Uuid::new_v4()));
         let plugin_dir = root.join("example.echo");
         fs::create_dir_all(&plugin_dir).expect("create plugin directory");
         fs::write(
