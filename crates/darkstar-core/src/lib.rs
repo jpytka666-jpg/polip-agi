@@ -17,6 +17,7 @@
 //! ==========================================
 
 pub mod audit;
+pub mod capability_gate;
 pub mod capability_index;
 pub mod capability_selector;
 pub mod discovery;
