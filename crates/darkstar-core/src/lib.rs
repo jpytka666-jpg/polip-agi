@@ -4,16 +4,16 @@
 //! ==========================================
 //! AUTHOR: M. SZUL
 //! AI MODEL: GPT-5.6 Luna
-//! TIMESTAMP: 2026-08-27 20:54:30
-//! REASON FOR CREATION: Establish the stable Rust control-plane contract for Darkstar.
-//! MECHANICS: Re-exports versioned domain contracts for sessions, plugins, events, policy, audit, discovery, capability indexing and external plugin transports.
+//! TIMESTAMP: 2026-08-27 22:55:00
+//! REASON FOR CREATION: Expose the stable Rust control-plane contracts used by Darkstar.
+//! MECHANICS: Re-exports versioned domain contracts for identity, sessions, plugins, events, policy, audit, discovery, capabilities and the Ghost Gate boundary.
 //! SYSTEM PART: Darkstar Core
-//! ARCHITECTURE FUNCTION: Model-agnostic control-plane foundation shared by all transports, plugins and workflows.
+//! ARCHITECTURE FUNCTION: Shared trusted-core foundation for all transports, plugins and workflows.
 //! DEPENDENCIES/LINKS: serde, serde_json, uuid, thiserror, tracing; consumed by Darkstar server and adapters.
-//! TECH STACK: Rust 2024; selected for memory safety, concurrency and a stable infrastructure core.
+//! TECH STACK: Rust 2024; selected for memory safety, deterministic data handling and safe concurrency.
 //! LOCAL WORKSPACE: N/A - GitHub-first workspace.
 //! GIT COMMIT: PENDING
-//! GITHUB METADATA: jpytka666-jpg/polip-agi, branch Darkstar
+//! GITHUB METADATA: jpytka666-jpg/polip-agi, branch feat/darkstar-ghost-gate-contract
 //! ==========================================
 
 pub mod audit;
@@ -22,6 +22,7 @@ pub mod capability_index;
 pub mod capability_selector;
 pub mod discovery;
 pub mod event;
+pub mod ghost_gate;
 pub mod plugin;
 pub mod plugin_host;
 pub mod policy;
