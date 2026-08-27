@@ -54,10 +54,7 @@ pub fn discover_manifests(
         }
 
         let content = fs::read_to_string(&manifest_path).map_err(|error| {
-            PluginHostError::Protocol(format!(
-                "cannot read {}: {error}",
-                manifest_path.display()
-            ))
+            PluginHostError::Protocol(format!("cannot read {}: {error}", manifest_path.display()))
         })?;
         let manifest: PluginManifest = serde_json::from_str(&content).map_err(|error| {
             PluginHostError::Protocol(format!(
