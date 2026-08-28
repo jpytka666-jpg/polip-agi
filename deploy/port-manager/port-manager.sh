@@ -23,7 +23,7 @@ service_value() {
   awk -v service="$service" -v key="$key" '
     $0 == "  " service ":" { in_service=1; next }
     in_service && $0 ~ /^  [^[:space:]].*:/ { exit }
-    in_service && $0 ~ "^[[:space:]]{4}" {
+    in_service && $0 ~ /^    / {
       line=$0
       sub(/^[[:space:]]+/, "", line)
       split(line, parts, ":")
@@ -72,7 +72,7 @@ allocate_one() {
   local existing
   existing="$(get_allocated "$service" || true)"
   if [ -n "$existing" ]; then
-    echo "$existing" | awk -F '\t' '{printf "%s -> host:%s:%s container:%s/%s\n", $1,$4,$2,$3,$4}'
+    echo "$existing" | awk -F '\t' '{printf "%s -> host:127.0.0.1:%s container:%s/%s\n", $1,$2,$3,$4}'
     return 0
   fi
 
