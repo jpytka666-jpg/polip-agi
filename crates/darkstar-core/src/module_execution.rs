@@ -4,9 +4,9 @@
 //! ==========================================
 //! AUTHOR: M. SZUL
 //! AI MODEL: GPT-5.6 Luna
-//! TIMESTAMP: 2026-08-28 02:05:00
+//! TIMESTAMP: 2026-08-28 02:10:00
 //! REASON FOR CREATION: Provide the single execution path from a module command request through Darkstar policy into a module provider.
-//! MECHANICS: A raw ModuleCommandRequest is authorized against session capabilities and trusted approval before it can be converted into an AuthorizedModuleCommand and passed to a provider. Provider context must carry the same request identity.
+//! MECHANICS: A raw ModuleCommandRequest is authorized against session capabilities and trusted approval before it can be converted into an AuthorizedModuleCommand. The provider context is then derived from that authorized command so request provenance cannot drift between authorization and execution.
 //! SYSTEM PART: Darkstar Core / Module Execution
 //! ARCHITECTURE FUNCTION: Physically separate intent from executable authority and preserve request provenance across the provider boundary.
 //! DEPENDENCIES/LINKS: module_state, module_provider, policy, provider implementations; later connected to orchestrator plans and event/audit emission.
@@ -27,8 +27,6 @@ use super::policy::{ApprovalState, AuthorizationDecision};
 pub enum ModuleExecutionError {
     #[error("module command authorization failed: {0:?}")]
     Authorization(AuthorizationDecision),
-    #[error("module provider context request id does not match authorized command")]
-    ContextMismatch,
     #[error("module provider rejected the command")]
     Provider(#[source] ProviderError),
 }
@@ -47,16 +45,17 @@ pub fn execute_module_command<P: ModuleProvider>(
     session_capabilities: &[String],
     request: &ModuleCommandRequest,
     approval: ApprovalState,
-    context: &ProviderContext,
+    principal_id: &str,
 ) -> Result<super::module_provider::ProviderResult, ModuleExecutionError> {
     let authorized = authorize_request(session_capabilities, request, approval)?;
-
-    if context.request_id != authorized.request_id.to_string() {
-        return Err(ModuleExecutionError::ContextMismatch);
-    }
+    let context = ProviderContext {
+        request_id: authorized.request_id.to_string(),
+        principal_id: principal_id.into(),
+        reason: authorized.reason.clone(),
+    };
 
     provider
-        .apply(&authorized, context)
+        .apply(&authorized, &context)
         .map_err(ModuleExecutionError::Provider)
 }
 
@@ -74,34 +73,14 @@ mod tests {
         }
     }
 
-    fn context(request_id: String) -> ProviderContext {
-        ProviderContext {
-            request_id,
-            principal_id: "human:operator".into(),
-            reason: "controlled test".into(),
-        }
-    }
-
-    fn authorized_context() -> (ModuleCommandRequest, ProviderContext) {
-        let request = request();
-        let authorized = authorize_request(
-            &["module.start".into()],
-            &request,
-            ApprovalState::Granted,
-        )
-        .expect("policy should authorize");
-        (request, context(authorized.request_id.to_string()))
-    }
-
     #[test]
     fn approved_module_command_reaches_provider() {
-        let (request, context) = authorized_context();
         let result = execute_module_command(
             &DryRunProvider,
             &["module.start".into()],
-            &request,
+            &request(),
             ApprovalState::Granted,
-            &context,
+            "human:operator",
         )
         .expect("policy-approved command should reach provider");
 
@@ -116,7 +95,7 @@ mod tests {
             &[],
             &request(),
             ApprovalState::Granted,
-            &context("untrusted".into()),
+            "human:operator",
         )
         .expect_err("missing capability must stop execution");
 
@@ -133,7 +112,7 @@ mod tests {
             &["module.start".into()],
             &request(),
             ApprovalState::Pending,
-            &context("untrusted".into()),
+            "human:operator",
         )
         .expect_err("missing trusted approval must stop execution");
 
@@ -141,20 +120,6 @@ mod tests {
             error,
             ModuleExecutionError::Authorization(AuthorizationDecision::NeedsApproval)
         );
-    }
-
-    #[test]
-    fn mismatched_provider_context_stops_before_provider() {
-        let error = execute_module_command(
-            &DryRunProvider,
-            &["module.start".into()],
-            &request(),
-            ApprovalState::Granted,
-            &context("different-request".into()),
-        )
-        .expect_err("mismatched request provenance must stop execution");
-
-        assert_eq!(error, ModuleExecutionError::ContextMismatch);
     }
 
     #[test]
@@ -173,10 +138,11 @@ mod tests {
             fn apply(
                 &self,
                 request: &AuthorizedModuleCommand,
-                _context: &ProviderContext,
+                context: &ProviderContext,
             ) -> Result<super::super::module_provider::ProviderResult, ProviderError> {
                 assert_eq!(request.module_id, "wpc-engine");
                 assert_eq!(request.capability, "module.start");
+                assert_eq!(context.request_id, request.request_id.to_string());
                 Ok(super::super::module_provider::ProviderResult {
                     provider_id: self.provider_id().into(),
                     module_id: request.module_id.clone(),
@@ -187,13 +153,12 @@ mod tests {
             }
         }
 
-        let (request, context) = authorized_context();
         let result = execute_module_command(
             &RecordingProvider,
             &["module.start".into()],
-            &request,
+            &request(),
             ApprovalState::Granted,
-            &context,
+            "human:operator",
         )
         .expect("authorized command should be accepted");
 
