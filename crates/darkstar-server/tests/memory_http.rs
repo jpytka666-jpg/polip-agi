@@ -16,8 +16,6 @@
 //! GITHUB METADATA: jpytka666-jpg/polip-agi / feat/darkstar-module-control
 //! ==========================================
 
-use std::{collections::HashMap, sync::Arc};
-
 use axum::{body::Body, http::{Request, StatusCode}, Router};
 use serde_json::Value;
 use tower::ServiceExt;
@@ -28,12 +26,8 @@ mod http;
 
 use http::{AppState, router};
 
-fn test_state(token: &str) -> AppState {
-    AppState {
-        api_token: Some(Arc::<str>::from(token)),
-        sessions: Arc::new(tokio::sync::RwLock::new(HashMap::new())),
-        run_streams: http::run_stream::RunStreamHub::default(),
-    }
+fn test_state() -> AppState {
+    AppState::from_env()
 }
 
 async fn create_session(app: Router) -> (Router, Uuid) {
@@ -68,7 +62,7 @@ async fn create_session(app: Router) -> (Router, Uuid) {
 
 #[tokio::test]
 async fn session_can_write_and_read_memory() {
-    let app = router(test_state("secret"));
+    let app = router(test_state());
     let (app, session_id) = create_session(app).await;
 
     let write = app
@@ -102,7 +96,7 @@ async fn session_can_write_and_read_memory() {
 
 #[tokio::test]
 async fn memory_routes_require_authentication() {
-    let app = router(test_state("secret"));
+    let app = router(test_state());
     let response = app
         .oneshot(
             Request::builder()
