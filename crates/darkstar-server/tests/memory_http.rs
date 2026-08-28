@@ -9,25 +9,34 @@
 //! MECHANICS: Create a session with explicit memory capabilities, write JSON memory, then read it back through the same session.
 //! SYSTEM PART: Darkstar Server / Layer 01 + Layer 02
 //! ARCHITECTURE FUNCTION: RED-phase contract test for HTTP access to session-scoped memory.
-//! DEPENDENCIES/LINKS: darkstar-server::http::router, darkstar-core::memory, axum, serde_json, uuid.
-//! TECH STACK: Rust 2024 integration test; selected to verify the public HTTP contract from outside the implementation module.
+//! DEPENDENCIES/LINKS: existing darkstar-server::http router, darkstar-core::memory, axum, serde_json, uuid.
+//! TECH STACK: Rust 2024 integration test; selected to exercise the existing HTTP module without adding a new library target.
 //! LOCAL WORKSPACE: N/A - GitHub-first workspace.
 //! GIT COMMIT: PENDING
 //! GITHUB METADATA: jpytka666-jpg/polip-agi / feat/darkstar-module-control
 //! ==========================================
 
-use axum::{body::Body, http::{Request, StatusCode}};
+use std::{collections::HashMap, sync::Arc};
+
+use axum::{body::Body, http::{Request, StatusCode}, Router};
 use serde_json::Value;
 use tower::ServiceExt;
 use uuid::Uuid;
 
-use darkstar_server::http::{router, AppState};
+#[path = "../src/http.rs"]
+mod http;
+
+use http::{AppState, router};
 
 fn test_state(token: &str) -> AppState {
-    AppState::from_parts_for_test(token)
+    AppState {
+        api_token: Some(Arc::<str>::from(token)),
+        sessions: Arc::new(tokio::sync::RwLock::new(HashMap::new())),
+        run_streams: http::run_stream::RunStreamHub::default(),
+    }
 }
 
-async fn create_session(app: axum::Router) -> (axum::Router, Uuid) {
+async fn create_session(app: Router) -> (Router, Uuid) {
     let response = app
         .clone()
         .oneshot(
@@ -49,7 +58,11 @@ async fn create_session(app: axum::Router) -> (axum::Router, Uuid) {
         .await
         .unwrap();
     let json: Value = serde_json::from_slice(&body).unwrap();
-    let session_id = json["session"]["session_id"].as_str().unwrap().parse().unwrap();
+    let session_id = json["session"]["session_id"]
+        .as_str()
+        .unwrap()
+        .parse()
+        .unwrap();
     (app, session_id)
 }
 
