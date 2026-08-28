@@ -33,12 +33,8 @@ fn request() -> ModuleCommandRequest {
 #[test]
 fn approved_module_command_reaches_provider() {
     let request = request();
-    let authorized = authorize_module_command(
-        &["module.start".into()],
-        &request,
-        ApprovalState::Granted,
-    )
-    .expect("policy should authorize");
+    let authorized = authorize_module_command(&["module.start".into()], &request, ApprovalState::Granted)
+        .expect("policy should authorize");
     let provider = DryRunProvider;
     let context = ProviderContext {
         request_id: authorized.request_id.to_string(),
@@ -61,11 +57,7 @@ fn missing_session_capability_never_reaches_provider() {
 
 #[test]
 fn execute_without_approval_stops_before_provider() {
-    let failure = authorize_module_command(
-        &["module.start".into()],
-        &request(),
-        ApprovalState::Pending,
-    )
-    .expect_err("execution without trusted approval must stop");
+    let failure = authorize_module_command(&["module.start".into()], &request(), ApprovalState::Pending)
+        .expect_err("execution without trusted approval must stop");
     assert_eq!(failure.decision, AuthorizationDecision::NeedsApproval);
 }
