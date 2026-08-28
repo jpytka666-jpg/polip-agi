@@ -64,6 +64,9 @@ mod tests {
             ],
         };
 
-        assert_ne!(table.participants[0].capabilities, table.participants[1].capabilities);
+        assert_ne!(
+            table.participants[0].capabilities,
+            table.participants[1].capabilities
+        );
     }
 }
