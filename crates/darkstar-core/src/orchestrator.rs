@@ -29,23 +29,34 @@ pub fn plan(modules: &[ModuleDescriptor], desired: &[DesiredModuleState]) -> Orc
     let mut commands = Vec::new();
 
     for target in desired {
-        let Some(module) = modules.iter().find(|module| module.module_id == target.module_id) else {
+        let Some(module) = modules
+            .iter()
+            .find(|module| module.module_id == target.module_id)
+        else {
             continue;
         };
 
         match (module.state, target.desired) {
-            (ModuleState::Offline, ModuleState::Ready | ModuleState::Running) => commands.push(PlannedCommand {
-                module_id: module.module_id.clone(),
-                command: ModuleCommand::Start,
-            }),
-            (ModuleState::Ready, ModuleState::Offline | ModuleState::Running) if target.desired == ModuleState::Offline => commands.push(PlannedCommand {
-                module_id: module.module_id.clone(),
-                command: ModuleCommand::Stop,
-            }),
-            (ModuleState::Running, ModuleState::Ready | ModuleState::Offline) => commands.push(PlannedCommand {
-                module_id: module.module_id.clone(),
-                command: ModuleCommand::Stop,
-            }),
+            (ModuleState::Offline, ModuleState::Ready | ModuleState::Running) => {
+                commands.push(PlannedCommand {
+                    module_id: module.module_id.clone(),
+                    command: ModuleCommand::Start,
+                })
+            }
+            (ModuleState::Ready, ModuleState::Offline | ModuleState::Running)
+                if target.desired == ModuleState::Offline =>
+            {
+                commands.push(PlannedCommand {
+                    module_id: module.module_id.clone(),
+                    command: ModuleCommand::Stop,
+                })
+            }
+            (ModuleState::Running, ModuleState::Ready | ModuleState::Offline) => {
+                commands.push(PlannedCommand {
+                    module_id: module.module_id.clone(),
+                    command: ModuleCommand::Stop,
+                })
+            }
             (ModuleState::Failed | ModuleState::Blocked, _) => {}
             _ => {}
         }
@@ -74,28 +85,37 @@ mod tests {
 
     #[test]
     fn offline_module_gets_start_command() {
-        let plan = plan(&[module("wpc", ModuleState::Offline)], &[DesiredModuleState {
-            module_id: "wpc".into(),
-            desired: ModuleState::Ready,
-        }]);
+        let plan = plan(
+            &[module("wpc", ModuleState::Offline)],
+            &[DesiredModuleState {
+                module_id: "wpc".into(),
+                desired: ModuleState::Ready,
+            }],
+        );
         assert_eq!(plan.commands[0].command, ModuleCommand::Start);
     }
 
     #[test]
     fn running_module_can_be_stopped() {
-        let plan = plan(&[module("camera", ModuleState::Running)], &[DesiredModuleState {
-            module_id: "camera".into(),
-            desired: ModuleState::Offline,
-        }]);
+        let plan = plan(
+            &[module("camera", ModuleState::Running)],
+            &[DesiredModuleState {
+                module_id: "camera".into(),
+                desired: ModuleState::Offline,
+            }],
+        );
         assert_eq!(plan.commands[0].command, ModuleCommand::Stop);
     }
 
     #[test]
     fn blocked_module_is_never_activated() {
-        let plan = plan(&[module("security", ModuleState::Blocked)], &[DesiredModuleState {
-            module_id: "security".into(),
-            desired: ModuleState::Ready,
-        }]);
+        let plan = plan(
+            &[module("security", ModuleState::Blocked)],
+            &[DesiredModuleState {
+                module_id: "security".into(),
+                desired: ModuleState::Ready,
+            }],
+        );
         assert!(plan.commands.is_empty());
     }
 }
