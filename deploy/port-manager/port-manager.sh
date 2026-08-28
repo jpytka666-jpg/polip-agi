@@ -100,7 +100,7 @@ allocate_one() {
   [ "$exposure" = "localhost" ] || { echo "Unsupported exposure for $service: $exposure" >&2; return 1; }
 
   for ((port=start; port<=end; port++)); do
-    if port_is_free "$port" && ! awk -F '\t' -v p="$port" '$2 == p {found=1} END{exit found}' "$STATE"; then
+    if port_is_free "$port" && awk -F '\t' -v p="$port" '$2 == p {found=1} END{exit found}' "$STATE"; then
       printf '%s\t%s\t%s\t%s\t%s\n' "$service" "$port" "$container_port" "$protocol" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$STATE"
       write_runtime_env
       echo "$service -> host:${exposure}:${port} container:${container_port}/${protocol}"
