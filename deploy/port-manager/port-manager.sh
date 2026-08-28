@@ -20,32 +20,22 @@ EOF
 
 service_value() {
   local service="$1" key="$2"
-  python3 - "$REGISTRY" "$service" "$key" <<'PY'
-import sys
-from pathlib import Path
-
-path, service, key = sys.argv[1:]
-lines = Path(path).read_text(encoding="utf-8").splitlines()
-in_service = False
-for raw in lines:
-    line = raw.rstrip()
-    if line.startswith("  ") and not line.startswith("    "):
-        in_service = False
-    if line == f"  {service}:":
-        in_service = True
-        continue
-    if in_service and line.startswith("    "):
-        stripped = line.strip()
-        if stripped.startswith(f"{key}:"):
-            print(stripped.split(":", 1)[1].strip())
-            raise SystemExit(0)
-raise SystemExit(1)
-PY
+  awk -v service="$service" -v key="$key" '
+    $0 == "  " service ":" { in_service=1; next }
+    in_service && $0 ~ /^  [^[:space:]].*:/ { exit }
+    in_service && $0 ~ "^[[:space:]]{4}" {
+      line=$0
+      sub(/^[[:space:]]+/, "", line)
+      split(line, parts, ":")
+      if (parts[1] == key) { print substr(line, index(line, ":") + 1); found=1; exit }
+    }
+    END { if (!found) exit 1 }
+  ' "$REGISTRY" | sed 's/^[[:space:]]*//'
 }
 
 range_value() {
   local key="$1"
-  awk -F': *' -v k="$key" '$1 ~ "^  " k "$" {print $2; exit}' "$REGISTRY"
+  awk -v k="$key" '$0 ~ "^  " k ":[[:space:]]*" {sub(/^[^:]*:[[:space:]]*/, ""); print; exit}' "$REGISTRY"
 }
 
 port_is_free() {
@@ -82,7 +72,7 @@ allocate_one() {
   local existing
   existing="$(get_allocated "$service" || true)"
   if [ -n "$existing" ]; then
-    echo "$existing" | awk -F '\t' '{printf "%s -> host:%s container:%s/%s\n", $1,$2,$3,$4}'
+    echo "$existing" | awk -F '\t' '{printf "%s -> host:%s:%s container:%s/%s\n", $1,$4,$2,$3,$4}'
     return 0
   fi
 
@@ -94,7 +84,7 @@ allocate_one() {
   exposure="$(service_value "$service" exposure)"
 
   for ((port=start; port<=end; port++)); do
-    if port_is_free "$port" && awk -F '\t' -v p="$port" '$2 == p {found=1} END{exit found}' "$STATE"; then
+    if port_is_free "$port" && ! awk -F '\t' -v p="$port" '$2 == p {found=1} END{exit found}' "$STATE"; then
       printf '%s\t%s\t%s\t%s\t%s\n' "$service" "$port" "$container_port" "$protocol" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$STATE"
       write_runtime_env
       echo "$service -> host:${exposure}:${port} container:${container_port}/${protocol}"
