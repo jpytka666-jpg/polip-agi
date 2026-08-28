@@ -165,7 +165,13 @@ mod tests {
             .collect();
         assert_eq!(
             ids,
-            ["internet", "sheriff-bridge", "kali-bridge", "darkstar", "aions"]
+            [
+                "internet",
+                "sheriff-bridge",
+                "kali-bridge",
+                "darkstar",
+                "aions"
+            ]
         );
         assert_eq!(topology.hops.len(), 4);
         assert_eq!(topology.hops[3].to, "aions");
