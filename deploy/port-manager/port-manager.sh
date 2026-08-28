@@ -66,6 +66,11 @@ port_is_free() {
   ! ss -H -ltn "sport = :$port" 2>/dev/null | grep -q .
 }
 
+port_is_reserved() {
+  local port="$1"
+  awk -F '\t' -v p="$port" 'NF && $2 == p {found=1; exit 0} END {if (found) exit 0; exit 1}' "$STATE"
+}
+
 get_allocated() {
   local service="$1"
   awk -F '\t' -v s="$service" '$1 == s {print; exit}' "$STATE"
@@ -131,7 +136,7 @@ allocate_one() {
   (( start <= end )) || { echo "Invalid registry range: $start-$end" >&2; return 1; }
 
   for ((port=start; port<=end; port++)); do
-    if port_is_free "$port" && ! awk -F '\t' -v p="$port" '$2 == p {found=1} END{exit found}' "$STATE"; then
+    if port_is_free "$port" && ! port_is_reserved "$port"; then
       printf '%s\t%s\t%s\t%s\t%s\n' "$service" "$port" "$container_port" "$protocol" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$STATE"
       write_runtime_env
       format_allocation "$service" "$port" "$container_port" "$protocol" "$exposure"
