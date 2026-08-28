@@ -150,12 +150,8 @@ mod tests {
 
     #[test]
     fn execute_is_authorized_before_reaching_provider() {
-        let authorized = authorize_module_command(
-            &["module.start".into()],
-            &request(),
-            ApprovalState::Granted,
-        )
-        .expect("policy should authorize");
+        let authorized = authorize_module_command(&["module.start".into()], &request(), ApprovalState::Granted)
+            .expect("policy should authorize");
 
         assert_eq!(authorized.capability, "module.start");
         assert_eq!(authorized.module_id, "wpc-engine");
@@ -170,12 +166,8 @@ mod tests {
 
     #[test]
     fn execute_without_approval_cannot_create_authorized_command() {
-        let failure = authorize_module_command(
-            &["module.start".into()],
-            &request(),
-            ApprovalState::Pending,
-        )
-        .expect_err("policy must require approval");
+        let failure = authorize_module_command(&["module.start".into()], &request(), ApprovalState::Pending)
+            .expect_err("policy must require approval");
         assert_eq!(failure.decision, AuthorizationDecision::NeedsApproval);
     }
 }
