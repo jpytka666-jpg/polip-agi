@@ -13,6 +13,7 @@ pub mod event;
 pub mod module_provider;
 pub mod module_registry;
 pub mod module_state;
+pub mod network_topology;
 pub mod orchestrator;
 pub mod plugin;
 pub mod plugin_host;
