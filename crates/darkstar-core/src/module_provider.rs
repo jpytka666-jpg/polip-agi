@@ -38,7 +38,7 @@ pub struct ProviderResult {
     pub message: String,
 }
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, thiserror::Error, PartialEq, Eq)]
 pub enum ProviderError {
     #[error("provider does not support module command")]
     Unsupported,
