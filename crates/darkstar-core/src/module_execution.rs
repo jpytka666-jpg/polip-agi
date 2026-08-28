@@ -30,8 +30,12 @@ fn approved_module_command_reaches_provider() {
         capability: "module.start".into(),
         reason: "controlled test".into(),
     };
-    let authorized = authorize_module_command(&["module.start".into()], &request, ApprovalState::Granted)
-        .expect("policy should authorize");
+    let authorized = authorize_module_command(
+        &["module.start".into()],
+        &request,
+        ApprovalState::Granted,
+    )
+    .expect("policy should authorize");
     let provider = DryRunProvider;
     let context = ProviderContext {
         request_id: request.request_id.to_string(),
@@ -39,8 +43,13 @@ fn approved_module_command_reaches_provider() {
         reason: request.reason.clone(),
     };
 
-    let result = provider.apply(&authorized, &context).expect("authorized command should execute");
-    assert_eq!(result.resulting_state, super::module_state::ModuleState::Ready);
+    let result = provider
+        .apply(&authorized, &context)
+        .expect("authorized command should execute");
+    assert_eq!(
+        result.resulting_state,
+        super::module_state::ModuleState::Ready
+    );
 }
 
 #[test]
@@ -54,7 +63,10 @@ fn missing_session_capability_never_reaches_provider() {
     };
 
     let decision = authorize_module_command(&[], &request, ApprovalState::Granted);
-    assert_eq!(decision.unwrap_err().decision, AuthorizationDecision::Deny);
+    assert_eq!(
+        decision.unwrap_err().decision,
+        AuthorizationDecision::Deny
+    );
 }
 
 #[test]
@@ -67,6 +79,13 @@ fn execute_without_approval_stops_before_provider() {
         reason: "controlled test".into(),
     };
 
-    let decision = authorize_module_command(&["module.start".into()], &request, ApprovalState::Pending);
-    assert_eq!(decision.unwrap_err().decision, AuthorizationDecision::NeedsApproval);
+    let decision = authorize_module_command(
+        &["module.start".into()],
+        &request,
+        ApprovalState::Pending,
+    );
+    assert_eq!(
+        decision.unwrap_err().decision,
+        AuthorizationDecision::NeedsApproval
+    );
 }
