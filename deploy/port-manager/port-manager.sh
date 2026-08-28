@@ -1,6 +1,22 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# THIS IS VERY IMPORTANT!!!
+# ==========================================
+# AUTHOR: M. SZUL
+# AI MODEL: GPT-5.6 Luna
+# TIMESTAMP: 2026-08-28 06:10:00
+# REASON FOR CREATION: Central dynamic host-port allocation for Darkstar and future services without hard-coded host-port collisions.
+# MECHANICS: Reads the tracked registry, checks live TCP listeners, reserves one free host port under an exclusive file lock, and writes local runtime environment state.
+# SYSTEM PART: Deployment infrastructure / Port Manager
+# ARCHITECTURE FUNCTION: Single local authority for host-port allocation used by Docker Compose.
+# DEPENDENCIES/LINKS: deploy/port-manager/registry.yaml, deploy/.env, docker-compose.yml, ss, awk, flock.
+# TECH STACK: Bash with standard Linux utilities; selected for direct host networking visibility and deployment portability.
+# LOCAL WORKSPACE: /home/owner/polip-agi/deploy/port-manager/port-manager.sh
+# GIT COMMIT: PENDING
+# GITHUB METADATA: Repository jpytka666-jpg/polip-agi, branch feat/darkstar-module-control
+# ==========================================
+
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 DEPLOY="$ROOT/deploy"
 REGISTRY="$DEPLOY/port-manager/registry.yaml"
@@ -19,15 +35,15 @@ EOF
 }
 
 service_value() {
-  local service="$1" key="$2" value
-  value="$(awk -v service="$service" -v key="$key" '
-    $0 == "  " service ":" { in_service=1; next }
+  local requested_service="$1" requested_key="$2" value
+  value="$(awk -v wanted_service="$requested_service" -v wanted_key="$requested_key" '
+    $0 == "  " wanted_service ":" { in_service=1; next }
     in_service && $0 ~ /^  [^[:space:]].*:/ { exit }
     in_service && $0 ~ /^    / {
       line=$0
       sub(/^[[:space:]]+/, "", line)
       split(line, parts, ":")
-      if (parts[1] == key) {
+      if (parts[1] == wanted_key) {
         value=substr(line, index(line, ":") + 1)
         gsub(/^[[:space:]]+|[[:space:]]+$/, "", value)
         print value
@@ -43,7 +59,7 @@ service_value() {
 
 range_value() {
   local key="$1" value
-  value="$(awk -v k="$key" '$0 ~ "^  " k ":[[:space:]]*" {sub(/^[^:]*:[[:space:]]*/, ""); print; exit}' "$REGISTRY")"
+  value="$(awk -v wanted_key="$key" '$0 ~ "^  " wanted_key ":[[:space:]]*" {sub(/^[^:]*:[[:space:]]*/, ""); print; exit}' "$REGISTRY")"
   [ -n "$value" ] || return 1
   printf '%s\n' "$value"
 }
@@ -53,9 +69,14 @@ port_is_free() {
   ! ss -H -ltn "sport = :$port" 2>/dev/null | grep -q .
 }
 
+port_is_reserved() {
+  local port="$1"
+  awk -F '\t' -v wanted_port="$port" '$2 == wanted_port {found=1} END {exit(found ? 0 : 1)}' "$STATE"
+}
+
 get_allocated() {
-  local service="$1"
-  awk -F '\t' -v s="$service" '$1 == s {print; exit}' "$STATE"
+  local requested_service="$1"
+  awk -F '\t' -v wanted_service="$requested_service" '$1 == wanted_service {print; exit}' "$STATE"
 }
 
 write_runtime_env() {
@@ -78,9 +99,9 @@ lock_run() {
 }
 
 allocate_one() {
-  local service="$1"
+  local requested_service="$1"
   local existing
-  existing="$(get_allocated "$service" || true)"
+  existing="$(get_allocated "$requested_service" || true)"
   if [ -n "$existing" ]; then
     echo "$existing" | awk -F '\t' '{printf "%s -> host:127.0.0.1:%s container:%s/%s\n", $1,$2,$3,$4}'
     return 0
@@ -89,21 +110,21 @@ allocate_one() {
   local start end container_port protocol exposure
   start="$(range_value start)"
   end="$(range_value end)"
-  container_port="$(service_value "$service" container_port)"
-  protocol="$(service_value "$service" protocol)"
-  exposure="$(service_value "$service" exposure)"
+  container_port="$(service_value "$requested_service" container_port)"
+  protocol="$(service_value "$requested_service" protocol)"
+  exposure="$(service_value "$requested_service" exposure)"
 
   [[ "$start" =~ ^[0-9]+$ ]] || { echo "Invalid registry start port: $start" >&2; return 1; }
   [[ "$end" =~ ^[0-9]+$ ]] || { echo "Invalid registry end port: $end" >&2; return 1; }
-  [[ "$container_port" =~ ^[0-9]+$ ]] || { echo "Invalid container port for $service: $container_port" >&2; return 1; }
-  [ "$protocol" = "tcp" ] || { echo "Unsupported protocol for $service: $protocol" >&2; return 1; }
-  [ "$exposure" = "localhost" ] || { echo "Unsupported exposure for $service: $exposure" >&2; return 1; }
+  [[ "$container_port" =~ ^[0-9]+$ ]] || { echo "Invalid container port for $requested_service: $container_port" >&2; return 1; }
+  [ "$protocol" = "tcp" ] || { echo "Unsupported protocol for $requested_service: $protocol" >&2; return 1; }
+  [ "$exposure" = "localhost" ] || { echo "Unsupported exposure for $requested_service: $exposure" >&2; return 1; }
 
   for ((port=start; port<=end; port++)); do
-    if port_is_free "$port" && awk -F '\t' -v p="$port" '$2 == p {found=1} END{exit found}' "$STATE"; then
-      printf '%s\t%s\t%s\t%s\t%s\n' "$service" "$port" "$container_port" "$protocol" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$STATE"
+    if port_is_free "$port" && ! port_is_reserved "$port"; then
+      printf '%s\t%s\t%s\t%s\t%s\n' "$requested_service" "$port" "$container_port" "$protocol" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$STATE"
       write_runtime_env
-      echo "$service -> host:${exposure}:${port} container:${container_port}/${protocol}"
+      echo "$requested_service -> host:${exposure}:${port} container:${container_port}/${protocol}"
       return 0
     fi
   done
@@ -113,20 +134,20 @@ allocate_one() {
 }
 
 release_one() {
-  local service="$1"
+  local requested_service="$1"
   local tmp="$STATE.tmp"
-  awk -F '\t' -v s="$service" '$1 != s' "$STATE" > "$tmp"
+  awk -F '\t' -v wanted_service="$requested_service" '$1 != wanted_service' "$STATE" > "$tmp"
   mv "$tmp" "$STATE"
   write_runtime_env
-  echo "released: $service"
+  echo "released: $requested_service"
 }
 
 list_all() {
   printf 'SERVICE\tHOST_PORT\tCONTAINER_PORT\tPROTOCOL\tSTATE\n'
-  while IFS=$'\t' read -r service host_port container_port protocol timestamp; do
-    [ -n "${service:-}" ] || continue
-    if port_is_free "$host_port"; then state="reserved/free"; else state="reserved/in-use"; fi
-    printf '%s\t%s\t%s\t%s\t%s\n' "$service" "$host_port" "$container_port" "$protocol" "$state"
+  while IFS=$'\t' read -r list_service list_host_port list_container_port list_protocol list_timestamp; do
+    [ -n "${list_service:-}" ] || continue
+    if port_is_free "$list_host_port"; then list_state="reserved/free"; else list_state="reserved/in-use"; fi
+    printf '%s\t%s\t%s\t%s\t%s\n' "$list_service" "$list_host_port" "$list_container_port" "$list_protocol" "$list_state"
   done < "$STATE"
 }
 
@@ -155,16 +176,16 @@ audit_all() {
 }
 
 main() {
-  local command="${1:-}" service="${2:-}"
+  local command="${1:-}" requested_service="${2:-}"
   case "$command" in
     list) list_all ;;
     allocate)
-      [ -n "$service" ] || { usage >&2; exit 2; }
-      lock_run allocate_one "$service"
+      [ -n "$requested_service" ] || { usage >&2; exit 2; }
+      lock_run allocate_one "$requested_service"
       ;;
     release)
-      [ -n "$service" ] || { usage >&2; exit 2; }
-      lock_run release_one "$service"
+      [ -n "$requested_service" ] || { usage >&2; exit 2; }
+      lock_run release_one "$requested_service"
       ;;
     audit|check) audit_all ;;
     *) usage >&2; exit 2 ;;
