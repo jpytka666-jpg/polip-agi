@@ -63,6 +63,35 @@ async fn create_session(app: Router) -> (Router, Uuid) {
         .unwrap();
     (app, session_id)
 }
+async fn create_control_session(app: Router) -> (Router, Uuid) {
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/sessions")
+                .header("authorization", "Bearer secret")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    r#"{"principal_id":"operator","capabilities":["module.start"]}"#,
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::CREATED);
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let json: Value = serde_json::from_slice(&body).unwrap();
+    let session_id = json["session"]["session_id"]
+        .as_str()
+        .unwrap()
+        .parse()
+        .unwrap();
+    (app, session_id)
+}
 
 #[tokio::test]
 async fn session_can_write_and_read_memory() {
@@ -111,4 +140,71 @@ async fn memory_routes_require_authentication() {
         .await
         .unwrap();
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn module_action_requires_bearer_token() {
+    let response = router(test_state())
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/modules/wpc-engine/actions")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    r#"{"command":"start","reason":"operator requested start"}"#,
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn module_action_denies_missing_capability() {
+    let app = router(test_state());
+    let (app, session_id) = create_session(app).await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/modules/wpc-engine/actions")
+                .header("authorization", "Bearer secret")
+                .header("content-type", "application/json")
+                .body(Body::from(format!(
+                    r#"{{"session_id":"{}","command":"start","reason":"operator requested start"}}"#,
+                    session_id
+                )))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
+async fn module_action_accepts_authorized_start_request() {
+    let app = router(test_state());
+    let (app, session_id) = create_control_session(app).await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/modules/wpc-engine/actions")
+                .header("authorization", "Bearer secret")
+                .header("content-type", "application/json")
+                .body(Body::from(format!(
+                    r#"{{"session_id":"{}","command":"start","reason":"operator requested start"}}"#,
+                    session_id
+                )))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
 }

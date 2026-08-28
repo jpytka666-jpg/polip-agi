@@ -18,6 +18,8 @@
 
 #[path = "memory_http.rs"]
 mod memory_http;
+#[path = "module_control_http.rs"]
+mod module_control_http;
 #[path = "run_stream.rs"]
 mod run_stream;
 #[path = "system_graph_view.rs"]
@@ -42,6 +44,7 @@ use darkstar_core::{
     session::{Principal, Session},
 };
 use memory_http::{read_memory, write_memory};
+use module_control_http::module_action;
 use run_stream::{RunEvent, RunStreamHub};
 use serde::Serialize;
 use tokio::{spawn, time::sleep};
@@ -130,6 +133,7 @@ pub fn router(state: AppState) -> Router {
         .route("/v1/system-graph", get(system_graph_json))
         .route("/v1/runs/start", post(start_demo_run))
         .route("/v1/runs/{run_id}/events", get(run_events))
+        .route("/v1/modules/{module_id}/actions", post(module_action))
         .route("/v1/sessions", post(create_session))
         .route(
             "/v1/sessions/{session_id}/memory/{key}",
