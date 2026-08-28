@@ -39,7 +39,10 @@ pub fn plan(modules: &[ModuleDescriptor], desired: &[DesiredModuleState]) -> Orc
     let mut commands = Vec::new();
 
     for target in desired {
-        let Some(module) = modules.iter().find(|module| module.module_id == target.module_id) else {
+        let Some(module) = modules
+            .iter()
+            .find(|module| module.module_id == target.module_id)
+        else {
             continue;
         };
 
@@ -93,10 +96,13 @@ mod tests {
                 desired: ModuleState::Ready,
             }],
         );
-        assert_eq!(plan.commands, vec![PlannedCommand {
-            module_id: "wpc".into(),
-            command: ModuleCommand::Start,
-        }]);
+        assert_eq!(
+            plan.commands,
+            vec![PlannedCommand {
+                module_id: "wpc".into(),
+                command: ModuleCommand::Start,
+            }]
+        );
     }
 
     #[test]
