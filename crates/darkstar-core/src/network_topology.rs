@@ -87,9 +87,7 @@ pub fn reference_topology() -> NetworkTopology {
                 layer: NetworkLayer::SheriffBridge,
                 trust: TrustLevel::Perimeter,
                 deployment: DeploymentForm::AzureContainer,
-                physical_hint: Some(
-                    "dedicated perimeter mini PC in physical deployment".into(),
-                ),
+                physical_hint: Some("dedicated perimeter mini PC in physical deployment".into()),
                 visible_identity: Some("sheriff-egress".into()),
                 route_role: "first perimeter gateway".into(),
             },
@@ -160,8 +158,15 @@ mod tests {
     #[test]
     fn reference_path_is_ordered() {
         let topology = reference_topology();
-        let ids: Vec<&str> = topology.nodes.iter().map(|node| node.node_id.as_str()).collect();
-        assert_eq!(ids, ["internet", "sheriff-bridge", "kali-bridge", "darkstar", "aions"]);
+        let ids: Vec<&str> = topology
+            .nodes
+            .iter()
+            .map(|node| node.node_id.as_str())
+            .collect();
+        assert_eq!(
+            ids,
+            ["internet", "sheriff-bridge", "kali-bridge", "darkstar", "aions"]
+        );
         assert_eq!(topology.hops.len(), 4);
         assert_eq!(topology.hops[3].to, "aions");
     }
