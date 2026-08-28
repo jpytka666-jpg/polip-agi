@@ -28,7 +28,10 @@ impl ModuleRegistry {
     }
 
     pub fn register(&self, descriptor: ModuleDescriptor) -> Result<(), ModuleRegistryError> {
-        let mut modules = self.modules.write().map_err(|_| ModuleRegistryError::LockPoisoned)?;
+        let mut modules = self
+            .modules
+            .write()
+            .map_err(|_| ModuleRegistryError::LockPoisoned)?;
         if modules.contains_key(&descriptor.module_id) {
             return Err(ModuleRegistryError::Duplicate(descriptor.module_id));
         }
@@ -37,17 +40,30 @@ impl ModuleRegistry {
     }
 
     pub fn get(&self, module_id: &str) -> Result<Option<ModuleDescriptor>, ModuleRegistryError> {
-        let modules = self.modules.read().map_err(|_| ModuleRegistryError::LockPoisoned)?;
+        let modules = self
+            .modules
+            .read()
+            .map_err(|_| ModuleRegistryError::LockPoisoned)?;
         Ok(modules.get(module_id).cloned())
     }
 
     pub fn list(&self) -> Result<Vec<ModuleDescriptor>, ModuleRegistryError> {
-        let modules = self.modules.read().map_err(|_| ModuleRegistryError::LockPoisoned)?;
+        let modules = self
+            .modules
+            .read()
+            .map_err(|_| ModuleRegistryError::LockPoisoned)?;
         Ok(modules.values().cloned().collect())
     }
 
-    pub fn set_state(&self, module_id: &str, state: ModuleState) -> Result<bool, ModuleRegistryError> {
-        let mut modules = self.modules.write().map_err(|_| ModuleRegistryError::LockPoisoned)?;
+    pub fn set_state(
+        &self,
+        module_id: &str,
+        state: ModuleState,
+    ) -> Result<bool, ModuleRegistryError> {
+        let mut modules = self
+            .modules
+            .write()
+            .map_err(|_| ModuleRegistryError::LockPoisoned)?;
         let Some(module) = modules.get_mut(module_id) else {
             return Ok(false);
         };
@@ -81,13 +97,19 @@ mod tests {
         registry.register(descriptor("cbms")).unwrap();
         assert_eq!(registry.list().unwrap()[0].module_id, "cbms");
         assert!(registry.set_state("wpc", ModuleState::Ready).unwrap());
-        assert_eq!(registry.get("wpc").unwrap().unwrap().state, ModuleState::Ready);
+        assert_eq!(
+            registry.get("wpc").unwrap().unwrap().state,
+            ModuleState::Ready
+        );
     }
 
     #[test]
     fn duplicates_are_rejected() {
         let registry = ModuleRegistry::new();
         registry.register(descriptor("wpc")).unwrap();
-        assert!(matches!(registry.register(descriptor("wpc")), Err(ModuleRegistryError::Duplicate(_))));
+        assert!(matches!(
+            registry.register(descriptor("wpc")),
+            Err(ModuleRegistryError::Duplicate(_))
+        ));
     }
 }
