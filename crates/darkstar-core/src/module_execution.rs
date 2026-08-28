@@ -6,7 +6,7 @@
 //! AI MODEL: GPT-5.6 Luna
 //! TIMESTAMP: 2026-08-28 01:35:00
 //! REASON FOR CREATION: Prove that module execution cannot reach a provider without Darkstar policy authorization.
-//! MECHANICS: Tests require an authorized command object, reject missing capability or approval, and allow an authorized command to reach a provider.
+//! MECHANICS: Tests require an AuthorizedModuleCommand produced only after policy approval; denied capability or missing approval cannot reach the provider.
 //! SYSTEM PART: Darkstar Core / Module Execution
 //! ARCHITECTURE FUNCTION: Close the execution boundary between policy decisions and provider execution.
 //! DEPENDENCIES/LINKS: module_state, module_provider, policy; later connected to orchestrator plans.
@@ -16,67 +16,56 @@
 //! GITHUB METADATA: jpytka666-jpg/polip-agi, branch feat/darkstar-module-control, PR #6
 //! ==========================================
 
-use super::module_provider::{DryRunProvider, ProviderContext, authorize_module_command};
-use super::module_state::{ModuleCommand, ModuleCommandRequest};
+use super::module_provider::{
+    DryRunProvider, ModuleProvider, ProviderContext, authorize_module_command,
+};
+use super::module_state::{ModuleCommand, ModuleCommandRequest, ModuleState};
 use super::policy::{ApprovalState, AuthorizationDecision};
-use uuid::Uuid;
+
+fn request() -> ModuleCommandRequest {
+    ModuleCommandRequest {
+        module_id: "wpc-engine".into(),
+        command: ModuleCommand::Start,
+        reason: "controlled test".into(),
+    }
+}
 
 #[test]
 fn approved_module_command_reaches_provider() {
-    let request = ModuleCommandRequest {
-        request_id: Uuid::new_v4(),
-        module_id: "wpc-engine".into(),
-        command: ModuleCommand::Start,
-        capability: "module.start".into(),
-        reason: "controlled test".into(),
-    };
-    let authorized =
-        authorize_module_command(&["module.start".into()], &request, ApprovalState::Granted)
-            .expect("policy should authorize");
+    let request = request();
+    let authorized = authorize_module_command(
+        &["module.start".into()],
+        &request,
+        ApprovalState::Granted,
+    )
+    .expect("policy should authorize");
     let provider = DryRunProvider;
     let context = ProviderContext {
-        request_id: request.request_id.to_string(),
+        request_id: authorized.request_id.to_string(),
         principal_id: "human:operator".into(),
-        reason: request.reason.clone(),
+        reason: authorized.reason.clone(),
     };
 
     let result = provider
         .apply(&authorized, &context)
         .expect("authorized command should execute");
-    assert_eq!(
-        result.resulting_state,
-        super::module_state::ModuleState::Ready
-    );
+    assert_eq!(result.resulting_state, ModuleState::Ready);
 }
 
 #[test]
 fn missing_session_capability_never_reaches_provider() {
-    let request = ModuleCommandRequest {
-        request_id: Uuid::new_v4(),
-        module_id: "wpc-engine".into(),
-        command: ModuleCommand::Start,
-        capability: "module.start".into(),
-        reason: "controlled test".into(),
-    };
-
-    let decision = authorize_module_command(&[], &request, ApprovalState::Granted);
-    assert_eq!(decision.unwrap_err().decision, AuthorizationDecision::Deny);
+    let failure = authorize_module_command(&[], &request(), ApprovalState::Granted)
+        .expect_err("missing capability must be denied");
+    assert_eq!(failure.decision, AuthorizationDecision::Deny);
 }
 
 #[test]
 fn execute_without_approval_stops_before_provider() {
-    let request = ModuleCommandRequest {
-        request_id: Uuid::new_v4(),
-        module_id: "wpc-engine".into(),
-        command: ModuleCommand::Start,
-        capability: "module.start".into(),
-        reason: "controlled test".into(),
-    };
-
-    let decision =
-        authorize_module_command(&["module.start".into()], &request, ApprovalState::Pending);
-    assert_eq!(
-        decision.unwrap_err().decision,
-        AuthorizationDecision::NeedsApproval
-    );
+    let failure = authorize_module_command(
+        &["module.start".into()],
+        &request(),
+        ApprovalState::Pending,
+    )
+    .expect_err("execution without trusted approval must stop");
+    assert_eq!(failure.decision, AuthorizationDecision::NeedsApproval);
 }
