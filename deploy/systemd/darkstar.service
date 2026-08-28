@@ -1,0 +1,37 @@
+# THIS IS VERY IMPORTANT!!!
+# ==========================================
+# AUTHOR: M. SZUL
+# AI MODEL: GPT-5.6 Luna
+# TIMESTAMP: 2026-08-28 06:51:00
+# REASON FOR CREATION: Start and stop the Darkstar Compose runtime with Ubuntu systemd.
+# MECHANICS: Waits for Docker, validates Compose configuration, then delegates container lifecycle to Docker Compose.
+# SYSTEM PART: Darkstar host runtime supervision
+# ARCHITECTURE FUNCTION: Boot/manual lifecycle for the Darkstar Compose stack.
+# DEPENDENCIES/LINKS: docker.service, /home/owner/polip-agi/deploy/docker-compose.yml, /home/owner/polip-agi/deploy/.env
+# TECH STACK: systemd unit + Docker Compose v2; selected because the host already uses systemd and Docker.
+# LOCAL WORKSPACE: /home/owner/polip-agi
+# GIT COMMIT: PENDING
+# GITHUB METADATA: jpytka666-jpg/polip-agi / feat/darkstar-module-control
+# ==========================================
+
+[Unit]
+Description=Darkstar Docker Compose Runtime
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/home/owner/polip-agi
+
+ExecStart=/usr/bin/test -f /home/owner/polip-agi/deploy/.env
+ExecStart=/usr/bin/docker compose --env-file /home/owner/polip-agi/deploy/.env -f /home/owner/polip-agi/deploy/docker-compose.yml config -q
+ExecStart=/usr/bin/docker compose --env-file /home/owner/polip-agi/deploy/.env -f /home/owner/polip-agi/deploy/docker-compose.yml up -d --remove-orphans
+ExecStop=/usr/bin/docker compose --env-file /home/owner/polip-agi/deploy/.env -f /home/owner/polip-agi/deploy/docker-compose.yml down
+
+TimeoutStartSec=0
+TimeoutStopSec=120
+
+[Install]
+WantedBy=multi-user.target
