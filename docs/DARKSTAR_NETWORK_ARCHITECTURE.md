@@ -6,47 +6,65 @@ Darkstar models the protected path into AIONS as an ordered set of network and
 trust boundaries. The topology contract is descriptive first; concrete VPN,
 routing, firewall and provider implementations are separate concerns.
 
-## Reference path
+## Initial Azure deployment
+
+The first cloud deployment uses three isolated container roles:
 
 ```text
 Internet
-   -> Watcher (perimeter / mini PC)
-   -> Kali Security Zone (sandbox)
-   -> Darkstar (control plane / policy gate)
-   -> AIONS (protected endpoint)
+   -> Sheriff Bridge container
+   -> Kali Bridge container
+   -> Darkstar container
+   -> AIONS protected endpoint
 ```
+
+This is the initial Azure test/development topology. It mirrors the intended
+logical separation before dedicated hardware is installed.
+
+## Physical deployment target
+
+The network/security edge is intended to move to separate small machines:
+
+```text
+Mini PC #1  -> Sheriff Bridge
+Mini PC #2  -> Kali security environment / Kali Bridge
+Darkstar    -> dedicated headless control-plane host
+```
+
+AIONS remains the protected system beyond the control boundary.
 
 ## Boundary responsibilities
 
-### Watcher
+### Sheriff Bridge
 
-The Watcher is the first perimeter gateway. It is intended to live on a small
-network appliance or mini PC and provide the outer network boundary for the
-system.
+Sheriff Bridge is the first perimeter gateway. It is intended to provide the
+outer network boundary, VPN/firewall/routing controls and the first trust
+transition into the security environment.
 
-### Kali Security Zone
+### Kali Bridge
 
-Kali is an isolated security-testing environment. Web and network testing tools
-must be treated as execution capabilities inside a sandbox rather than as part
-of the trusted AIONS endpoint.
+Kali Bridge is an isolated security-testing environment. Web and network
+security tooling must be treated as execution capabilities inside a sandbox,
+not as part of the trusted AIONS endpoint.
 
 ### Darkstar
 
-Darkstar is the control plane. Requests entering the protected side should
-cross Session, Capability, Policy and Orchestrator controls before a provider
-is allowed to act.
+Darkstar is the control plane and Ghost Gate. Requests entering the protected
+side should cross Session, Capability, Policy and Orchestrator controls before
+a provider is allowed to act.
 
 ### AIONS
 
-AIONS is the protected system endpoint. It is not modelled as another public
-network identity in this contract.
+AIONS is the protected system endpoint. It remains outside the three-container
+edge and is not modelled as another public network identity in this contract.
 
 ## Identity separation
 
 The architecture permits separate externally visible network identities for
-Watcher, Kali and Darkstar, while AIONS remains private. This document does not
-claim anonymity or guarantee a particular geolocation. Identity separation is
-an architectural boundary; VPN, firewall and routing providers implement it.
+Sheriff Bridge, Kali Bridge and Darkstar, while AIONS remains private. This
+document does not claim anonymity or guarantee a particular geolocation.
+Identity separation is an architectural boundary; VPN, firewall and routing
+providers implement it.
 
 ## Security rule
 
