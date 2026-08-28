@@ -322,6 +322,7 @@ async fn create_session(
         StatusCode::CREATED,
         Json(serde_json::json!({ "session": session })),
     )
+        .into_response()
 }
 
 pub(crate) fn authenticated(state: &AppState, headers: &HeaderMap) -> bool {
@@ -408,7 +409,7 @@ mod tests {
                     .method("POST")
                     .uri("/v1/runs/start")
                     .header("content-type", "application/json")
-                    .body(Body::from(format!(r#"{{"run_id":"{}"}}"#, Uuid::new_v4())))
+                    .body(Body::from(format!(r#"{{\"run_id\":\"{}\"}}"#, Uuid::new_v4())))
                     .unwrap(),
             )
             .await
@@ -426,7 +427,7 @@ mod tests {
                     .uri("/v1/runs/start")
                     .header("authorization", "Bearer secret")
                     .header("content-type", "application/json")
-                    .body(Body::from(format!(r#"{{"run_id":"{}"}}"#, run_id)))
+                    .body(Body::from(format!(r#"{{\"run_id\":\"{}\"}}"#, run_id)))
                     .unwrap(),
             )
             .await
@@ -456,7 +457,7 @@ mod tests {
                     .method("POST")
                     .uri("/v1/sessions")
                     .header("content-type", "application/json")
-                    .body(Body::from(r#"{"principal_id":"agent-1"}"#))
+                    .body(Body::from(r#"{\"principal_id\":\"agent-1\"}"#))
                     .unwrap(),
             )
             .await
@@ -474,7 +475,7 @@ mod tests {
                     .header("authorization", "Bearer secret")
                     .header("content-type", "application/json")
                     .body(Body::from(
-                        r#"{"principal_id":"agent-1","capabilities":["github.read"]}"#,
+                        r#"{\"principal_id\":\"agent-1\",\"capabilities\":[\"github.read\"]}"#,
                     ))
                     .unwrap(),
             )
