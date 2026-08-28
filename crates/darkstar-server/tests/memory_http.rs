@@ -16,7 +16,11 @@
 //! GITHUB METADATA: jpytka666-jpg/polip-agi / feat/darkstar-module-control
 //! ==========================================
 
-use axum::{body::Body, http::{Request, StatusCode}, Router};
+use axum::{
+    Router,
+    body::Body,
+    http::{Request, StatusCode},
+};
 use serde_json::Value;
 use tower::ServiceExt;
 use uuid::Uuid;

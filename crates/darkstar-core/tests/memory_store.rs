@@ -27,7 +27,12 @@ fn stores_and_reads_memory_with_session_isolation() {
     let session_b = Uuid::new_v4();
 
     store
-        .put(session_a, "project", json!({"name": "Darkstar"}), 1_700_000_000_000)
+        .put(
+            session_a,
+            "project",
+            json!({"name": "Darkstar"}),
+            1_700_000_000_000,
+        )
         .expect("session A write should succeed");
 
     let found = store

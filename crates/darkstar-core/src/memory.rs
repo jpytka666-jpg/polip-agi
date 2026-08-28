@@ -67,11 +67,7 @@ impl MemoryStore {
         Ok(())
     }
 
-    pub fn get(
-        &self,
-        session_id: Uuid,
-        key: &str,
-    ) -> Result<Option<StoredMemory>, String> {
+    pub fn get(&self, session_id: Uuid, key: &str) -> Result<Option<StoredMemory>, String> {
         let records = self
             .records
             .read()

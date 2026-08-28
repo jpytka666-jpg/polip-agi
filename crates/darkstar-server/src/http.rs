@@ -16,12 +16,12 @@
 //! GITHUB METADATA: jpytka666-jpg/polip-agi, branch feat/darkstar-module-control
 //! ==========================================
 
+#[path = "memory_http.rs"]
+mod memory_http;
 #[path = "run_stream.rs"]
 mod run_stream;
 #[path = "system_graph_view.rs"]
 mod system_graph_view;
-#[path = "memory_http.rs"]
-mod memory_http;
 
 use std::{
     collections::HashMap,
@@ -409,7 +409,7 @@ mod tests {
                     .method("POST")
                     .uri("/v1/runs/start")
                     .header("content-type", "application/json")
-                    .body(Body::from(format!(r#"{{\"run_id\":\"{}\"}}"#, Uuid::new_v4())))
+                    .body(Body::from(format!(r#"{{"run_id":"{}"}}"#, Uuid::new_v4())))
                     .unwrap(),
             )
             .await
@@ -427,7 +427,7 @@ mod tests {
                     .uri("/v1/runs/start")
                     .header("authorization", "Bearer secret")
                     .header("content-type", "application/json")
-                    .body(Body::from(format!(r#"{{\"run_id\":\"{}\"}}"#, run_id)))
+                    .body(Body::from(format!(r#"{{"run_id":"{}"}}"#, run_id)))
                     .unwrap(),
             )
             .await
@@ -457,7 +457,7 @@ mod tests {
                     .method("POST")
                     .uri("/v1/sessions")
                     .header("content-type", "application/json")
-                    .body(Body::from(r#"{\"principal_id\":\"agent-1\"}"#))
+                    .body(Body::from(r#"{"principal_id":"agent-1"}"#))
                     .unwrap(),
             )
             .await
@@ -475,7 +475,7 @@ mod tests {
                     .header("authorization", "Bearer secret")
                     .header("content-type", "application/json")
                     .body(Body::from(
-                        r#"{\"principal_id\":\"agent-1\",\"capabilities\":[\"github.read\"]}"#,
+                        r#"{"principal_id":"agent-1","capabilities":["github.read"]}"#,
                     ))
                     .unwrap(),
             )
