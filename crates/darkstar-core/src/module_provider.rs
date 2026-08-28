@@ -168,4 +168,41 @@ mod tests {
                 .expect_err("policy must require approval");
         assert_eq!(failure.decision, AuthorizationDecision::NeedsApproval);
     }
+    #[test]
+    fn dry_run_provider_maps_all_lifecycle_commands_to_states() {
+        let commands = [
+            (ModuleCommand::Start, ModuleState::Ready),
+            (ModuleCommand::Stop, ModuleState::Offline),
+            (ModuleCommand::Restart, ModuleState::Ready),
+        ];
+
+        for (command, expected_state) in commands {
+            let request = ModuleCommandRequest {
+                module_id: "wpc-engine".into(),
+                command: command.clone(),
+                reason: "lifecycle regression test".into(),
+            };
+
+            let authorized = authorize_module_command(
+                &[command.clone().capability().into()],
+                &request,
+                ApprovalState::Granted,
+            )
+            .expect("command should be authorized");
+
+            let result = DryRunProvider
+                .apply(
+                    &authorized,
+                    &ProviderContext {
+                        request_id: authorized.request_id.to_string(),
+                        principal_id: "test".into(),
+                        reason: authorized.reason.clone(),
+                    },
+                )
+                .expect("dry-run provider should accept the command");
+
+            assert_eq!(result.command, command);
+            assert_eq!(result.resulting_state, expected_state);
+        }
+    }
 }
