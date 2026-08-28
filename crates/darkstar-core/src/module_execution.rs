@@ -16,7 +16,7 @@
 //! GITHUB METADATA: jpytka666-jpg/polip-agi, branch feat/darkstar-module-control, PR #6
 //! ==========================================
 
-use super::module_provider::{authorize_module_command, DryRunProvider, ProviderContext};
+use super::module_provider::{DryRunProvider, ProviderContext, authorize_module_command};
 use super::module_state::{ModuleCommand, ModuleCommandRequest};
 use super::policy::{ApprovalState, AuthorizationDecision};
 use uuid::Uuid;
@@ -30,12 +30,9 @@ fn approved_module_command_reaches_provider() {
         capability: "module.start".into(),
         reason: "controlled test".into(),
     };
-    let authorized = authorize_module_command(
-        &["module.start".into()],
-        &request,
-        ApprovalState::Granted,
-    )
-    .expect("policy should authorize");
+    let authorized =
+        authorize_module_command(&["module.start".into()], &request, ApprovalState::Granted)
+            .expect("policy should authorize");
     let provider = DryRunProvider;
     let context = ProviderContext {
         request_id: request.request_id.to_string(),
@@ -63,10 +60,7 @@ fn missing_session_capability_never_reaches_provider() {
     };
 
     let decision = authorize_module_command(&[], &request, ApprovalState::Granted);
-    assert_eq!(
-        decision.unwrap_err().decision,
-        AuthorizationDecision::Deny
-    );
+    assert_eq!(decision.unwrap_err().decision, AuthorizationDecision::Deny);
 }
 
 #[test]
@@ -79,11 +73,8 @@ fn execute_without_approval_stops_before_provider() {
         reason: "controlled test".into(),
     };
 
-    let decision = authorize_module_command(
-        &["module.start".into()],
-        &request,
-        ApprovalState::Pending,
-    );
+    let decision =
+        authorize_module_command(&["module.start".into()], &request, ApprovalState::Pending);
     assert_eq!(
         decision.unwrap_err().decision,
         AuthorizationDecision::NeedsApproval
