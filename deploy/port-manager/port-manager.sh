@@ -19,23 +19,33 @@ EOF
 }
 
 service_value() {
-  local service="$1" key="$2"
-  awk -v service="$service" -v key="$key" '
+  local service="$1" key="$2" value
+  value="$(awk -v service="$service" -v key="$key" '
     $0 == "  " service ":" { in_service=1; next }
     in_service && $0 ~ /^  [^[:space:]].*:/ { exit }
     in_service && $0 ~ /^    / {
       line=$0
       sub(/^[[:space:]]+/, "", line)
       split(line, parts, ":")
-      if (parts[1] == key) { print substr(line, index(line, ":") + 1); found=1; exit }
+      if (parts[1] == key) {
+        value=substr(line, index(line, ":") + 1)
+        gsub(/^[[:space:]]+|[[:space:]]+$/, "", value)
+        print value
+        found=1
+        exit 0
+      }
     }
     END { if (!found) exit 1 }
-  ' "$REGISTRY" | sed 's/^[[:space:]]*//'
+  ' "$REGISTRY")"
+  [ -n "$value" ] || return 1
+  printf '%s\n' "$value"
 }
 
 range_value() {
-  local key="$1"
-  awk -v k="$key" '$0 ~ "^  " k ":[[:space:]]*" {sub(/^[^:]*:[[:space:]]*/, ""); print; exit}' "$REGISTRY"
+  local key="$1" value
+  value="$(awk -v k="$key" '$0 ~ "^  " k ":[[:space:]]*" {sub(/^[^:]*:[[:space:]]*/, ""); print; exit}' "$REGISTRY")"
+  [ -n "$value" ] || return 1
+  printf '%s\n' "$value"
 }
 
 port_is_free() {
@@ -83,6 +93,12 @@ allocate_one() {
   protocol="$(service_value "$service" protocol)"
   exposure="$(service_value "$service" exposure)"
 
+  [[ "$start" =~ ^[0-9]+$ ]] || { echo "Invalid registry start port: $start" >&2; return 1; }
+  [[ "$end" =~ ^[0-9]+$ ]] || { echo "Invalid registry end port: $end" >&2; return 1; }
+  [[ "$container_port" =~ ^[0-9]+$ ]] || { echo "Invalid container port for $service: $container_port" >&2; return 1; }
+  [ "$protocol" = "tcp" ] || { echo "Unsupported protocol for $service: $protocol" >&2; return 1; }
+  [ "$exposure" = "localhost" ] || { echo "Unsupported exposure for $service: $exposure" >&2; return 1; }
+
   for ((port=start; port<=end; port++)); do
     if port_is_free "$port" && ! awk -F '\t' -v p="$port" '$2 == p {found=1} END{exit found}' "$STATE"; then
       printf '%s\t%s\t%s\t%s\t%s\n' "$service" "$port" "$container_port" "$protocol" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$STATE"
@@ -123,6 +139,11 @@ audit_all() {
   else rc=1; fi
   while IFS=$'\t' read -r service host_port container_port protocol timestamp; do
     [ -n "${service:-}" ] || continue
+    if [ -z "$host_port" ] || [ -z "$container_port" ] || [ -z "$protocol" ]; then
+      echo "$service -> INVALID_ALLOCATION"
+      rc=1
+      continue
+    fi
     if port_is_free "$host_port"; then
       echo "$service host:$host_port -> free"
     else
