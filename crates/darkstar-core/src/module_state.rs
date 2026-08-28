@@ -39,6 +39,16 @@ pub enum ModuleCommand {
     Restart,
 }
 
+impl ModuleCommand {
+    pub fn capability(self) -> &'static str {
+        match self {
+            Self::Start => "module.start",
+            Self::Stop => "module.stop",
+            Self::Restart => "module.restart",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ModuleCommandRequest {
     pub module_id: String,
@@ -60,5 +70,11 @@ mod tests {
         let encoded = serde_json::to_string(&request).unwrap();
         let decoded: ModuleCommandRequest = serde_json::from_str(&encoded).unwrap();
         assert_eq!(request, decoded);
+    }
+    #[test]
+    fn commands_expose_control_capabilities() {
+        assert_eq!(ModuleCommand::Start.capability(), "module.start");
+        assert_eq!(ModuleCommand::Stop.capability(), "module.stop");
+        assert_eq!(ModuleCommand::Restart.capability(), "module.restart");
     }
 }

@@ -60,11 +60,7 @@ impl AuthorizationFailure {
 }
 
 pub fn capability_for_command(command: ModuleCommand) -> &'static str {
-    match command {
-        ModuleCommand::Start => "module.start",
-        ModuleCommand::Stop => "module.stop",
-        ModuleCommand::Restart => "module.restart",
-    }
+    command.capability()
 }
 
 pub fn authorize_module_command(
