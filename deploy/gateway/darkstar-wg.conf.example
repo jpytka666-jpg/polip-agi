@@ -1,0 +1,28 @@
+# THIS IS VERY IMPORTANT!!!
+# ==========================================
+# AUTHOR: M. SZUL
+# AI MODEL: GPT-5.6 Sol
+# TIMESTAMP: 2026-08-29 03:27:00 Europe/London
+# REASON FOR CREATION: Provide a secret-free template for the Darkstar WireGuard gateway interface.
+# MECHANICS: Defines the protected subnet and peer routing; real private/public keys and endpoint details remain local secrets/state.
+# SYSTEM PART: Darkstar network gateway
+# ARCHITECTURE FUNCTION: Full-tunnel ingress from Windows/iOnis into Darkstar before Internet egress.
+# DEPENDENCIES/LINKS: WireGuard, deploy/gateway/README.md.
+# TECH STACK: wg-quick configuration.
+# LOCAL WORKSPACE: /home/owner/polip-agi
+# GIT COMMIT: PENDING
+# GITHUB METADATA: jpytka666-jpg/polip-agi / feat/darkstar-gateway
+# ==========================================
+
+# Install as /etc/wireguard/darkstar-wg.conf only after replacing placeholders.
+# NEVER commit the real private key.
+
+[Interface]
+Address = 10.77.0.1/24
+ListenPort = 51820
+PrivateKey = <DARKSTAR_PRIVATE_KEY_LOCAL_ONLY>
+
+[Peer]
+# Windows now / iOnis OS later
+PublicKey = <PROTECTED_HOST_PUBLIC_KEY>
+AllowedIPs = 10.77.0.2/32
