@@ -1,0 +1,27 @@
+# THIS IS VERY IMPORTANT!!!
+# ==========================================
+# AUTHOR: M. SZUL
+# AI MODEL: GPT-5.6 Luna
+# TIMESTAMP: 2026-08-28 07:05:00
+# REASON FOR CREATION: Run one bounded Darkstar dependency recovery attempt on timer activation.
+# MECHANICS: systemd starts one shell probe; the probe checks health and can perform one idempotent Compose reconciliation.
+# SYSTEM PART: Darkstar runtime supervision
+# ARCHITECTURE FUNCTION: Host-side bridge between the 15-minute timer and the existing Compose runtime.
+# DEPENDENCIES/LINKS: docker.service, deploy/dependency-retry.sh, deploy/docker-compose.yml, deploy/.env.
+# TECH STACK: systemd oneshot; selected because Ubuntu already uses systemd for host lifecycle supervision.
+# LOCAL WORKSPACE: /home/owner/polip-agi
+# GIT COMMIT: PENDING
+# GITHUB METADATA: jpytka666-jpg/polip-agi / feat/darkstar-module-control
+# ==========================================
+
+[Unit]
+Description=Darkstar bounded dependency recovery attempt
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/owner/polip-agi
+EnvironmentFile=-/home/owner/polip-agi/deploy/.env
+ExecStart=/home/owner/polip-agi/deploy/dependency-retry.sh

@@ -1,0 +1,58 @@
+#!/bin/sh
+# THIS IS VERY IMPORTANT!!!
+# ==========================================
+# AUTHOR: M. SZUL
+# AI MODEL: GPT-5 Codex
+# TIMESTAMP: 2026-08-29 00:00:00
+# REASON FOR CREATION: Weryfikacja tylko do odczytu aktywnego host guard Darkstar.
+# ==========================================
+
+set -eu
+
+TABLE_FAMILY=inet
+TABLE_NAME=darkstar_host_guard
+UPSTREAM_IFACE=wlp2s0
+
+fail() {
+    printf '%s\n' "darkstar-firewall-verify: $1" >&2
+    exit 1
+}
+
+chain_has_drop_policy() {
+    chain_name=$1
+
+    printf '%s\n' "$ruleset" | awk -v chain_name="$chain_name" '
+        $1 == "chain" && $2 == chain_name && $3 == "{" {
+            in_chain = 1
+            next
+        }
+        in_chain && /policy drop;/ {
+            has_drop_policy = 1
+        }
+        in_chain && $1 == "}" {
+            exit(has_drop_policy ? 0 : 1)
+        }
+        END {
+            exit(has_drop_policy ? 0 : 1)
+        }
+    '
+}
+
+command -v nft >/dev/null 2>&1 || fail "nft command not found"
+command -v ip >/dev/null 2>&1 || fail "ip command not found"
+command -v awk >/dev/null 2>&1 || fail "awk command not found"
+
+ruleset=$(nft list table "$TABLE_FAMILY" "$TABLE_NAME") || fail "table inet darkstar_host_guard is absent"
+
+printf '%s\n' "$ruleset" | grep -Fq 'chain input {' || fail "input chain is absent"
+printf '%s\n' "$ruleset" | grep -Fq 'chain forward {' || fail "forward chain is absent"
+chain_has_drop_policy input || fail "input policy is not drop"
+chain_has_drop_policy forward || fail "forward policy is not drop"
+printf '%s\n' "$ruleset" | grep -Fq 'iifname @loopback_ifaces accept' || fail "loopback rule is absent"
+printf '%s\n' "$ruleset" | grep -Fq 'ct state established,related accept' || fail "established/related rule is absent"
+
+ip -4 route show default | grep -Fq "dev $UPSTREAM_IFACE" || fail "IPv4 management route via $UPSTREAM_IFACE is absent"
+[ "$(cat /proc/sys/net/ipv4/ip_forward)" = 1 ] || fail "IPv4 forwarding is not enabled"
+[ "$(cat /proc/sys/net/ipv6/conf/all/forwarding)" = 1 ] || fail "IPv6 forwarding is not enabled"
+
+printf '%s\n' 'darkstar-firewall-verify: host guard checks passed'

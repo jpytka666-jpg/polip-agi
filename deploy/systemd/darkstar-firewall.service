@@ -1,0 +1,22 @@
+# THIS IS VERY IMPORTANT!!!
+# ==========================================
+# AUTHOR: M. SZUL
+# AI MODEL: GPT-5 Codex
+# TIMESTAMP: 2026-08-29 00:00:00
+# REASON FOR CREATION: Jednostka systemd uruchamiająca host guard Darkstar przed chronioną siecią.
+# ==========================================
+
+[Unit]
+Description=Darkstar host firewall guard
+Documentation=file:///etc/darkstar/host-guard.nft
+After=local-fs.target
+Before=network-pre.target
+Wants=network-pre.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/darkstar-firewall-apply
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

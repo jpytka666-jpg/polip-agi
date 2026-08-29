@@ -4,18 +4,22 @@
 //! ==========================================
 //! AUTHOR: M. SZUL
 //! AI MODEL: GPT-5.6 Luna
-//! TIMESTAMP: 2026-08-27 22:45:00
-//! REASON FOR CREATION: Expose authenticated control routes plus a live, read-only execution stream for the browser System Graph.
-//! MECHANICS: Axum serves health, sessions, architecture inspection and run events. A Tokio broadcast hub carries structured run events; the demo runner only exercises the visualization path and does not execute external tools.
-//! SYSTEM PART: Darkstar Server / Layer 02 Connection + Live Run Graph
+//! TIMESTAMP: 2026-08-28 09:20:00
+//! REASON FOR CREATION: Expose authenticated control routes plus a live, read-only execution stream for the browser System Graph and session-scoped memory.
+//! MECHANICS: Axum serves health, sessions, architecture inspection, memory access and run events. A Tokio broadcast hub carries structured run events; the demo runner only exercises the visualization path and does not execute external tools.
+//! SYSTEM PART: Darkstar Server / Layer 01 + Layer 02 Connection + Live Run Graph
 //! ARCHITECTURE FUNCTION: Transport boundary between clients, Darkstar control-plane state and the human-facing execution observer.
-//! DEPENDENCIES/LINKS: axum, tokio, tokio-stream, serde_json, uuid, darkstar-core session/system_graph models, system_graph_view, run_stream.
+//! DEPENDENCIES/LINKS: axum, tokio, tokio-stream, serde_json, uuid, darkstar-core session/memory/system_graph models, system_graph_view, run_stream, memory_http.
 //! TECH STACK: Rust 2024 + Axum 0.8 + Tokio; selected for a small asynchronous control plane and native server-sent events.
 //! LOCAL WORKSPACE: N/A - GitHub-first workspace.
 //! GIT COMMIT: PENDING
-//! GITHUB METADATA: jpytka666-jpg/polip-agi, branch feat/darkstar-system-graph
+//! GITHUB METADATA: jpytka666-jpg/polip-agi, branch feat/darkstar-module-control
 //! ==========================================
 
+#[path = "memory_http.rs"]
+mod memory_http;
+#[path = "module_control_http.rs"]
+mod module_control_http;
 #[path = "run_stream.rs"]
 mod run_stream;
 #[path = "system_graph_view.rs"]
@@ -33,9 +37,14 @@ use axum::{
     extract::{Path, State},
     http::{HeaderMap, StatusCode, header::AUTHORIZATION},
     response::{Html, IntoResponse, Sse, sse::Event},
-    routing::{get, post},
+    routing::{get, post, put},
 };
-use darkstar_core::session::{Principal, Session};
+use darkstar_core::{
+    memory::MemoryStore,
+    session::{Principal, Session},
+};
+use memory_http::{read_memory, write_memory};
+use module_control_http::module_action;
 use run_stream::{RunEvent, RunStreamHub};
 use serde::Serialize;
 use tokio::{spawn, time::sleep};
@@ -46,6 +55,7 @@ use uuid::Uuid;
 pub struct AppState {
     pub api_token: Option<Arc<str>>,
     pub sessions: Arc<tokio::sync::RwLock<HashMap<Uuid, Session>>>,
+    pub memory: Arc<MemoryStore>,
     pub run_streams: RunStreamHub,
 }
 
@@ -54,6 +64,7 @@ impl AppState {
         Self {
             api_token: env::var("DARKSTAR_API_TOKEN").ok().map(Arc::<str>::from),
             sessions: Arc::new(tokio::sync::RwLock::new(HashMap::new())),
+            memory: Arc::new(MemoryStore::new()),
             run_streams: RunStreamHub::default(),
         }
     }
@@ -107,7 +118,7 @@ fn default_source() -> String {
     "remote".into()
 }
 
-fn now_unix_ms() -> i64 {
+pub(crate) fn now_unix_ms() -> i64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .expect("system clock before UNIX epoch")
@@ -122,7 +133,12 @@ pub fn router(state: AppState) -> Router {
         .route("/v1/system-graph", get(system_graph_json))
         .route("/v1/runs/start", post(start_demo_run))
         .route("/v1/runs/{run_id}/events", get(run_events))
+        .route("/v1/modules/{module_id}/actions", post(module_action))
         .route("/v1/sessions", post(create_session))
+        .route(
+            "/v1/sessions/{session_id}/memory/{key}",
+            put(write_memory).get(read_memory),
+        )
         .with_state(state)
 }
 
@@ -284,7 +300,8 @@ async fn create_session(
         return (
             StatusCode::UNAUTHORIZED,
             Json(serde_json::json!({ "error": "authentication_required" })),
-        );
+        )
+            .into_response();
     }
     let now = now_unix_ms();
     let session = Session {
@@ -309,9 +326,10 @@ async fn create_session(
         StatusCode::CREATED,
         Json(serde_json::json!({ "session": session })),
     )
+        .into_response()
 }
 
-fn authenticated(state: &AppState, headers: &HeaderMap) -> bool {
+pub(crate) fn authenticated(state: &AppState, headers: &HeaderMap) -> bool {
     let Some(expected) = state.api_token.as_deref() else {
         return false;
     };
@@ -339,6 +357,7 @@ mod tests {
         AppState {
             api_token: Some(Arc::<str>::from(token)),
             sessions: Arc::new(tokio::sync::RwLock::new(HashMap::new())),
+            memory: Arc::new(MemoryStore::new()),
             run_streams: RunStreamHub::default(),
         }
     }

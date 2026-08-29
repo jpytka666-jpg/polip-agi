@@ -1,20 +1,8 @@
 //! Darkstar core contracts.
 //!
-//! THIS IS VERY IMPORTANT!!!
-//! ==========================================
-//! AUTHOR: M. SZUL
-//! AI MODEL: GPT-5.6 Luna
-//! TIMESTAMP: 2026-08-27 22:20:00
-//! REASON FOR CREATION: Establish the stable Rust control-plane contract for Darkstar.
-//! MECHANICS: Re-exports versioned domain contracts for sessions, plugins, events, policy, audit, discovery, capability indexing, system graph projection and external plugin transports.
 //! SYSTEM PART: Darkstar Core
-//! ARCHITECTURE FUNCTION: Model-agnostic control-plane foundation shared by all transports, plugins and workflows.
-//! DEPENDENCIES/LINKS: serde, serde_json, uuid, thiserror, tracing; consumed by Darkstar server and adapters.
-//! TECH STACK: Rust 2024; selected for memory safety, concurrency and a stable infrastructure core.
-//! LOCAL WORKSPACE: N/A - GitHub-first workspace.
-//! GIT COMMIT: PENDING
-//! GITHUB METADATA: jpytka666-jpg/polip-agi, branch feat/darkstar-system-graph
-//! ==========================================
+//! ARCHITECTURE FUNCTION: Model-agnostic control-plane foundation shared by transports, plugins, workflows and AIONS ecosystem modules.
+//! TECH STACK: Rust 2024.
 
 pub mod audit;
 pub mod capability_gate;
@@ -22,10 +10,18 @@ pub mod capability_index;
 pub mod capability_selector;
 pub mod discovery;
 pub mod event;
+pub mod memory;
+pub mod module_execution;
+pub mod module_provider;
+pub mod module_registry;
+pub mod module_state;
+pub mod network_topology;
+pub mod orchestrator;
 pub mod plugin;
 pub mod plugin_host;
 pub mod policy;
 pub mod registry;
+pub mod round_table;
 pub mod session;
 pub mod stdio;
 pub mod system_graph;

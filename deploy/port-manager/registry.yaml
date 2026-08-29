@@ -1,0 +1,10 @@
+version: 1
+port_range:
+  start: 18080
+  end: 18999
+services:
+  darkstar:
+    container_port: 8080
+    protocol: tcp
+    exposure: localhost
+    host_port: auto
