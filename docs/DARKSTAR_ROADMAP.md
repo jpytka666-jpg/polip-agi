@@ -71,7 +71,10 @@ Headscale zapewnia samodzielnie hostowany control server sieci mesh. Headplane j
 
 ### M0 — Ochrona checkpointu i dokumentacja
 
-Stan: NEXT
+Stan: DONE
+
+Dowód: commit b3b599f utworzył specyfikację, roadmapę i 17-zadaniowy
+plan wykonawczy jako potomka checkpointu fd8099e.
 
 Zakres:
 
