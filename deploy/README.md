@@ -1,5 +1,14 @@
 # Dark Star supervised runtime
 
+## Host firewall
+
+The versioned host firewall is in [firewall/README.md](firewall/README.md).
+It owns only `inet darkstar_host_guard`, keeps the API closed to public input,
+and has separate install, verification and rollback instructions. Applying it
+to a live host is a later manual operation that requires physical access and
+timestamped root-owned backups; this repository task does not change live
+rules.
+
 This directory defines the first Ubuntu runtime deployment for the existing `darkstar-server` image.
 
 ## Port Manager

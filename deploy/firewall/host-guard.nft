@@ -1,0 +1,68 @@
+# THIS IS VERY IMPORTANT!!!
+# ==========================================
+# AUTHOR: M. SZUL
+# AI MODEL: GPT-5 Codex
+# TIMESTAMP: 2026-08-29 00:00:00
+# REASON FOR CREATION: Wersjonowany host guard nftables dla bramy Darkstar.
+# ==========================================
+
+table inet darkstar_host_guard {
+    set loopback_ifaces {
+        type ifname
+        elements = { "lo" }
+    }
+
+    set management_ifaces {
+        type ifname
+        elements = { "tailscale0" }
+    }
+
+    set upstream_ifaces {
+        type ifname
+        elements = { "wlp2s0" }
+    }
+
+    set downstream_ifaces {
+        type ifname
+        elements = { "enp1s0" }
+    }
+
+    set darkstar_downstream_ipv4 {
+        type ipv4_addr
+        flags interval
+        elements = { 10.44.0.0/24 }
+    }
+
+    chain input {
+        type filter hook input priority filter; policy drop;
+
+        iifname @loopback_ifaces accept comment "loopback"
+        ct state established,related accept comment "established and related"
+        ct state invalid drop comment "invalid connection state"
+
+        ip protocol icmp accept comment "ICMPv4"
+        meta l4proto ipv6-icmp accept comment "ICMPv6"
+
+        iifname @management_ifaces accept comment "temporary Tailscale management"
+        iifname @upstream_ifaces udp dport 41641 accept comment "temporary WireGuard transport"
+
+        iifname @upstream_ifaces udp sport 67 udp dport 68 accept comment "IPv4 DHCP client"
+        iifname @upstream_ifaces udp sport 547 udp dport 546 accept comment "IPv6 DHCP client"
+
+        iifname @downstream_ifaces ip saddr @darkstar_downstream_ipv4 tcp dport 22 accept comment "downstream SSH management after Task 5"
+    }
+
+    chain forward {
+        type filter hook forward priority filter; policy drop;
+
+        ct state established,related accept comment "established and related"
+        ct state invalid drop comment "invalid connection state"
+        iifname @downstream_ifaces oifname @upstream_ifaces ip saddr @darkstar_downstream_ipv4 accept comment "Darkstar downstream IPv4 to upstream"
+    }
+
+    chain postrouting {
+        type nat hook postrouting priority srcnat; policy accept;
+
+        oifname @upstream_ifaces ip saddr @darkstar_downstream_ipv4 masquerade comment "Darkstar downstream IPv4 NAT"
+    }
+}
