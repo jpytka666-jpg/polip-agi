@@ -46,6 +46,9 @@ Stan sprawdzony 2026-08-29:
 
 - repozytorium Ubuntu /home/owner/polip-agi jest czyste i wskazuje dokładnie commit fd8099e;
 - Windows i Darkstar komunikują się tymczasowo przez adres 100.71.8.70;
+- zapisany klucz C:\Users\User\.ssh\darkstar_codex został odrzucony przez
+  Ubuntu; jednorazowe logowanie hasłem działa, więc trwałe logowanie kluczem
+  musi zostać naprawione i przetestowane przed firewallem/rebootem;
 - Tailscale działa i Darkstar oferuje tymczasowy exit node;
 - Darkstar ma aktywny systemd service oraz aktywny timer zależności;
 - IPv4 i IPv6 forwarding mają wartość 1;

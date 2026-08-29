@@ -73,8 +73,9 @@ Headscale zapewnia samodzielnie hostowany control server sieci mesh. Headplane j
 
 Stan: DONE
 
-Dowód: commit b3b599f utworzył specyfikację, roadmapę i 17-zadaniowy
-plan wykonawczy jako potomka checkpointu fd8099e.
+Dowód: commit b3b599f utworzył specyfikację, roadmapę i plan z zadaniami
+0–16 jako potomka checkpointu fd8099e; kolejna kontrola dodała obowiązkową
+bramkę 0A dla logowania SSH kluczem.
 
 Zakres:
 
@@ -97,6 +98,8 @@ Stan: PLANNED
 
 Zakres:
 
+- naprawienie logowania SSH kluczem bez nadpisywania authorized_keys i bez
+  wyłączania hasła przed udanym testem BatchMode;
 - zastąpienie AppState::from_env w test fixture deterministycznym stanem z tokenem;
 - dodanie testu potwierdzającego fail-closed bez tokena;
 - uruchomienie fmt, clippy i pełnego workspace test;

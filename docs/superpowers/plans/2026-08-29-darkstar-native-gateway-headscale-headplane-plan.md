@@ -58,6 +58,7 @@ IPv4 forwarding:       1
 IPv6 forwarding:       1
 Headscale command:     absent
 Tailscale:             active temporary fallback
+SSH key authentication: rejected; password login works temporarily
 React frontend:        Vite starter, not a finished Control Room
 Rust baseline:         fmt passes; 3 integration tests fail with unexpected 401
 ~~~
@@ -160,6 +161,78 @@ git commit -m "test(darkstar): make HTTP fixtures deterministic"
 ~~~
 
 **Exit gate:** Rust tests are green and the failure is not hidden by setting a global shell variable.
+
+---
+
+## Task 0A: Restore key-based SSH before network mutation
+
+**Entry gate:** Task 0 is green. Password login still works and no firewall
+mutation is in progress.
+
+**Files:**
+
+- Inspect locally: C:\Users\User\.ssh\darkstar_codex
+- Inspect locally: C:\Users\User\.ssh\darkstar_codex.pub
+- Inspect on Ubuntu: /home/owner/.ssh/authorized_keys
+- No repository file is created because private access material does not belong in Git.
+
+- [ ] **Step 0A.1: Record the local public-key fingerprint**
+
+On Windows:
+
+~~~powershell
+ssh-keygen -lf C:\Users\User\.ssh\darkstar_codex.pub
+~~~
+
+Never print or copy the private key.
+
+- [ ] **Step 0A.2: Inspect remote ownership and modes**
+
+Through the temporary password session:
+
+~~~bash
+stat -c '%U %G %a %n' /home/owner
+stat -c '%U %G %a %n' /home/owner/.ssh
+stat -c '%U %G %a %n' /home/owner/.ssh/authorized_keys
+~~~
+
+Expected: owner owns .ssh/authorized_keys, directory mode 700 and file mode 600.
+
+- [ ] **Step 0A.3: Compare the exact public key**
+
+Read only darkstar_codex.pub locally and search for that exact public-key body
+in authorized_keys. Do not compare only the comment.
+
+- [ ] **Step 0A.4: Repair without overwriting existing keys**
+
+If missing, append exactly one public-key line. If ownership/modes are wrong,
+repair only /home/owner/.ssh and authorized_keys. Do not replace the whole file.
+
+- [ ] **Step 0A.5: Check sshd policy**
+
+~~~bash
+sshd -T | grep -E 'pubkeyauthentication|authorizedkeysfile|passwordauthentication'
+~~~
+
+Confirm public-key authentication and the resolved authorized_keys path.
+
+- [ ] **Step 0A.6: Test a second BatchMode session**
+
+Keep the password session open and run from Windows:
+
+~~~powershell
+ssh -o BatchMode=yes -o ConnectTimeout=15 -i C:\Users\User\.ssh\darkstar_codex owner@100.71.8.70 hostnamectl --static
+~~~
+
+Expected: CBMS with exit code 0 and no password prompt.
+
+- [ ] **Step 0A.7: Test reconnection**
+
+Close only the key-test session, reconnect twice with BatchMode and verify
+repository status. Do not disable password login in this task.
+
+**Exit gate:** Two fresh key-only sessions succeed. Firewall and reboot work may
+not begin while key authentication is unproven.
 
 ---
 
@@ -1867,7 +1940,7 @@ Each requires a separate design specification, threat review, implementation pla
 
 The plan is complete only when:
 
-- all Task 0–16 exit gates are met;
+- all Task 0–16 exit gates and the Task 0A SSH gate are met;
 - Rust and frontend quality gates pass;
 - real reboot evidence contains changed boot IDs;
 - Windows has no active Internet bypass around Darkstar;
