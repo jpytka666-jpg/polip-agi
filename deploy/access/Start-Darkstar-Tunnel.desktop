@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Start Darkstar Tunnel
+Comment=Start or repair the Darkstar Serveo management tunnel
+Terminal=true
+Exec=bash -lc 'sudo systemctl restart darkstar-serveo-tunnel.service && systemctl status darkstar-serveo-tunnel.service --no-pager; echo; read -p "Press Enter to close..."'
+Icon=network-vpn
+Categories=Network;System;
