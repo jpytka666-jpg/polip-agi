@@ -18,15 +18,36 @@ fail() {
     exit 1
 }
 
+chain_has_drop_policy() {
+    chain_name=$1
+
+    printf '%s\n' "$ruleset" | awk -v chain_name="$chain_name" '
+        $1 == "chain" && $2 == chain_name && $3 == "{" {
+            in_chain = 1
+            next
+        }
+        in_chain && /policy drop;/ {
+            has_drop_policy = 1
+        }
+        in_chain && $1 == "}" {
+            exit(has_drop_policy ? 0 : 1)
+        }
+        END {
+            exit(has_drop_policy ? 0 : 1)
+        }
+    '
+}
+
 command -v nft >/dev/null 2>&1 || fail "nft command not found"
 command -v ip >/dev/null 2>&1 || fail "ip command not found"
+command -v awk >/dev/null 2>&1 || fail "awk command not found"
 
 ruleset=$(nft list table "$TABLE_FAMILY" "$TABLE_NAME") || fail "table inet darkstar_host_guard is absent"
 
 printf '%s\n' "$ruleset" | grep -Fq 'chain input {' || fail "input chain is absent"
 printf '%s\n' "$ruleset" | grep -Fq 'chain forward {' || fail "forward chain is absent"
-printf '%s\n' "$ruleset" | grep -Eq 'chain input \{.*policy drop;' || fail "input policy is not drop"
-printf '%s\n' "$ruleset" | grep -Eq 'chain forward \{.*policy drop;' || fail "forward policy is not drop"
+chain_has_drop_policy input || fail "input policy is not drop"
+chain_has_drop_policy forward || fail "forward policy is not drop"
 printf '%s\n' "$ruleset" | grep -Fq 'iifname @loopback_ifaces accept' || fail "loopback rule is absent"
 printf '%s\n' "$ruleset" | grep -Fq 'ct state established,related accept' || fail "established/related rule is absent"
 
