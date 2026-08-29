@@ -16,11 +16,14 @@
 //! GITHUB METADATA: jpytka666-jpg/polip-agi / feat/darkstar-module-control
 //! ==========================================
 
+use std::{collections::HashMap, sync::Arc};
+
 use axum::{
     Router,
     body::Body,
     http::{Request, StatusCode},
 };
+use darkstar_core::memory::MemoryStore;
 use serde_json::Value;
 use tower::ServiceExt;
 use uuid::Uuid;
@@ -31,7 +34,14 @@ mod http;
 use http::{AppState, router};
 
 fn test_state() -> AppState {
-    AppState::from_env()
+    // Keep the production constructor part of this integration target without reading its environment.
+    let _ = AppState::from_env as fn() -> AppState;
+    AppState {
+        api_token: Some(Arc::<str>::from("secret")),
+        sessions: Arc::new(tokio::sync::RwLock::new(HashMap::new())),
+        memory: Arc::new(MemoryStore::new()),
+        run_streams: Default::default(),
+    }
 }
 
 async fn create_session(app: Router) -> (Router, Uuid) {
@@ -139,6 +149,28 @@ async fn memory_routes_require_authentication() {
         )
         .await
         .unwrap();
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn missing_api_token_fails_closed() {
+    let app = router(AppState {
+        api_token: None,
+        sessions: Arc::new(tokio::sync::RwLock::new(HashMap::new())),
+        memory: Arc::new(MemoryStore::new()),
+        run_streams: Default::default(),
+    });
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri("/v1/system-graph")
+                .header("authorization", "Bearer secret")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 }
 
