@@ -1,3 +1,13 @@
+<!--
+THIS IS VERY IMPORTANT!!!
+==========================================
+AUTHOR: M. SZUL
+AI MODEL: GPT-5 Codex
+TIMESTAMP: 2026-08-29 11:19:11 Europe/London
+REASON FOR CREATION: Aktualizacja specyfikacji nadzoru runtime o stan checkpointu i nazwę Warlock.
+==========================================
+-->
+
 # Dark Star Runtime Supervision Design
 
 ## Goal
@@ -10,7 +20,7 @@ Docker Compose owns the Dark Star container definition and application-level hea
 
 ## Scope
 
-This design covers the first Ubuntu host deployment of the existing `darkstar-server` container. It does not add Sheriff, Kali, provider registry behavior, external cloud deployment, or Power Automate integration.
+This design covers the first Ubuntu host deployment of the existing `darkstar-server` container. It does not add Warlock (formerly Sheriff), Kali, provider registry behavior, external cloud deployment, or Power Automate integration.
 
 ## Runtime contract
 
@@ -74,7 +84,7 @@ The implementation must provide tests or reproducible checks for:
 
 ## Non-goals
 
-Do not introduce a second workflow engine. Do not put a permanent `while true` loop inside the Dark Star application container. Do not use an AI model for supervision. Do not add cloud-specific orchestration just for local recovery. Do not merge this deployment work with Sheriff/Kali implementation.
+Do not introduce a second workflow engine. Do not put a permanent `while true` loop inside the Dark Star application container. Do not use an AI model for supervision. Do not add cloud-specific orchestration just for local recovery. Do not merge this deployment work with Warlock/Kali implementation.
 
 ## Relationship to existing architecture
 

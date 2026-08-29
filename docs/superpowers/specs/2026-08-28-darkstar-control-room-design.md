@@ -1,8 +1,28 @@
+<!--
+THIS IS VERY IMPORTANT!!!
+==========================================
+AUTHOR: M. SZUL
+AI MODEL: GPT-5 Codex
+TIMESTAMP: 2026-08-29 11:19:11 Europe/London
+REASON FOR CREATION: Aktualizacja projektu Control Room o faktyczny checkpoint React/Vite fd8099e i integrację modułów gateway/Headscale/Headplane.
+==========================================
+-->
+
 # Darkstar Control Room v1 — Browser System Graph and Live Run Graph
 
 ## Status
 
-Approved architectural design for implementation planning.
+Approved architectural design, updated at checkpoint fd8099e.
+
+Checkpoint reality:
+
+- existing embedded Rust Control Room remains the functional fallback;
+- commit fd8099e adds a React/TypeScript/Vite workspace with React Flow;
+- the React app is still the default Vite starter and has no Darkstar product UI;
+- the implementation direction now uses React for the full interactive Control
+  Room while Rust remains authoritative for API, policy, providers and audit;
+- gateway, firewall, Headscale and Headplane become first-class observable
+  modules under the new implementation plan.
 
 ## 1. Goal
 
@@ -203,9 +223,15 @@ This preserves the architectural distinction between human interaction, authoriz
 
 ## 10. Relationship to existing code
 
-The existing `system_graph_view.rs` already provides a self-contained browser implementation with graph loading, demo-run controls, SVG rendering, search, node inspection, zoom/pan and authenticated SSE consumption.
+The existing system_graph_view.rs already provides a self-contained browser
+implementation with graph loading, demo-run controls, SVG rendering, search,
+node inspection, zoom/pan and authenticated SSE consumption.
 
-The implementation should evolve that existing view instead of introducing a second unrelated frontend stack.
+It remains a compatibility fallback and a source of proven behavior while the
+React frontend reaches functional parity. New UI behavior must not be
+implemented independently in both stacks. Once React passes the complete
+acceptance gate, the embedded view may be reduced to a recovery/status surface
+in a separate change.
 
 The existing routes should remain compatible where practical. A dedicated `/control-room` route may be added as the preferred entry point, with `/system-graph` retained as a compatibility alias.
 
@@ -221,13 +247,17 @@ The next implementation stage should add real module-control requests through th
 
 ## 11. Technology decision
 
-Primary implementation remains Rust 2024 with the existing Axum/Tokio server.
+The trusted control plane remains Rust 2024 with the existing Axum/Tokio
+server.
 
-The WebView remains embedded HTML/CSS/JavaScript in the first implementation.
+The product Control Room uses the React/TypeScript/Vite stack introduced by
+fd8099e. React Flow provides the interactive graph. The production build is
+served by Darkstar and the browser never receives system credentials.
 
-No separate React/Node frontend build is required for v1. A browser-native client reduces deployment complexity and keeps the Control Room close to the Darkstar service boundary.
-
-If the UI later becomes large enough to justify a dedicated frontend build, that decision should be made from measured complexity rather than assumed in advance.
+This supersedes the earlier embedded-only implementation choice because the
+approved scope now includes a large interactive graph, gateway controls,
+private mesh state and Headplane integration. The embedded Rust view remains a
+tested fallback until the React build achieves parity.
 
 ## 12. Testing
 

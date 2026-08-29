@@ -1,4 +1,27 @@
+<!--
+THIS IS VERY IMPORTANT!!!
+==========================================
+AUTHOR: M. SZUL
+AI MODEL: GPT-5 Codex
+TIMESTAMP: 2026-08-29 11:19:11 Europe/London
+REASON FOR CREATION: Utrwalenie faktycznego stanu wdrożenia runtime oraz braku dowodu prawdziwego rebootu dla firewalla Darkstar.
+==========================================
+-->
+
 # Dark Star Runtime Supervision Implementation Plan
+
+## Handoff status at fd8099e
+
+- Compose/systemd runtime is installed and darkstar.service is active on Ubuntu.
+- The 15-minute dependency timer is active.
+- Darkstar API was healthy on 127.0.0.1:18080.
+- Host forwarding is enabled for IPv4 and IPv6.
+- The separately installed darkstar-firewall.service is enabled but was
+  inactive/dead on 2026-08-29 and had no journal entries.
+- The firewall files were created after the current host boot, so boot
+  persistence is not proven.
+- The required real reboot test, including a changed boot_id, is now Task 3 of
+  docs/superpowers/plans/2026-08-29-darkstar-native-gateway-headscale-headplane-plan.md.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -15,7 +38,7 @@
 - GitHub remains the source of truth for repository code and deployment configuration.
 - Ubuntu is the local build/test/runtime host.
 - The Dark Star application container remains non-root.
-- Do not add Sheriff, Kali, Provider Registry, Power Automate, or cloud orchestration in this change.
+- Do not add Warlock (formerly Sheriff), Kali, Provider Registry, Power Automate, or cloud orchestration in this historical change.
 - Do not add a permanent `while true` loop inside the application container.
 - Supervision decisions are mechanical; no AI/model participates.
 - Dependency retry cadence is exactly 15 minutes; process/container recovery is immediate and separately bounded.

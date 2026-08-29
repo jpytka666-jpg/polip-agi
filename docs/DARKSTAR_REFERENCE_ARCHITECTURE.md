@@ -1,4 +1,14 @@
-# Dark Star Reference Architecture v1.0
+<!--
+THIS IS VERY IMPORTANT!!!
+==========================================
+AUTHOR: M. SZUL
+AI MODEL: GPT-5 Codex
+TIMESTAMP: 2026-08-29 11:19:11 Europe/London
+REASON FOR CREATION: Ujednolicenie architektury referencyjnej z fazą Ghost Gate i zmianą nazwy z Sheriff Bridge na Warlock Bridge.
+==========================================
+-->
+
+# Dark Star Reference Architecture v1.1
 
 ## 1. System position
 
@@ -32,17 +42,21 @@ The canonical protected path is:
 
 ```text
 Internet
-  -> Sheriff Bridge
+  -> Warlock Bridge
   -> Kali Bridge
   -> Dark Star
   -> AIONS
 ```
 
-### Sheriff Bridge
+### Warlock Bridge
 
-Sheriff Bridge is the outer perimeter gateway. It owns the external network boundary, VPN, routing, firewall responsibilities and the first ingress/egress decision boundary.
+Warlock Bridge is the outer perimeter gateway. It owns the external network boundary, VPN, routing, firewall responsibilities and the first ingress/egress decision boundary.
 
 The physical target is a dedicated mini-PC. The initial Azure deployment may represent it as a separate container role.
+
+Warlock replaces the earlier name Sheriff. Existing Sheriff identifiers remain
+legacy inputs until the typed Rust migration is completed with backward-compatible
+deserialization.
 
 ### Kali Bridge
 
@@ -63,7 +77,7 @@ AIONS is the protected ecosystem behind the Dark Star boundary. It is not anothe
 The first Azure representation uses three isolated roles:
 
 ```text
-Container 1 -> Sheriff Bridge
+Container 1 -> Warlock Bridge
 Container 2 -> Kali Bridge
 Container 3 -> Dark Star
 ```
@@ -71,13 +85,31 @@ Container 3 -> Dark Star
 The logical model is independent of this deployment form. A later physical deployment may use:
 
 ```text
-Mini-PC #1 -> Sheriff Bridge
+Mini-PC #1 -> Warlock Bridge
 Mini-PC #2 -> Kali Bridge
 Dedicated host -> Dark Star
 Protected environment -> AIONS
 ```
 
 Moving from containers to physical hosts does not change the control-plane contracts.
+
+### Current transitional deployment
+
+Before the dedicated Warlock and Kali hosts exist, Darkstar Ubuntu temporarily
+acts as Ghost Gate and native Internet gateway for Windows/private clients:
+
+~~~text
+Internet
+  -> Darkstar Ubuntu / Ghost Gate
+  -> Windows and private clients
+  -> AIONS
+~~~
+
+NetworkManager, nftables and systemd implement the host networking mechanics.
+Darkstar policy and a constrained provider authorize control operations.
+Headscale/Headplane provide the planned private mesh/control UI. Tailscale SaaS
+is only a temporary recovery route and must not be treated as the final control
+plane.
 
 ## 4. Layer 1 — Context and Memory
 
@@ -171,7 +203,7 @@ state
 health
 ```
 
-Example modules may include WPC, CBMS, Ghost Gate, AIONS Server Wiedzy, Sheriff Bridge and Kali Bridge.
+Example modules may include WPC, CBMS, Ghost Gate, AIONS Server Wiedzy, Warlock Bridge and Kali Bridge.
 
 ## 9. Module lifecycle
 

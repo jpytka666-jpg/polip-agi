@@ -1,4 +1,29 @@
+<!--
+THIS IS VERY IMPORTANT!!!
+==========================================
+AUTHOR: M. SZUL
+AI MODEL: GPT-5 Codex
+TIMESTAMP: 2026-08-29 11:19:11 Europe/London
+REASON FOR CREATION: Oznaczenie rzeczywistego statusu wcześniejszego planu Control Room i przekazanie dalszych prac do planu React/Gateway/Headscale.
+==========================================
+-->
+
 # Darkstar Control Room Implementation Plan
+
+## Handoff status at fd8099e
+
+This plan records the original embedded-UI implementation path.
+
+- Tasks 1–3 produced the typed module contract, authenticated HTTP boundary and
+  embedded Rust Control Room through commits 0e97e30, 8f9712f and b020641.
+- Task 4 remains incomplete: the current HTTP v1 authorizes requests but does
+  not execute real host infrastructure.
+- Commit fd8099e added a React/TypeScript/Vite/React Flow workspace, but it is
+  still the default Vite starter.
+- The embedded-only technology constraint below is superseded for new work by
+  docs/superpowers/plans/2026-08-29-darkstar-native-gateway-headscale-headplane-plan.md.
+- The embedded Rust view remains a compatibility fallback until the React
+  Control Room passes its complete acceptance gate.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
