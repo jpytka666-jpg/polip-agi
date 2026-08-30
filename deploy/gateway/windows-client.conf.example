@@ -1,0 +1,29 @@
+# THIS IS VERY IMPORTANT!!!
+# ==========================================
+# AUTHOR: M. SZUL
+# AI MODEL: GPT-5.6 Sol
+# TIMESTAMP: 2026-08-29 03:28:00 Europe/London
+# REASON FOR CREATION: Provide a secret-free WireGuard client template that forces Windows/iOnis Internet traffic through Darkstar.
+# MECHANICS: Uses /0 AllowedIPs to make Darkstar the default route and engage WireGuard for Windows block-untunneled-traffic semantics.
+# SYSTEM PART: Protected host network edge
+# ARCHITECTURE FUNCTION: Prevent ordinary direct Internet egress from the protected host.
+# DEPENDENCIES/LINKS: WireGuard for Windows, deploy/gateway/README.md, Darkstar WireGuard endpoint.
+# TECH STACK: WireGuard wg-quick compatible configuration.
+# LOCAL WORKSPACE: Windows client
+# GIT COMMIT: PENDING
+# GITHUB METADATA: jpytka666-jpg/polip-agi / feat/darkstar-gateway
+# ==========================================
+
+# Copy to a local protected path and replace every placeholder.
+# NEVER commit the real private key.
+
+[Interface]
+PrivateKey = <PROTECTED_HOST_PRIVATE_KEY_LOCAL_ONLY>
+Address = 10.77.0.2/32
+DNS = 10.77.0.1
+
+[Peer]
+PublicKey = <DARKSTAR_PUBLIC_KEY>
+Endpoint = <DARKSTAR_REACHABLE_IP_OR_NAME>:51820
+AllowedIPs = 0.0.0.0/0, ::/0
+PersistentKeepalive = 25
