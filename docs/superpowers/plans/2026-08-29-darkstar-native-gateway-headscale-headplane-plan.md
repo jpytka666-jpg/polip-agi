@@ -81,7 +81,7 @@ Rust baseline:         fmt passes; 3 integration tests fail with unexpected 401
 - Consumes AppState with a known API token.
 - Produces deterministic integration tests independent of DARKSTAR_API_TOKEN in the developer shell.
 
-- [ ] **Step 0.1: Reconfirm the exact checkpoint**
+- [x] **Step 0.1: Reconfirm the exact checkpoint**
 
 Run:
 
@@ -92,7 +92,7 @@ git status --short --branch
 
 Expected: HEAD equals fd8099e4e3c3399ae69a885fa2ed32ab0c57d2df and no changed paths.
 
-- [ ] **Step 0.2: Reproduce the three failures**
+- [x] **Step 0.2: Reproduce the three failures**
 
 Run:
 
@@ -102,13 +102,13 @@ cargo test -p darkstar-server --test memory_http
 
 Expected before the fix: session_can_write_and_read_memory, module_action_denies_missing_capability and module_action_accepts_authorized_start_request fail because session creation returns 401.
 
-- [ ] **Step 0.3: Write a test that proves fail-closed production behavior**
+- [x] **Step 0.3: Write a test that proves fail-closed production behavior**
 
 Add an integration test constructing AppState with api_token=None and assert
 that an authenticated route returns 401. Do not mutate the process environment
 inside parallel tests. AppState::from_env remains the production constructor.
 
-- [ ] **Step 0.4: Replace the fixture with an explicit token**
+- [x] **Step 0.4: Replace the fixture with an explicit token**
 
 Change test_state so it constructs AppState directly with:
 
@@ -119,7 +119,7 @@ Change test_state so it constructs AppState directly with:
 
 Prefer a crate-private AppState constructor only if at least two test modules need it. Do not weaken AppState::from_env.
 
-- [ ] **Step 0.5: Run the focused tests**
+- [x] **Step 0.5: Run the focused tests**
 
 ~~~bash
 cargo test -p darkstar-server --test memory_http
@@ -127,7 +127,7 @@ cargo test -p darkstar-server --test memory_http
 
 Expected: all tests pass.
 
-- [ ] **Step 0.6: Run the complete Rust quality gate**
+- [x] **Step 0.6: Run the complete Rust quality gate**
 
 ~~~bash
 cargo fmt --all -- --check
@@ -149,11 +149,11 @@ npm run build
 
 Expected: dependency lock is honored and lint/build pass. Record any checkpoint failure before changing dependencies.
 
-- [ ] **Step 0.8: Confirm metadata and workspace hygiene**
+- [x] **Step 0.8: Confirm metadata and workspace hygiene**
 
 Check changed/new source files for AUTHOR: M. SZUL. Confirm that frontend/dist, target and dependency caches are ignored and are not staged.
 
-- [ ] **Step 0.9: Commit the baseline repair**
+- [x] **Step 0.9: Commit the baseline repair**
 
 ~~~bash
 git add crates/darkstar-server/tests/memory_http.rs
@@ -254,7 +254,7 @@ not begin while key authentication is unproven.
 - Consumes explicit interface names and private subnets.
 - Produces one idempotent nftables table named inet darkstar_host_guard and one systemd oneshot unit.
 
-- [ ] **Step 1.1: Capture checksums of installed files**
+- [x] **Step 1.1: Capture checksums of installed files**
 
 On Ubuntu:
 
@@ -266,7 +266,7 @@ sudo sha256sum /etc/systemd/system/darkstar-firewall.service
 
 Store checksums in the implementation journal, not as claims in source templates.
 
-- [ ] **Step 1.2: Add a failing repository presence check**
+- [x] **Step 1.2: Add a failing repository presence check**
 
 ~~~bash
 test -f deploy/firewall/host-guard.nft
@@ -276,7 +276,7 @@ test -f deploy/systemd/darkstar-firewall.service
 
 Expected before creation: at least one command fails.
 
-- [ ] **Step 1.3: Create the versioned nftables ruleset**
+- [x] **Step 1.3: Create the versioned nftables ruleset**
 
 Start from the inspected host-guard.nft, then add explicit named sets/chains for:
 
@@ -293,7 +293,7 @@ Start from the inspected host-guard.nft, then add explicit named sets/chains for
 
 Do not encode a Wi-Fi password or a temporary IP assigned by a client.
 
-- [ ] **Step 1.4: Implement the apply script**
+- [x] **Step 1.4: Implement the apply script**
 
 The POSIX script must:
 
@@ -305,7 +305,7 @@ The POSIX script must:
 6. log a concise result to journald/stdout;
 7. never flush unrelated nftables tables.
 
-- [ ] **Step 1.5: Implement the verify script**
+- [x] **Step 1.5: Implement the verify script**
 
 The script checks:
 
@@ -318,11 +318,11 @@ The script checks:
 
 It must only inspect and must not repair.
 
-- [ ] **Step 1.6: Version the systemd unit**
+- [x] **Step 1.6: Version the systemd unit**
 
 Use Type=oneshot and RemainAfterExit=yes. Order it after local filesystems and before services that require the protected network. ExecStart points to /usr/local/sbin/darkstar-firewall-apply. Add ExecStartPost for the verify script only after manual verification proves it safe.
 
-- [ ] **Step 1.7: Add install and rollback instructions**
+- [x] **Step 1.7: Add install and rollback instructions**
 
 Document:
 
@@ -333,7 +333,7 @@ Document:
 - rollback that restores the previous three files from timestamped root-owned backups;
 - physical access requirement.
 
-- [ ] **Step 1.8: Validate syntax without applying**
+- [x] **Step 1.8: Validate syntax without applying**
 
 On Ubuntu:
 
@@ -350,7 +350,7 @@ sh -n deploy/firewall/darkstar-firewall-apply
 sh -n deploy/firewall/darkstar-firewall-verify
 ~~~
 
-- [ ] **Step 1.9: Commit firewall-as-code**
+- [x] **Step 1.9: Commit firewall-as-code**
 
 ~~~bash
 git add deploy/firewall deploy/systemd/darkstar-firewall.service deploy/README.md
@@ -371,7 +371,7 @@ git commit -m "feat(darkstar): version host firewall controls"
 - Use: deploy/systemd/darkstar-firewall.service
 - Create after success: docs/operations/evidence/2026-08-29-firewall-manual-activation.md
 
-- [ ] **Step 2.1: Record pre-change network evidence**
+- [x] **Step 2.1: Record pre-change network evidence**
 
 On Ubuntu record:
 
@@ -386,7 +386,7 @@ curl -fsS http://127.0.0.1:18080/health
 
 Sanitize public tokens and Wi-Fi secrets before saving evidence.
 
-- [ ] **Step 2.2: Create root-owned backups**
+- [x] **Step 2.2: Create root-owned backups**
 
 Create a timestamped directory under /var/backups/darkstar-firewall and copy only:
 
@@ -396,7 +396,7 @@ Create a timestamped directory under /var/backups/darkstar-firewall and copy onl
 
 List and checksum the backup before continuing.
 
-- [ ] **Step 2.3: Install versioned files**
+- [x] **Step 2.3: Install versioned files**
 
 Use sudo install with:
 
@@ -404,7 +404,7 @@ Use sudo install with:
 - 0755 for apply/verify scripts;
 - root:root ownership.
 
-- [ ] **Step 2.4: Reload systemd and verify unit resolution**
+- [x] **Step 2.4: Reload systemd and verify unit resolution**
 
 ~~~bash
 sudo systemctl daemon-reload
@@ -412,7 +412,7 @@ systemctl cat darkstar-firewall.service
 systemctl show darkstar-firewall.service -p FragmentPath -p UnitFileState
 ~~~
 
-- [ ] **Step 2.5: Start the unit manually**
+- [x] **Step 2.5: Start the unit manually**
 
 ~~~bash
 sudo systemctl start darkstar-firewall.service
@@ -422,7 +422,7 @@ systemctl status darkstar-firewall.service --no-pager --full
 
 Expected: active with SubState=exited because RemainAfterExit=yes.
 
-- [ ] **Step 2.6: Run post-apply verification**
+- [x] **Step 2.6: Run post-apply verification**
 
 ~~~bash
 sudo /usr/local/sbin/darkstar-firewall-verify
@@ -430,7 +430,7 @@ sudo nft list table inet darkstar_host_guard
 curl -fsS http://127.0.0.1:18080/health
 ~~~
 
-- [ ] **Step 2.7: Verify management from Windows**
+- [x] **Step 2.7: Verify management from Windows**
 
 From Windows:
 
@@ -441,7 +441,7 @@ ssh owner@100.71.8.70 hostnamectl --static
 
 Expected: SSH remains reachable through the temporary fallback.
 
-- [ ] **Step 2.8: Exercise idempotency**
+- [x] **Step 2.8: Exercise idempotency**
 
 Start the unit a second time, restart it once, and confirm there is still exactly one inet darkstar_host_guard table.
 
@@ -449,7 +449,7 @@ Start the unit a second time, restart it once, and confirm there is still exactl
 
 Review the rollback command from a second local terminal. Do not intentionally cut the only working route. Confirm backups are readable and paths are exact.
 
-- [ ] **Step 2.10: Write evidence and commit**
+- [x] **Step 2.10: Write evidence and commit**
 
 The evidence file includes commands, exit codes, service status and sanitized checksums.
 

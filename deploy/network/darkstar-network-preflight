@@ -1,0 +1,135 @@
+#!/bin/sh
+# THIS IS VERY IMPORTANT!!!
+# ==========================================
+# AUTHOR: M. SZUL
+# AI MODEL: Claude Opus 5
+# TIMESTAMP: 2026-09-01 05:44:48
+# REASON FOR CREATION: Tylko-do-odczytu rozpoznanie sprzetu sieciowego Darkstar przed wyborem topologii downstream (Task 4).
+# MECHANICS: Odpytuje NetworkManager, sysfs, ethtool, iw, ip, nft i systemd; kazda wartosc emituje jako para klucz=wartosc plus czytelne sekcje. Brak narzedzia lub brak uprawnien daje wartosc "unavailable", nigdy bledu krytycznego.
+# SYSTEM PART: deploy/network - warstwa przygotowania natywnej bramy Darkstar.
+# ARCHITECTURE FUNCTION: Dostarcza dowod wejsciowy dla Step 4.6 (wybor baseline) i Task 5 (modul bramy/hotspotu). Nie aktywuje, nie rozlacza i nie modyfikuje zadnego polaczenia.
+# DEPENDENCIES/LINKS: nmcli, ip, ethtool, iw, nft, systemctl, /sys/class/net; komplementarny wobec deploy/firewall/darkstar-firewall-verify.
+# TECH STACK: POSIX sh - zgodnie z istniejacymi skryptami deploy/firewall, zero zaleznosci runtime na hoscie Ubuntu.
+# LOCAL WORKSPACE: D:\codex-fresh-2026-08-28\worktrees\polip-agi-darkstar-plan
+# GIT COMMIT: PENDING
+# GITHUB METADATA: jpytka666-jpg/polip-agi, branch docs/darkstar-headscale-hotspot-plan
+# ==========================================
+
+set -eu
+
+UPSTREAM_IFACE=${DARKSTAR_UPSTREAM_IFACE:-wlp2s0}
+DOWNSTREAM_IFACE=${DARKSTAR_DOWNSTREAM_IFACE:-enp1s0}
+
+emit() {
+    printf '%s=%s\n' "$1" "$2"
+}
+
+section() {
+    printf '\n# --- %s\n' "$1"
+}
+
+# Uruchamia komende tylko do odczytu; brak narzedzia lub blad daje "unavailable".
+probe() {
+    key=$1
+    shift
+    if ! command -v "$1" >/dev/null 2>&1; then
+        emit "$key" 'unavailable:command-missing'
+        return 0
+    fi
+    value=$("$@" 2>/dev/null | head -n 1 | tr -s ' \t' ' ' | sed 's/^ //;s/ $//') || value=''
+    [ -n "$value" ] || value='unavailable:no-output'
+    emit "$key" "$value"
+}
+
+read_sysfs() {
+    key=$1
+    path=$2
+    if [ -r "$path" ]; then
+        emit "$key" "$(cat "$path" 2>/dev/null || printf 'unavailable:read-failed')"
+    else
+        emit "$key" 'unavailable:absent'
+    fi
+}
+
+section 'identity'
+emit preflight_version '1'
+emit generated_at "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+emit hostname "$(hostname 2>/dev/null || printf 'unavailable')"
+emit upstream_iface "$UPSTREAM_IFACE"
+emit downstream_iface "$DOWNSTREAM_IFACE"
+
+section 'tool versions'
+probe networkmanager_version nmcli --version
+probe nft_version nft --version
+probe systemd_version systemctl --version
+probe ip_version ip -V
+probe iw_present iw --version
+
+section 'upstream radio'
+read_sysfs upstream_operstate "/sys/class/net/$UPSTREAM_IFACE/operstate"
+read_sysfs upstream_carrier "/sys/class/net/$UPSTREAM_IFACE/carrier"
+if [ -L "/sys/class/net/$UPSTREAM_IFACE/device/driver" ]; then
+    emit upstream_driver "$(basename "$(readlink -f "/sys/class/net/$UPSTREAM_IFACE/device/driver")")"
+else
+    emit upstream_driver 'unavailable:absent'
+fi
+if command -v ethtool >/dev/null 2>&1; then
+    emit upstream_firmware "$(ethtool -i "$UPSTREAM_IFACE" 2>/dev/null | awk -F': ' '$1 == "firmware-version" { print $2; exit }' || printf 'unavailable')"
+else
+    emit upstream_firmware 'unavailable:command-missing'
+fi
+
+section 'ap capability'
+if command -v iw >/dev/null 2>&1; then
+    if iw list 2>/dev/null | grep -Fq ' * AP$'; then
+        emit ap_mode_supported 'yes'
+    elif iw list 2>/dev/null | grep -q 'AP'; then
+        emit ap_mode_supported 'probable-see-combinations'
+    else
+        emit ap_mode_supported 'no'
+    fi
+    emit ap_valid_combinations "$(iw list 2>/dev/null | grep -c 'valid interface combinations' || printf '0')"
+else
+    emit ap_mode_supported 'unavailable:iw-missing'
+    emit ap_valid_combinations 'unavailable:iw-missing'
+fi
+
+section 'downstream ethernet'
+read_sysfs downstream_operstate "/sys/class/net/$DOWNSTREAM_IFACE/operstate"
+read_sysfs downstream_carrier "/sys/class/net/$DOWNSTREAM_IFACE/carrier"
+if command -v ethtool >/dev/null 2>&1; then
+    emit downstream_link_detected "$(ethtool "$DOWNSTREAM_IFACE" 2>/dev/null | awk -F': ' '$1 ~ /Link detected/ { print $2; exit }' || printf 'unavailable')"
+else
+    emit downstream_link_detected 'unavailable:command-missing'
+fi
+
+section 'routes'
+probe default_route_v4 ip -4 route show default
+probe default_route_v6 ip -6 route show default
+
+section 'networkmanager profiles'
+if command -v nmcli >/dev/null 2>&1; then
+    nmcli -t -f NAME,DEVICE,TYPE,STATE connection show --active 2>/dev/null |
+        while IFS= read -r line; do
+            printf 'active_profile=%s\n' "$line"
+        done
+else
+    emit active_profile 'unavailable:nmcli-missing'
+fi
+
+section 'forwarding'
+read_sysfs ipv4_forwarding /proc/sys/net/ipv4/ip_forward
+read_sysfs ipv6_forwarding /proc/sys/net/ipv6/conf/all/forwarding
+
+section 'host guard'
+if command -v nft >/dev/null 2>&1; then
+    if nft list table inet darkstar_host_guard >/dev/null 2>&1; then
+        emit host_guard_table 'present'
+    else
+        emit host_guard_table 'absent-or-unprivileged'
+    fi
+else
+    emit host_guard_table 'unavailable:nft-missing'
+fi
+
+printf '\n%s\n' 'darkstar-network-preflight: read-only discovery complete'
