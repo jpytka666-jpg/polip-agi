@@ -6,8 +6,18 @@ services:
       DARKSTAR_HOST: 0.0.0.0
       DARKSTAR_PORT: 8080
       DARKSTAR_HOST_PORT: ${DARKSTAR_HOST_PORT:?run ./deploy/port-manager/port-manager.sh allocate darkstar}
+      # Bez tokenu kazda sciezka poza /health i /ready odpowiada 401 - fail-closed.
+      # Wartosc zyje w deploy/.env (tryb 0600, ignorowany przez git), nigdy w repozytorium.
+      DARKSTAR_API_TOKEN: ${DARKSTAR_API_TOKEN:?ustaw DARKSTAR_API_TOKEN w deploy/.env}
+      # Noga pamieci AIONS na tym hoscie. host.docker.internal wskazuje Chrome na petli
+      # zwrotnej hosta - kontener nie moze uzyc wlasnego 127.0.0.1, bo to jego wlasna petla.
+      DARKSTAR_CONTEXT_LOCAL: ${DARKSTAR_CONTEXT_LOCAL:-http://host.docker.internal:8000}
+      DARKSTAR_CONTEXT_REMOTE: ${DARKSTAR_CONTEXT_REMOTE:-http://100.71.8.70:8000}
     ports:
       - "127.0.0.1:${DARKSTAR_HOST_PORT}:8080"
+    # Kontener nie ma wlasnej Chromy - siega po nia na petle zwrotna hosta.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     restart: on-failure:5
     healthcheck:
       test: ["CMD", "curl", "--fail", "--silent", "--show-error", "http://127.0.0.1:8080/health"]
