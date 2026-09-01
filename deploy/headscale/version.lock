@@ -1,0 +1,61 @@
+# THIS IS VERY IMPORTANT!!!
+# ==========================================
+# AUTHOR: M. SZUL
+# AI MODEL: Claude Opus 5
+# TIMESTAMP: 2026-09-01 22:55:00
+# REASON FOR CREATION: Przypiecie niezmiennej wersji Headscale jako docelowego mesh Darkstara (Task 13, Step 13.1 i 13.2).
+# MECHANICS: Zapis tagu, skrotu commita i sum kontrolnych odczytanych z GitHub API 2026-09-01.
+# Nic z tego nie jest instalowane - plik ustala, CO wolno zainstalowac, gdy przyjdzie na to pora.
+# SYSTEM PART: deploy/headscale - modul prywatnego mesh.
+# ARCHITECTURE FUNCTION: Headscale jest CELEM architektury. Tailscale SaaS to tymczasowy kabel
+# ratunkowy, nie warstwa docelowa, i znika dopiero po udowodnieniu nowej drogi.
+# DEPENDENCIES/LINKS: deploy/headscale/README.md, plan Task 13, brama 192.168.2.1.
+# TECH STACK: plik tekstowy klucz=wartosc - czytelny dla czlowieka i dla skryptu weryfikujacego.
+# LOCAL WORKSPACE: D:\codex-fresh-2026-08-28\worktrees\polip-agi-darkstar-plan
+# GIT COMMIT: PENDING
+# GITHUB METADATA: jpytka666-jpg/polip-agi, branch docs/darkstar-headscale-hotspot-plan
+# ==========================================
+
+upstream_repository = https://github.com/juanfont/headscale
+license             = BSD-3-Clause
+release_tag         = v0.29.3
+commit_sha          = 5aff68b5b9921db5ccb88013bb1740077ab872fb
+released_at         = 2026-07-29T12:51:35Z
+verified_at         = 2026-09-01
+verified_via        = GitHub API (get_latest_release + get_tag)
+
+# NIGDY "latest". Zmiana wersji to zmiana tych trzech pol i nowy przebieg weryfikacji.
+pinning_policy      = immutable-tag-and-sha
+
+# Sumy kontrolne artefaktow wydania, odczytane z metadanych zasobow GitHub.
+asset_linux_amd64        = headscale_0.29.3_linux_amd64
+sha256_linux_amd64       = 8dc183758024ed7095cf610fedea0790233613c71353bc8be2715d82ba29b92c
+asset_linux_amd64_deb    = headscale_0.29.3_linux_amd64.deb
+sha256_linux_amd64_deb   = 14eccf8d41fd93927ad3fe1fd9e49dbe14d5668a244c4205d940967c442aea0d
+asset_checksums          = checksums.txt
+sha256_checksums         = 95670d5a226069bf2f79c837baa6e8c554e60a33b90833d6e7651a8faf04da87
+
+# Obraz kontenera nie zostal jeszcze zweryfikowany - digest ustala sie przy Step 13.2,
+# po wybraniu sposobu wdrozenia (pakiet .deb kontra kontener). PENDING to nie "dowolny".
+container_image          = PENDING
+container_image_digest   = PENDING
+
+# Rola w architekturze
+mesh_target              = headscale          # docelowy, wlasny, edytowalny control server
+mesh_fallback            = tailscale-saas     # TYMCZASOWY kabel ratunkowy, nie architektura
+fallback_removal_gate    = Task 13 Step 13.13 - klient testowy dziala na wlasnym mesh
+
+# Adresy nasluchu - wiazace. Zgodne z deploy/headscale/README.md.
+bind_allowed             = 127.0.0.1, 192.168.2.1
+bind_forbidden           = 0.0.0.0, ::, dowolny adres z 192.168.1.0/24, 10.44.0.0/24
+bind_rationale           = nasluch na adresie nieokreslonym wystawilby usluge na wlp2s0,
+                           czyli do segmentu nadrzednego Vodafone; host guard ma polityke drop
+                           na input i przepuszcza tylko loopback, tailscale0 i 192.168.2.0/24
+
+# Zgodnosc klienta, z informacji o wydaniu
+minimum_tailscale_client = v1.80.0
+
+# Stan na hoscie CBMS, zmierzony 2026-09-01
+installed_on_host        = no
+host_ports_free          = 8080, 50443, 443
+host_port_conflict       = 41641/udp zajety przez tailscaled
