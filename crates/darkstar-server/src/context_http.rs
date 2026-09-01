@@ -25,7 +25,7 @@
 
 use std::{
     io::{BufRead, BufReader, Read, Write},
-    net::TcpStream,
+    net::{TcpStream, ToSocketAddrs},
     sync::Arc,
     time::Duration,
 };
@@ -92,7 +92,15 @@ impl ContextTransport for ReadOnlyHttp {
             None => (rest, "/"),
         };
 
-        let mut stream = TcpStream::connect(authority)
+        // Sam connect MUSI miec limit czasu. Bez niego zapytanie do adresu, ktory zapora
+        // cicho odrzuca, wisi do systemowego timeoutu TCP - okolo dwoch minut - i cala
+        // sciezka HTTP zwraca 000 zamiast uczciwego 503.
+        let addr = authority
+            .to_socket_addrs()
+            .map_err(|e| ContextError::Unreachable(format!("{authority}: {e}")))?
+            .next()
+            .ok_or_else(|| ContextError::Unreachable(format!("{authority}: brak adresu")))?;
+        let mut stream = TcpStream::connect_timeout(&addr, Duration::from_secs(3))
             .map_err(|e| ContextError::Unreachable(format!("{authority}: {e}")))?;
         stream
             .set_read_timeout(Some(Duration::from_secs(5)))
