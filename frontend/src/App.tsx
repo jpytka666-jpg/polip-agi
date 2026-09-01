@@ -1,121 +1,72 @@
+/*
+THIS IS VERY IMPORTANT!!!
+==========================================
+AUTHOR: M. SZUL
+AI MODEL: Claude Opus 5
+TIMESTAMP: 2026-09-01 23:35:00
+REASON FOR CREATION: Szkielet Control Room zastepujacy starter Vite (Task 10).
+MECHANICS: Sklada dwa widoki - stan bramy i graf systemu - wokol pola na token operatora.
+Token trafia do pamieci przegladarki, nigdy do repozytorium. Aplikacja wykonuje wylacznie
+zapytania GET; nie ma tu zadnego przycisku, ktory zmienialby cokolwiek na hoscie.
+SYSTEM PART: Control Room / szkielet aplikacji.
+ARCHITECTURE FUNCTION: Pierwsza wersja panelu operatora. Zadna przegladarka nie uruchamia
+polecen systemowych - to pozostaje rola zaufanego control plane w Ruscie.
+DEPENDENCIES/LINKS: GatewayPanel, SystemGraph, api.ts.
+TECH STACK: TypeScript 6 + React 19 + Vite 8, swiadomie zamiast Rusta - domyslnego jezyka.
+  (1) MUSI: dzialac jako strona w przegladarce operatora.
+  (2) DLACZEGO NIE RUST: to warstwa prezentacji w DOM; Rust przez WebAssembly nadal wymaga
+      warstwy TS, a logika decyzyjna ma zostac po stronie serwera w Ruscie.
+  (3) TRACIMY: jeden jezyk w calym stosie. Rekompensata: przegladarka nie ma zadnej wladzy -
+      caly zakres dzialania to zapytania odczytu.
+LOCAL WORKSPACE: D:\codex-fresh-2026-08-28\worktrees\polip-agi-darkstar-plan
+GIT COMMIT: PENDING
+GITHUB METADATA: jpytka666-jpg/polip-agi, branch docs/darkstar-headscale-hotspot-plan
+==========================================
+*/
+
 import { useState } from 'react'
-import heroImg from './assets/hero.png'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
+import { GatewayPanel } from './GatewayPanel'
+import { SystemGraph } from './SystemGraph'
+import { readToken, storeToken } from './api'
 import './App.css'
 
 function App() {
-  const [count, setCount] = useState(0)
+  const [token, setToken] = useState(readToken)
+  const [draft, setDraft] = useState(readToken)
+
+  const applyToken = () => {
+    storeToken(draft)
+    setToken(draft)
+  }
 
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
+    <div className="control-room">
+      <header className="control-room__header">
+        <h1>Darkstar Control Room</h1>
+        <div className="token-row">
+          <label htmlFor="token">Token operatora</label>
+          <input
+            id="token"
+            type="password"
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+            placeholder="Bearer ..."
+          />
+          <button type="button" onClick={applyToken}>
+            Zastosuj
+          </button>
         </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.tsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
+      </header>
 
-      <div className="ticks"></div>
+      <main className="control-room__body">
+        <GatewayPanel token={token} />
+        <SystemGraph token={token} />
+      </main>
 
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
-
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
+      <footer className="control-room__footer">
+        Widok tylko do odczytu. Zadne polecenie systemowe nie jest uruchamiane z przegladarki.
+      </footer>
+    </div>
   )
 }
 
