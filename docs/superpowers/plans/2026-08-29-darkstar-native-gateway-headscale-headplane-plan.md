@@ -1236,7 +1236,7 @@ Test that the shell renders:
 - timeline region;
 - no Vite/React demo logos or counter.
 
-- [ ] **Step 10.4: Define API types matching Rust**
+- [x] **Step 10.4: Define API types matching Rust**
 
 Types include:
 
@@ -1249,7 +1249,7 @@ Types include:
 
 Use exact snake_case wire fields and map them explicitly when presentation uses camelCase.
 
-- [ ] **Step 10.5: Implement a single API client**
+- [x] **Step 10.5: Implement a single API client**
 
 The client:
 
@@ -1261,15 +1261,15 @@ The client:
 - supports AbortSignal;
 - exposes graph, gateway status, session and module action methods.
 
-- [ ] **Step 10.6: Implement AuthContext**
+- [x] **Step 10.6: Implement AuthContext**
 
 Keep the initial token only in memory. Provide login/token entry, logout and expired/unauthorized handling. Do not log the token.
 
-- [ ] **Step 10.7: Replace starter UI**
+- [x] **Step 10.7: Replace starter UI**
 
 Remove Vite starter assets/usages and render the four-region Control Room. Preserve keyboard focus and responsive behavior.
 
-- [ ] **Step 10.8: Add loading, empty, error and disconnected states**
+- [x] **Step 10.8: Add loading, empty, error and disconnected states**
 
 Tests must cover each state. An empty graph is not an error. A 401 returns to the auth state.
 

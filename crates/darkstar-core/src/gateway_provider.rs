@@ -120,21 +120,31 @@ impl<R: CommandRunner> GatewayProvider<R> {
 
     /// Wylacznie odczyt. Zwraca zwalidowany stan albo blad - nigdy stanu polowicznego.
     pub fn read_status(&self, now_unix_ms: u64) -> Result<GatewayStatus, GatewayProviderError> {
-        let active = self.runner.active_connections()?;
-        let profile_active = active.lines().any(|line| {
-            let mut parts = line.split(':');
-            parts.next() == Some(self.connection_profile.as_str())
-                && parts.next() == Some(self.downstream_interface.as_str())
-                && parts.next() == Some("activated")
-        });
+        // nmcli bywa niedostepny tam, gdzie `ip` dziala: w kontenerze na CBMS AppArmor
+        // blokuje magistrale DBus. Brak nmcli NIE moze oznaczac braku bramy - stan
+        // wyliczamy wtedy z samego `ip`, a niepotwierdzony profil jest oznaczony wprost.
+        let nmcli_active = self.runner.active_connections().ok();
+        let nmcli_profile = self.runner.profile_ipv4(&self.connection_profile).ok();
+        let nmcli_available = nmcli_active.is_some() && nmcli_profile.is_some();
+
+        let profile_active = nmcli_active
+            .as_deref()
+            .map(|active| {
+                active.lines().any(|line| {
+                    let mut parts = line.split(':');
+                    parts.next() == Some(self.connection_profile.as_str())
+                        && parts.next() == Some(self.downstream_interface.as_str())
+                        && parts.next() == Some("activated")
+                })
+            })
+            .unwrap_or(false);
 
         let addr_output = self
             .runner
             .interface_addresses(&self.downstream_interface)?;
         let live_cidr = first_address_in(&addr_output);
 
-        let profile_output = self.runner.profile_ipv4(&self.connection_profile)?;
-        let mut profile_lines = profile_output.lines();
+        let mut profile_lines = nmcli_profile.as_deref().unwrap_or_default().lines();
         let method = profile_lines.next().unwrap_or_default().trim().to_string();
         let configured_cidr = profile_lines.next().unwrap_or_default().trim().to_string();
 
@@ -143,15 +153,28 @@ impl<R: CommandRunner> GatewayProvider<R> {
         let subnet = subnet_of(&cidr)
             .ok_or_else(|| GatewayProviderError::Unparseable(format!("cidr: {cidr}")))?;
 
-        let health = if !profile_active {
-            GatewayHealth::Offline
-        } else if live_cidr.is_none() || method != "shared" {
-            GatewayHealth::Degraded
-        } else {
+        let health = if nmcli_available {
+            if !profile_active {
+                GatewayHealth::Offline
+            } else if live_cidr.is_none() || method != "shared" {
+                GatewayHealth::Degraded
+            } else {
+                GatewayHealth::Ready
+            }
+        } else if live_cidr.is_some() {
+            // Interfejs downstream ma swoj adres - brama stoi. Profilu nie potwierdzamy.
             GatewayHealth::Ready
+        } else {
+            GatewayHealth::Offline
         };
 
-        let connected_clients = if profile_active {
+        let connection_profile = if nmcli_available {
+            self.connection_profile.clone()
+        } else {
+            "unconfirmed:nmcli-unavailable".to_string()
+        };
+
+        let connected_clients = if profile_active || !nmcli_available {
             let neigh = self.runner.neighbours(&self.downstream_interface)?;
             count_downstream_clients(&neigh, &subnet)
         } else {
@@ -167,7 +190,7 @@ impl<R: CommandRunner> GatewayProvider<R> {
             downstream_interface: self.downstream_interface.clone(),
             downstream_cidr: cidr,
             downstream_subnet: subnet,
-            connection_profile: self.connection_profile.clone(),
+            connection_profile,
             connected_clients,
             last_verified_unix_ms: now_unix_ms,
         };
@@ -301,6 +324,61 @@ br-e0a0946cdec3:br-e0a0946cdec3:activated\n";
             Err(GatewayProviderError::Contract(
                 GatewayContractError::AbandonedSubnet
             ))
+        ));
+    }
+
+    #[test]
+    fn nmcli_blocked_still_yields_status_from_ip() {
+        // Na CBMS AppArmor blokuje kontenerowi magistrale DBus, wiec nmcli nie odpowiada,
+        // a `ip` dziala normalnie. Brak nmcli nie moze oznaczac braku bramy.
+        struct NoNmcli;
+        impl CommandRunner for NoNmcli {
+            fn active_connections(&self) -> Result<String, GatewayProviderError> {
+                Err(GatewayProviderError::CommandFailed("nmcli blocked".into()))
+            }
+            fn interface_addresses(&self, _i: &str) -> Result<String, GatewayProviderError> {
+                Ok(IP_ADDR.into())
+            }
+            fn profile_ipv4(&self, _p: &str) -> Result<String, GatewayProviderError> {
+                Err(GatewayProviderError::CommandFailed("nmcli blocked".into()))
+            }
+            fn neighbours(&self, _i: &str) -> Result<String, GatewayProviderError> {
+                Ok(IP_NEIGH.into())
+            }
+        }
+
+        let provider = GatewayProvider::new(NoNmcli, "wlp2s0", "enp1s0", "DARKSTAR-WiFi");
+        let status = provider.read_status(1).unwrap();
+
+        assert_eq!(status.downstream_cidr, "192.168.2.1/24");
+        assert_eq!(status.downstream_subnet, "192.168.2.0/24");
+        assert_eq!(status.connected_clients, 1);
+        // Adres jest, wiec brama stoi - ale profil niepotwierdzony i to ma byc widoczne.
+        assert_eq!(status.health, GatewayHealth::Ready);
+        assert_eq!(status.connection_profile, "unconfirmed:nmcli-unavailable");
+    }
+
+    #[test]
+    fn without_nmcli_and_without_address_it_is_offline() {
+        struct Nothing;
+        impl CommandRunner for Nothing {
+            fn active_connections(&self) -> Result<String, GatewayProviderError> {
+                Err(GatewayProviderError::CommandFailed("nmcli blocked".into()))
+            }
+            fn interface_addresses(&self, _i: &str) -> Result<String, GatewayProviderError> {
+                Ok(String::new())
+            }
+            fn profile_ipv4(&self, _p: &str) -> Result<String, GatewayProviderError> {
+                Err(GatewayProviderError::CommandFailed("nmcli blocked".into()))
+            }
+            fn neighbours(&self, _i: &str) -> Result<String, GatewayProviderError> {
+                Ok(String::new())
+            }
+        }
+        let provider = GatewayProvider::new(Nothing, "wlp2s0", "enp1s0", "DARKSTAR-WiFi");
+        assert!(matches!(
+            provider.read_status(1),
+            Err(GatewayProviderError::Unparseable(_))
         ));
     }
 
