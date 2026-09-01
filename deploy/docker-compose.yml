@@ -1,3 +1,8 @@
+# darkstar-header-v1
+# po co: docker-compose.yml
+# nie wolno: hotspot, ruszac wlp2s0, wracac do 10.44, gasic DARKSTAR-WiFi, haslo w gicie
+# autor: Marcin
+# powstal: 2026-09-01
 services:
   darkstar:
     image: darkstar:dev
@@ -18,6 +23,10 @@ services:
       DARKSTAR_CONTEXT_REMOTE: ${DARKSTAR_CONTEXT_REMOTE:-http://100.71.8.70:8000}
     # Bez mapowania portow: przy network_mode host wiazanie robi sam serwer (DARKSTAR_HOST).
     network_mode: host
+    # Tylko gniazdo DBus i tylko do odczytu: nmcli w kontenerze pyta NetworkManagera
+    # hosta o stan bramy. Warstwa mutujaca nie istnieje w kodzie, a montaz jest read-only.
+    volumes:
+      - /run/dbus/system_bus_socket:/run/dbus/system_bus_socket:ro
     restart: on-failure:5
     healthcheck:
       test: ["CMD", "curl", "--fail", "--silent", "--show-error", "http://127.0.0.1:${DARKSTAR_HOST_PORT}/health"]
