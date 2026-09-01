@@ -4,7 +4,7 @@ THIS IS VERY IMPORTANT!!!
 AUTHOR: M. SZUL
 AI MODEL: GPT-5 Codex
 TIMESTAMP: 2026-08-29 11:19:11 Europe/London
-REASON FOR CREATION: Ujednolicenie architektury referencyjnej z fazą Ghost Gate i zmianą nazwy z Sheriff Bridge na Warlock Bridge.
+REASON FOR CREATION: Ujednolicenie architektury referencyjnej z fazą Ghost Gate i zmianą nazwy z Warlock Bridge na Warlock Bridge.
 ==========================================
 -->
 
@@ -54,7 +54,7 @@ Warlock Bridge is the outer perimeter gateway. It owns the external network boun
 
 The physical target is a dedicated mini-PC. The initial Azure deployment may represent it as a separate container role.
 
-Warlock replaces the earlier name Sheriff. Existing Sheriff identifiers remain
+Warlock replaces the earlier name Warlock. Existing Warlock identifiers remain
 legacy inputs until the typed Rust migration is completed with backward-compatible
 deserialization.
 

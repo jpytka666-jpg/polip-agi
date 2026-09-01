@@ -1,12 +1,17 @@
+// darkstar-header-v1
+// po co: network_topology.rs
+// nie wolno: hotspot, ruszac wlp2s0, wracac do 10.44, gasic DARKSTAR-WiFi, haslo w gicie
+// autor: Marcin
+// powstal: 2026-09-01
 //! Layered network topology contract for the Darkstar perimeter.
 //!
 //! SYSTEM PART: Darkstar Core / Network Boundary
 //! ARCHITECTURE FUNCTION: Model the ordered path from public Internet through
-//! Sheriff Bridge, Kali Bridge, Darkstar and the protected AIONS endpoint.
+//! Warlock Bridge, Kali Bridge, Darkstar and the protected AIONS endpoint.
 //! SECURITY: This module describes topology and trust boundaries only. It does
 //! not create tunnels, alter routes, spoof identity or execute network tools.
 //! DEPLOYMENT MODEL: Azure starts with three isolated container roles; the
-//! intended physical deployment places Sheriff Bridge and Kali on separate
+//! intended physical deployment places Warlock Bridge and Kali on separate
 //! mini PCs. The AIONS endpoint remains outside this three-container edge.
 //! TECH STACK: Rust 2024 + serde.
 
@@ -16,10 +21,22 @@ use serde::{Deserialize, Serialize};
 #[serde(rename_all = "snake_case")]
 pub enum NetworkLayer {
     Internet,
-    SheriffBridge,
+    /// Perymetr. Historycznie nazywany Sheriff; alias serde utrzymuje czytelnosc
+    /// zdarzen i konfiguracji zapisanych pod stara nazwa.
+    #[serde(alias = "sheriff_bridge")]
+    WarlockBridge,
     KaliBridge,
     Darkstar,
     Aions,
+}
+
+/// Odwzorowuje historyczny identyfikator perymetru na obowiazujacy.
+/// Nie tworzy drugiego wezla - istnieje dokladnie jeden perymetr.
+pub fn resolve_legacy_node_id(node_id: &str) -> &str {
+    match node_id {
+        "sheriff-bridge" => "warlock-bridge",
+        other => other,
+    }
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -82,13 +99,13 @@ pub fn reference_topology() -> NetworkTopology {
                 route_role: "public network".into(),
             },
             NetworkNode {
-                node_id: "sheriff-bridge".into(),
-                name: "Sheriff Bridge".into(),
-                layer: NetworkLayer::SheriffBridge,
+                node_id: "warlock-bridge".into(),
+                name: "Warlock Bridge".into(),
+                layer: NetworkLayer::WarlockBridge,
                 trust: TrustLevel::Perimeter,
                 deployment: DeploymentForm::AzureContainer,
                 physical_hint: Some("dedicated perimeter mini PC in physical deployment".into()),
-                visible_identity: Some("sheriff-egress".into()),
+                visible_identity: Some("warlock-egress".into()),
                 route_role: "first perimeter gateway".into(),
             },
             NetworkNode {
@@ -125,15 +142,15 @@ pub fn reference_topology() -> NetworkTopology {
         hops: vec![
             NetworkHop {
                 from: "internet".into(),
-                to: "sheriff-bridge".into(),
+                to: "warlock-bridge".into(),
                 channel: "internet ingress/egress".into(),
-                required_gate: "sheriff perimeter policy".into(),
+                required_gate: "warlock perimeter policy".into(),
             },
             NetworkHop {
-                from: "sheriff-bridge".into(),
+                from: "warlock-bridge".into(),
                 to: "kali-bridge".into(),
                 channel: "segmented security link".into(),
-                required_gate: "sheriff-to-kali route policy".into(),
+                required_gate: "warlock-to-kali route policy".into(),
             },
             NetworkHop {
                 from: "kali-bridge".into(),
@@ -167,7 +184,7 @@ mod tests {
             ids,
             [
                 "internet",
-                "sheriff-bridge",
+                "warlock-bridge",
                 "kali-bridge",
                 "darkstar",
                 "aions"
@@ -175,6 +192,39 @@ mod tests {
         );
         assert_eq!(topology.hops.len(), 4);
         assert_eq!(topology.hops[3].to, "aions");
+    }
+
+    #[test]
+    fn legacy_sheriff_layer_still_deserializes() {
+        // Zapisane wczesniej zdarzenia i konfiguracje nadal musza sie wczytywac.
+        let legacy: NetworkLayer = serde_json::from_str("\"sheriff_bridge\"").unwrap();
+        assert_eq!(legacy, NetworkLayer::WarlockBridge);
+    }
+
+    #[test]
+    fn layer_serializes_under_the_new_name() {
+        let json = serde_json::to_string(&NetworkLayer::WarlockBridge).unwrap();
+        assert_eq!(json, "\"warlock_bridge\"");
+    }
+
+    #[test]
+    fn legacy_node_id_resolves_to_warlock() {
+        assert_eq!(resolve_legacy_node_id("sheriff-bridge"), "warlock-bridge");
+        assert_eq!(resolve_legacy_node_id("warlock-bridge"), "warlock-bridge");
+        assert_eq!(resolve_legacy_node_id("darkstar"), "darkstar");
+    }
+
+    #[test]
+    fn only_one_perimeter_node_exists() {
+        let topology = reference_topology();
+        assert_eq!(
+            topology
+                .nodes
+                .iter()
+                .filter(|node| node.trust == TrustLevel::Perimeter)
+                .count(),
+            1
+        );
     }
 
     #[test]

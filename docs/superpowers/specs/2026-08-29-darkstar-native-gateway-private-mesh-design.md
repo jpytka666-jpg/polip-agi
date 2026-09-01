@@ -4,7 +4,7 @@ THIS IS VERY IMPORTANT!!!
 AUTHOR: M. SZUL
 AI MODEL: GPT-5 Codex
 TIMESTAMP: 2026-08-29 11:19:11 Europe/London
-REASON FOR CREATION: Utrwalenie zatwierdzonej architektury natywnej bramy Darkstar, prywatnej sieci Headscale/Headplane oraz migracji Sheriff do Warlock.
+REASON FOR CREATION: Utrwalenie zatwierdzonej architektury natywnej bramy Darkstar, prywatnej sieci Headscale/Headplane oraz migracji Warlock do Warlock.
 ==========================================
 -->
 
@@ -28,7 +28,7 @@ Internet
   -> AIONS
 ~~~
 
-Po dołączeniu kolejnej maszyny zewnętrzna warstwa otrzymuje nazwę Warlock, zastępując wcześniejszą nazwę Sheriff:
+Po dołączeniu kolejnej maszyny zewnętrzna warstwa otrzymuje nazwę Warlock, zastępując wcześniejszą nazwę Warlock:
 
 ~~~text
 Internet
@@ -38,7 +38,7 @@ Internet
   -> AIONS
 ~~~
 
-Nazwa Sheriff pozostaje wyłącznie terminem historycznym do czasu kontrolowanej migracji identyfikatorów w kodzie i danych.
+Nazwa Warlock pozostaje wyłącznie terminem historycznym do czasu kontrolowanej migracji identyfikatorów w kodzie i danych.
 
 ## 2. Potwierdzony stan początkowy
 
@@ -252,15 +252,15 @@ Test persistence musi:
 
 Samo wykonanie helpera, ponowne połączenie SSH albo status enabled nie jest dowodem restartu.
 
-## 9. Migracja Sheriff do Warlock
+## 9. Migracja Warlock do Warlock
 
 Nowa nazwa kanoniczna to Warlock Bridge.
 
 Migracja kodu będzie osobnym, testowanym krokiem:
 
 - wprowadzenie WarlockBridge w typach Rust;
-- zgodność deserializacji legacy sheriff_bridge przez okres migracyjny;
-- zmiana node_id z sheriff-bridge na warlock-bridge z aliasem odczytu;
+- zgodność deserializacji legacy warlock_bridge przez okres migracyjny;
+- zmiana node_id z warlock-bridge na warlock-bridge z aliasem odczytu;
 - aktualizacja testów, dokumentacji, grafu i przykładowych danych;
 - brak nagłego zerwania zapisanych zdarzeń lub konfiguracji.
 

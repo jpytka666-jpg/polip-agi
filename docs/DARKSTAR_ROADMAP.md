@@ -44,7 +44,7 @@ REASON FOR CREATION: Utworzenie jednego kanonicznego harmonogramu rozwoju Darkst
 | Natywny downstream do Windows | NEXT | enp1s0 istnieje; hotspot AP raportowany, lecz brak testu concurrent AP+STA. |
 | Headscale | PLANNED | Nie jest zainstalowany. |
 | Headplane | PLANNED | Wybrany jako UI najbliższy Tailscale; nie jest zainstalowany. |
-| Warlock Bridge | PLANNED | Nowa nazwa kanoniczna zastępująca Sheriff; wymaga migracji typów i przyszłego hosta. |
+| Warlock Bridge | PLANNED | Nowa nazwa kanoniczna zastępująca Warlock; wymaga migracji typów i przyszłego hosta. |
 | Kali Bridge | BLOCKED | Czeka na przyszłą maszynę. |
 | Domowa chmura Git/CI | PLANNED | Osobny etap po stabilnej sieci. |
 | AIONS na PowerEdge | BLOCKED | Osobny etap po przygotowaniu i montażu sprzętu. |
@@ -83,7 +83,7 @@ Zakres:
 - praca w izolowanym worktree;
 - zapis specyfikacji, roadmapy i planu;
 - aktualizacja wcześniejszych dokumentów o rzeczywisty status;
-- utrwalenie zmiany Sheriff -> Warlock;
+- utrwalenie zmiany Warlock -> Warlock;
 - commit i push dokumentacji.
 
 Brama wyjścia:
@@ -313,4 +313,4 @@ Zakres wysokiego poziomu:
 4. Każda nowa zależność open source ma zapisane: upstream URL, licencję, wersję/commit, sposób aktualizacji i rollback.
 5. Każdy nowy plik projektu ma metadane AUTHOR: M. SZUL.
 6. Każdy milestone kończy się małym commitem i aktualizacją dowodu w dokumentacji.
-7. Zmiany nazwy Warlock nie mogą zerwać odczytu starszych danych Sheriff bez jawnej migracji.
+7. Zmiany nazwy Warlock nie mogą zerwać odczytu starszych danych Warlock bez jawnej migracji.

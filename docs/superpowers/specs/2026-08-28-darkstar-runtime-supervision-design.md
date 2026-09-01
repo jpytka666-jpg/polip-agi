@@ -20,7 +20,7 @@ Docker Compose owns the Dark Star container definition and application-level hea
 
 ## Scope
 
-This design covers the first Ubuntu host deployment of the existing `darkstar-server` container. It does not add Warlock (formerly Sheriff), Kali, provider registry behavior, external cloud deployment, or Power Automate integration.
+This design covers the first Ubuntu host deployment of the existing `darkstar-server` container. It does not add Warlock (formerly Warlock), Kali, provider registry behavior, external cloud deployment, or Power Automate integration.
 
 ## Runtime contract
 

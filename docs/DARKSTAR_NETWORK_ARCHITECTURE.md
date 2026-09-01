@@ -73,8 +73,8 @@ Warlock Bridge is the first perimeter gateway. It is intended to provide the
 outer network boundary, VPN/firewall/routing controls and the first trust
 transition into the security environment.
 
-Warlock replaces the earlier project name Sheriff. At checkpoint fd8099e the
-typed Rust topology still uses Sheriff identifiers. They remain a legacy input
+Warlock replaces the earlier project name Warlock. At checkpoint fd8099e the
+typed Rust topology still uses Warlock identifiers. They remain a legacy input
 only until the backward-compatible migration in the implementation plan.
 
 ### Kali Bridge
@@ -112,3 +112,18 @@ remains the responsibility of Darkstar Policy and Capability Gate.
 The typed Rust representation lives in:
 
 `crates/darkstar-core/src/network_topology.rs`
+
+## Nota migracyjna — Sheriff to dawna nazwa Warlocka
+
+Perymetr nazywal sie **Sheriff Bridge** do 2026-09-01. Obowiazujaca nazwa to **Warlock Bridge**;
+zmiana jest wylacznie nazewnicza i nie tworzy drugiego wezla — perymetr jest dokladnie jeden.
+
+Stare dane pozostaja czytelne:
+
+- `NetworkLayer` ma `#[serde(alias = "sheriff_bridge")]`, wiec zapisane wczesniej zdarzenia i
+  konfiguracje wczytuja sie bez konwersji;
+- `resolve_legacy_node_id("sheriff-bridge")` zwraca `"warlock-bridge"` dla odwolan trzymanych
+  jako identyfikator tekstowy;
+- zapis zawsze uzywa nowej nazwy — `"warlock_bridge"`.
+
+Zrodlo: `crates/darkstar-core/src/network_topology.rs`.
