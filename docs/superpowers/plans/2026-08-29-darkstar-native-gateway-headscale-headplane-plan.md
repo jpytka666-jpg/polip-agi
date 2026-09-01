@@ -472,7 +472,7 @@ git commit -m "docs(darkstar): record firewall activation evidence"
 - Modify only if failure is found: deploy/systemd/darkstar-firewall.service
 - Modify only if failure is found: deploy/firewall/*
 
-- [ ] **Step 3.1: Record the old boot identity**
+- [x] **Step 3.1: Record the old boot identity**
 
 ~~~bash
 cat /proc/sys/kernel/random/boot_id
@@ -482,7 +482,7 @@ who -b
 
 Store old_boot_id in the evidence draft.
 
-- [ ] **Step 3.2: Verify all pre-reboot gates**
+- [x] **Step 3.2: Verify all pre-reboot gates**
 
 ~~~bash
 systemctl is-enabled darkstar-firewall.service
@@ -500,7 +500,7 @@ Every command must match its expected state.
 
 Keep one Windows terminal ready for SSH and one local/physical console available. Record the current route and successful SSH.
 
-- [ ] **Step 3.4: Issue the real reboot**
+- [x] **Step 3.4: Issue the real reboot**
 
 Run directly on Ubuntu or through the authenticated SSH session:
 
@@ -514,11 +514,11 @@ Do not substitute a helper that merely closes the connection.
 
 From Windows poll port 22 at a bounded interval and record at least one failed connection after the reboot command.
 
-- [ ] **Step 3.6: Wait for the host to return**
+- [x] **Step 3.6: Wait for the host to return**
 
 Poll for a maximum of ten minutes. Stop and use physical recovery if the host does not return.
 
-- [ ] **Step 3.7: Prove a new boot occurred**
+- [x] **Step 3.7: Prove a new boot occurred**
 
 After reconnect:
 
@@ -530,7 +530,7 @@ who -b
 
 The new boot_id must differ from old_boot_id. If it is equal, the test fails even if SSH reconnected.
 
-- [ ] **Step 3.8: Verify persistence**
+- [x] **Step 3.8: Verify persistence**
 
 ~~~bash
 systemctl is-active darkstar-firewall.service
@@ -552,7 +552,7 @@ Confirm Windows can reach Darkstar and a public HTTPS endpoint through the curre
 
 If firewall failed, inspect only its journal/unit. If Darkstar failed, inspect darkstar.service/Compose. If routing failed, inspect sysctl/routes/nft. Do not make multiple speculative changes at once.
 
-- [ ] **Step 3.11: Commit the reboot evidence**
+- [x] **Step 3.11: Commit the reboot evidence**
 
 ~~~bash
 git add docs/operations/evidence/2026-08-29-darkstar-real-reboot.md
