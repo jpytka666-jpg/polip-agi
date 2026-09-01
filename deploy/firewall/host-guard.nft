@@ -2,7 +2,7 @@
 # ==========================================
 # AUTHOR: M. SZUL
 # AI MODEL: GPT-5 Codex
-# TIMESTAMP: 2026-08-29 00:00:00
+# TIMESTAMP: 2026-09-01 08:10:27
 # REASON FOR CREATION: Wersjonowany host guard nftables dla bramy Darkstar.
 # ==========================================
 
@@ -30,7 +30,7 @@ table inet darkstar_host_guard {
     set darkstar_downstream_ipv4 {
         type ipv4_addr
         flags interval
-        elements = { 10.44.0.0/24 }
+        elements = { 192.168.2.0/24 }
     }
 
     chain input {
