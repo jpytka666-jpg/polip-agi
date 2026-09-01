@@ -10,6 +10,7 @@ pub mod capability_index;
 pub mod capability_selector;
 pub mod discovery;
 pub mod event;
+pub mod gateway_status;
 pub mod memory;
 pub mod module_execution;
 pub mod module_provider;
