@@ -1,0 +1,98 @@
+#!/bin/sh
+# darkstar-header-v1
+# po co: darkstar-chroma-health
+# nie wolno: hotspot, ruszac wlp2s0, wracac do 10.44, gasic DARKSTAR-WiFi, haslo w gicie
+# autor: Marcin
+# powstal: 2026-09-01
+# THIS IS VERY IMPORTANT!!!
+# ==========================================
+# AUTHOR: M. SZUL
+# AI MODEL: Claude Opus 5
+# TIMESTAMP: 2026-09-02 01:55:00
+# REASON FOR CREATION: Sprawdzenie drugiej nogi Chroma na CBMS - tylko odczyt, przed jakimkolwiek synchronizowaniem danych z E:.
+# MECHANICS: Emituje pary klucz=wartosc: obecnosc katalogu danych, jego prawa i rozmiar, obecnosc
+# chromadb, zajetosc portu, odpowiedz /api/v1/heartbeat i liczbe kolekcji. Brak narzedzia lub brak
+# odpowiedzi daje "unavailable:..." i kod wyjscia 0, zeby dowod dalo sie zebrac w jednym przebiegu.
+# Skrypt niczego nie instaluje, nie uruchamia i nie kopiuje.
+# SYSTEM PART: deploy/context - druga noga pamieci AIONS na Darkstar.
+# ARCHITECTURE FUNCTION: Bramka przed synchronizacja. Pelny sync z E: wolno zaczac dopiero, gdy ten
+# skrypt pokaze health=ok na PUSTEJ bazie, a wynik trafi do evidence.
+# DEPENDENCIES/LINKS: /var/lib/darkstar/chroma, chromadb, curl, ss; zrodlo prawdy "E:\server wiedzy\data\chroma".
+# TECH STACK: POSIX sh - spojne z deploy/firewall i deploy/network, zero zaleznosci na hoscie.
+# LOCAL WORKSPACE: D:\codex-fresh-2026-08-28\worktrees\polip-agi-darkstar-plan
+# GIT COMMIT: PENDING
+# GITHUB METADATA: jpytka666-jpg/polip-agi, branch docs/darkstar-headscale-hotspot-plan
+# ==========================================
+
+set -eu
+
+DATA_DIR=${DARKSTAR_CHROMA_DIR:-/var/lib/darkstar/chroma}
+# Dozwolone adresy nasluchu. NIGDY 0.0.0.0 - to wystawiloby pamiec na siec nadrzedna.
+BIND_LOOPBACK=${DARKSTAR_CHROMA_BIND_LOOPBACK:-127.0.0.1}
+BIND_PRIVATE=${DARKSTAR_CHROMA_BIND_PRIVATE:-192.168.2.1}
+PORT=${DARKSTAR_CHROMA_PORT:-8000}
+
+emit() {
+    printf '%s=%s\n' "$1" "$2"
+}
+
+have() {
+    command -v "$1" >/dev/null 2>&1
+}
+
+emit data_dir "$DATA_DIR"
+emit bind_allowed "$BIND_LOOPBACK,$BIND_PRIVATE"
+emit bind_forbidden '0.0.0.0,::'
+emit port "$PORT"
+
+if [ -d "$DATA_DIR" ]; then
+    emit data_dir_present 'yes'
+    emit data_dir_mode "$(stat -c '%a %U:%G' "$DATA_DIR" 2>/dev/null || printf 'unavailable')"
+    emit data_dir_files "$(find "$DATA_DIR" -type f 2>/dev/null | wc -l | tr -d ' ')"
+    emit data_dir_bytes "$(du -sb "$DATA_DIR" 2>/dev/null | cut -f1 || printf 'unavailable')"
+else
+    emit data_dir_present 'no'
+    emit data_dir_mode 'unavailable:absent'
+    emit data_dir_files 'unavailable:absent'
+    emit data_dir_bytes 'unavailable:absent'
+fi
+
+if have chroma; then
+    emit chroma_binary 'present'
+elif have python3 && python3 -c 'import chromadb' >/dev/null 2>&1; then
+    emit chroma_binary 'module-only'
+else
+    emit chroma_binary 'absent'
+fi
+
+if have ss; then
+    if ss -ltn 2>/dev/null | grep -q ":$PORT "; then
+        emit port_state 'listening'
+    else
+        emit port_state 'free'
+    fi
+else
+    emit port_state 'unavailable:ss-missing'
+fi
+
+if have curl; then
+    for addr in "$BIND_LOOPBACK" "$BIND_PRIVATE"; do
+        # Bez "|| printf" - przy bledzie polaczenia curl juz wypisuje 000,
+        # a doklejenie drugiej wartosci dawaloby mylace "000000".
+        code=$(curl -s -o /dev/null -m 5 -w '%{http_code}' "http://$addr:$PORT/api/v1/heartbeat" 2>/dev/null) || true
+        [ -n "$code" ] || code='000'
+        emit "heartbeat_$addr" "$code"
+    done
+    body=$(curl -s -m 5 "http://$BIND_LOOPBACK:$PORT/api/v1/collections" 2>/dev/null || printf '')
+    if [ -n "$body" ]; then
+        # Pusta baza zwraca []. Liczymy wystapienia pola "name".
+        emit collections "$(printf '%s' "$body" | grep -o '"name"' | wc -l | tr -d ' ')"
+    else
+        emit collections 'unavailable:no-response'
+    fi
+else
+    emit heartbeat_loopback 'unavailable:curl-missing'
+    emit collections 'unavailable:curl-missing'
+fi
+
+printf 'darkstar-chroma-health=read-only-complete\n'

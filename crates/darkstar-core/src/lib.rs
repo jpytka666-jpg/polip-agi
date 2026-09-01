@@ -8,6 +8,7 @@ pub mod audit;
 pub mod capability_gate;
 pub mod capability_index;
 pub mod capability_selector;
+pub mod context_client;
 pub mod discovery;
 pub mod event;
 pub mod gateway_module;

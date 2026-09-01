@@ -21,6 +21,7 @@
 //! GITHUB METADATA: jpytka666-jpg/polip-agi, branch Darkstar
 //! ==========================================
 
+mod context_http;
 mod gateway_http;
 mod http;
 
@@ -53,7 +54,11 @@ async fn main() {
         state.api_token.clone(),
         std::sync::Arc::new(gateway_http::NmcliRunner),
     ));
-    let app = http::router(state).merge(gateway);
+    let context = context_http::context_router(context_http::ContextState::new(
+        state.api_token.clone(),
+        std::sync::Arc::new(context_http::ReadOnlyHttp),
+    ));
+    let app = http::router(state).merge(gateway).merge(context);
     tracing::info!(%address, api_version = darkstar_core::API_VERSION, "darkstar server starting");
 
     let listener = tokio::net::TcpListener::bind(address)
