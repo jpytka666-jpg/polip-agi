@@ -80,7 +80,7 @@ async fn search_returns_matching_collections() {
         .await
         .unwrap();
     let json: Value = serde_json::from_slice(&bytes).unwrap();
-    assert_eq!(json["served_by"], "remote_e");
+    assert_eq!(json["served_by"], "local_cbms");
     assert_eq!(json["collections"].as_array().unwrap().len(), 1);
     assert_eq!(
         json["collections"][0]["name"],

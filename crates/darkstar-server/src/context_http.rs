@@ -53,12 +53,19 @@ impl ContextState {
         api_token: Option<Arc<str>>,
         transport: Arc<dyn ContextTransport + Send + Sync>,
     ) -> Self {
+        // Adresy nog musza byc konfigurowalne: to samo wykonywalne dziala na Windows
+        // (gdzie zrodlem jest E:) i na CBMS (gdzie noga lokalna slucha na petli zwrotnej).
+        // Wpisanie ich na sztywno dawaloby 503 na jednej z maszyn.
+        let local_url = std::env::var("DARKSTAR_CONTEXT_LOCAL")
+            .unwrap_or_else(|_| "http://127.0.0.1:8000".to_string());
+        let remote_url = std::env::var("DARKSTAR_CONTEXT_REMOTE")
+            .unwrap_or_else(|_| "http://100.71.8.70:8000".to_string());
+        // Noga lokalna jest pierwsza: gdy dane sa na miejscu, nie ma powodu isc przez siec.
         Self {
             api_token,
             transport,
-            // Dzis dane sa wylacznie na E:. Po przeniesieniu kolejnosc sie odwroci.
-            preferred: ContextLeg::remote_e("http://100.71.8.70:8000"),
-            fallback: ContextLeg::local_cbms("http://192.168.2.1:8000"),
+            preferred: ContextLeg::local_cbms(&local_url),
+            fallback: ContextLeg::remote_e(&remote_url),
         }
     }
 }

@@ -57,12 +57,17 @@ else
     emit data_dir_bytes 'unavailable:absent'
 fi
 
-if have chroma; then
-    emit chroma_binary 'present'
-elif have python3 && python3 -c 'import chromadb' >/dev/null 2>&1; then
-    emit chroma_binary 'module-only'
+# Chroma zyje we wlasnym venv, nie w systemowym Pythonie - szukamy jej najpierw tam.
+VENV=${DARKSTAR_CHROMA_VENV:-/home/owner/darkstar/venv}
+if [ -x "$VENV/bin/chroma" ]; then
+    emit chroma_binary "venv:$VENV"
+    emit chroma_version "$("$VENV/bin/python" -c 'import chromadb; print(chromadb.__version__)' 2>/dev/null || printf 'unavailable')"
+elif have chroma; then
+    emit chroma_binary 'system-path'
+    emit chroma_version "$(python3 -c 'import chromadb; print(chromadb.__version__)' 2>/dev/null || printf 'unavailable')"
 else
     emit chroma_binary 'absent'
+    emit chroma_version 'unavailable:absent'
 fi
 
 if have ss; then
@@ -75,23 +80,51 @@ else
     emit port_state 'unavailable:ss-missing'
 fi
 
+TENANT=${DARKSTAR_CHROMA_TENANT:-default_tenant}
+DATABASE=${DARKSTAR_CHROMA_DATABASE:-default_database}
+
 if have curl; then
+    # chromadb 1.5.9 odpowiada na v2; starsze wydanie na E: mowi v1 i na v2 daje 404.
+    # Sprawdzamy obie i zapisujemy, ktora odpowiedziala - to nie jest szczegol:
+    # sciezka do kolekcji rozni sie miedzy wersjami.
+    api=''
     for addr in "$BIND_LOOPBACK" "$BIND_PRIVATE"; do
-        # Bez "|| printf" - przy bledzie polaczenia curl juz wypisuje 000,
-        # a doklejenie drugiej wartosci dawaloby mylace "000000".
-        code=$(curl -s -o /dev/null -m 5 -w '%{http_code}' "http://$addr:$PORT/api/v1/heartbeat" 2>/dev/null) || true
-        [ -n "$code" ] || code='000'
-        emit "heartbeat_$addr" "$code"
+        best='000'
+        for v in v2 v1; do
+            code=$(curl -s -o /dev/null -m 5 -w '%{http_code}' \
+                "http://$addr:$PORT/api/$v/heartbeat" 2>/dev/null) || true
+            [ -n "$code" ] || code='000'
+            if [ "$code" = 200 ]; then
+                best=$code
+                [ -n "$api" ] || api=$v
+                break
+            fi
+            [ "$best" = '000' ] && best=$code
+        done
+        emit "heartbeat_$addr" "$best"
     done
-    body=$(curl -s -m 5 "http://$BIND_LOOPBACK:$PORT/api/v1/collections" 2>/dev/null || printf '')
-    if [ -n "$body" ]; then
-        # Pusta baza zwraca []. Liczymy wystapienia pola "name".
-        emit collections "$(printf '%s' "$body" | grep -o '"name"' | wc -l | tr -d ' ')"
+    emit api_version "${api:-unavailable}"
+
+    case ${api:-none} in
+        v2) url="http://$BIND_LOOPBACK:$PORT/api/v2/tenants/$TENANT/databases/$DATABASE/collections?limit=10000" ;;
+        v1) url="http://$BIND_LOOPBACK:$PORT/api/v1/collections" ;;
+        *) url='' ;;
+    esac
+
+    if [ -n "$url" ]; then
+        body=$(curl -s -m 15 "$url" 2>/dev/null || printf '')
+        if [ -n "$body" ]; then
+            # Pusta baza zwraca []. Liczymy wystapienia pola "name".
+            emit collections "$(printf '%s' "$body" | grep -o '"name"' | wc -l | tr -d ' ')"
+        else
+            emit collections 'unavailable:no-response'
+        fi
     else
-        emit collections 'unavailable:no-response'
+        emit collections 'unavailable:no-api'
     fi
 else
     emit heartbeat_loopback 'unavailable:curl-missing'
+    emit api_version 'unavailable:curl-missing'
     emit collections 'unavailable:curl-missing'
 fi
 

@@ -1,0 +1,63 @@
+#!/bin/sh
+# darkstar-header-v1
+# po co: darkstar-chroma-run
+# nie wolno: hotspot, ruszac wlp2s0, wracac do 10.44, gasic DARKSTAR-WiFi, haslo w gicie
+# autor: Marcin
+# powstal: 2026-09-01
+# THIS IS VERY IMPORTANT!!!
+# ==========================================
+# AUTHOR: M. SZUL
+# AI MODEL: Claude Opus 5
+# TIMESTAMP: 2026-09-02 02:30:00
+# REASON FOR CREATION: Uruchomienie drugiej nogi Chroma na CBMS z wiazaniem ograniczonym do petli zwrotnej.
+# MECHANICS: Startuje chroma z venv /home/owner/darkstar/venv na katalogu /var/lib/darkstar/chroma.
+# Przed startem odmawia pracy, jesli ktos poda adres nasluchu spoza listy dozwolonych - zabezpieczenie
+# jest w skrypcie, nie w pamieci operatora. Nie kopiuje danych i nie dotyka zrodla na Windows.
+# SYSTEM PART: deploy/context - druga noga pamieci AIONS.
+# ARCHITECTURE FUNCTION: Chroma celowo NIE jest wystawiona na siec prywatna. Dostep z 192.168.2.0/24
+# ma isc przez darkstar-server, ktory ma uwierzytelnianie i wylacznie sciezki odczytu; baza wektorowa
+# sama nie ma zadnej kontroli dostepu, wiec kazdy jej adres poza petla zwrotna to otwarte drzwi.
+# DEPENDENCIES/LINKS: /home/owner/darkstar/venv, /var/lib/darkstar/chroma, darkstar-chroma-health.
+# TECH STACK: POSIX sh - spojne z deploy/firewall i deploy/network. Sama Chroma zostaje w swoim
+# runtime (Python/venv); przepisywanie jej na Rust nie wchodzi w gre.
+# LOCAL WORKSPACE: D:\codex-fresh-2026-08-28\worktrees\polip-agi-darkstar-plan
+# GIT COMMIT: PENDING
+# GITHUB METADATA: jpytka666-jpg/polip-agi, branch docs/darkstar-headscale-hotspot-plan
+# ==========================================
+
+set -eu
+
+VENV=${DARKSTAR_CHROMA_VENV:-/home/owner/darkstar/venv}
+DATA_DIR=${DARKSTAR_CHROMA_DIR:-/var/lib/darkstar/chroma}
+LOG_DIR=${DARKSTAR_CHROMA_LOG_DIR:-/home/owner/darkstar/logs}
+HOST=${DARKSTAR_CHROMA_HOST:-127.0.0.1}
+PORT=${DARKSTAR_CHROMA_PORT:-8000}
+
+fail() {
+    printf 'darkstar-chroma-run: %s\n' "$1" >&2
+    exit 1
+}
+
+# Bezpiecznik wiazania. 0.0.0.0 wystawiloby pamiec AIONS takze na uplink Vodafone.
+case $HOST in
+    127.0.0.1 | 192.168.2.1) : ;;
+    *) fail "niedozwolony adres nasluchu: $HOST (dozwolone: 127.0.0.1, 192.168.2.1)" ;;
+esac
+
+[ -x "$VENV/bin/chroma" ] || fail "brak chroma w $VENV/bin"
+[ -d "$DATA_DIR" ] || fail "brak katalogu danych: $DATA_DIR"
+
+mkdir -p "$LOG_DIR"
+
+if command -v ss >/dev/null 2>&1 && ss -ltn 2>/dev/null | grep -q ":$PORT "; then
+    fail "port $PORT jest juz zajety - nie uruchamiam drugiej instancji na tych samych danych"
+fi
+
+printf 'darkstar-chroma-run: start na %s:%s, dane %s\n' "$HOST" "$PORT" "$DATA_DIR" >&2
+
+# chromadb 1.5.9 nie przyjmuje juz --log-path; dziennik zbieramy przekierowaniem
+# po stronie wolajacego (nohup ... > logs/run.out).
+exec "$VENV/bin/chroma" run \
+    --path "$DATA_DIR" \
+    --host "$HOST" \
+    --port "$PORT"

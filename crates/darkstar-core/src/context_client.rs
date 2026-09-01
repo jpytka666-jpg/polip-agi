@@ -46,10 +46,23 @@ pub enum ContextLegKind {
     LocalCbms,
 }
 
+/// Wersja HTTP API Chromy. Zrodlo na E: pracuje na starszej wersji i mowi `v1`;
+/// chromadb 1.5.9 na CBMS odpowiada na `v1` kodem 410 i wymaga `v2`, w ktorej
+/// kolekcje leza pod sciezka z tenantem i baza.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ChromaApi {
+    V1,
+    V2,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ContextLeg {
     pub kind: ContextLegKind,
     pub base_url: String,
+    pub api_version: ChromaApi,
+    pub tenant: String,
+    pub database: String,
 }
 
 impl ContextLeg {
@@ -57,6 +70,9 @@ impl ContextLeg {
         Self {
             kind: ContextLegKind::RemoteE,
             base_url: base_url.trim_end_matches('/').to_string(),
+            api_version: ChromaApi::V1,
+            tenant: "default_tenant".into(),
+            database: "default_database".into(),
         }
     }
 
@@ -64,6 +80,26 @@ impl ContextLeg {
         Self {
             kind: ContextLegKind::LocalCbms,
             base_url: base_url.trim_end_matches('/').to_string(),
+            api_version: ChromaApi::V2,
+            tenant: "default_tenant".into(),
+            database: "default_database".into(),
+        }
+    }
+
+    pub fn heartbeat_url(&self) -> String {
+        match self.api_version {
+            ChromaApi::V1 => format!("{}/api/v1/heartbeat", self.base_url),
+            ChromaApi::V2 => format!("{}/api/v2/heartbeat", self.base_url),
+        }
+    }
+
+    pub fn collections_url(&self) -> String {
+        match self.api_version {
+            ChromaApi::V1 => format!("{}/api/v1/collections", self.base_url),
+            ChromaApi::V2 => format!(
+                "{}/api/v2/tenants/{}/databases/{}/collections",
+                self.base_url, self.tenant, self.database
+            ),
         }
     }
 }
@@ -127,7 +163,7 @@ impl<T: ContextTransport> ContextClient<T> {
     /// nigdy pusta lista - inaczej awaria wygladalaby jak brak wiedzy.
     fn list_from_any_leg(&self) -> Result<ContextListing, ContextError> {
         for leg in [&self.preferred, &self.fallback] {
-            let url = format!("{}/api/v1/collections", leg.base_url);
+            let url = leg.collections_url();
             if let Ok(body) = self.transport.get(&url) {
                 return Ok(ContextListing {
                     served_by: leg.kind,
@@ -165,7 +201,7 @@ impl<T: ContextTransport> ContextClient<T> {
             local_cbms_ok: false,
         };
         for leg in [&self.preferred, &self.fallback] {
-            let url = format!("{}/api/v1/heartbeat", leg.base_url);
+            let url = leg.heartbeat_url();
             let ok = self.transport.get(&url).is_ok();
             match leg.kind {
                 ContextLegKind::RemoteE => health.remote_e_ok = ok,
@@ -279,6 +315,33 @@ mod tests {
         let c = client(true, true);
         assert_eq!(c.search("session", 1).unwrap().collections.len(), 1);
         assert_eq!(c.search("session", 10).unwrap().collections.len(), 2);
+    }
+
+    #[test]
+    fn each_leg_uses_the_api_version_its_server_speaks() {
+        // Zywe zrodlo na E: mowi v1. Noga na CBMS to chromadb 1.5.9 - v1 zwraca tam 410,
+        // a kolekcje leza pod sciezka z tenantem i baza.
+        let e = ContextLeg::remote_e("http://100.71.8.70:8000");
+        assert_eq!(e.api_version, ChromaApi::V1);
+        assert_eq!(
+            e.collections_url(),
+            "http://100.71.8.70:8000/api/v1/collections"
+        );
+        assert_eq!(
+            e.heartbeat_url(),
+            "http://100.71.8.70:8000/api/v1/heartbeat"
+        );
+
+        let cbms = ContextLeg::local_cbms("http://127.0.0.1:8000");
+        assert_eq!(cbms.api_version, ChromaApi::V2);
+        assert_eq!(
+            cbms.collections_url(),
+            "http://127.0.0.1:8000/api/v2/tenants/default_tenant/databases/default_database/collections"
+        );
+        assert_eq!(
+            cbms.heartbeat_url(),
+            "http://127.0.0.1:8000/api/v2/heartbeat"
+        );
     }
 
     #[test]
