@@ -1,0 +1,83 @@
+#!/usr/bin/env docker-compose
+# darkstar-header-v1
+# po co: compose.yml
+# nie wolno: hotspot, ruszac wlp2s0, wracac do 10.44, gasic DARKSTAR-WiFi, haslo w gicie
+# autor: Marcin
+# powstal: 2026-09-01
+# THIS IS VERY IMPORTANT!!!
+# ==========================================
+# AUTHOR: M. SZUL
+# AI MODEL: Claude Haiku 4.5
+# TIMESTAMP: 2026-09-02 00:15:00
+# REASON FOR CREATION: Docker Compose definicja dla self-hosted Headscale mesh control server (Task 13).
+# MECHANICS: Serwis Headscale sluchajacy na 127.0.0.1 i 192.168.2.1, korzystajacy z SQLite, dane w named volume.
+# SYSTEM PART: deploy/headscale - modul prywatnego mesh.
+# ARCHITECTURE FUNCTION: Headscale to docelowy control server; Tailscale SaaS to tymczasowy kabel ratunkowy.
+# DEPENDENCIES/LINKS: version.lock (tag v0.29.3, commit 5aff68b5b9921db5ccb88013bb1740077ab872fb), config.yaml, policy.hujson, darkstar_host_guard firewall.
+# TECH STACK: Docker Compose YAML - zgodnie z architektura Darkstar, zero zaleznosci runtime.
+# LOCAL WORKSPACE: D:\codex-fresh-2026-08-28\worktrees\polip-agi-darkstar-plan
+# GIT COMMIT: PENDING
+# GITHUB METADATA: jpytka666-jpg/polip-agi, branch docs/darkstar-headscale-hotspot-plan
+# ==========================================
+
+version: "3.8"
+
+services:
+  headscale:
+    image: headscale/headscale:v0.29.3
+    container_name: darkstar-headscale
+    restart: unless-stopped
+
+    ports:
+      # HTTP API + Web UI — bind TYLKO na loopback i brama prywatna
+      - "127.0.0.1:8080:8080/tcp"
+      - "192.168.2.1:8080:8080/tcp"
+      # gRPC API — bind TYLKO na loopback i brama prywatna
+      - "127.0.0.1:50443:50443/tcp"
+      - "192.168.2.1:50443:50443/tcp"
+
+    volumes:
+      # Konfiguracja — zamapowana z hosta
+      - ./config.yaml:/etc/headscale/config.yaml:ro
+      # Polityka — zamapowana z hosta
+      - ./policy.hujson:/etc/headscale/policy.hujson:ro
+      # Baza danych — persistent storage
+      - headscale_data:/var/lib/headscale
+      # Run directory dla socket'ów
+      - headscale_run:/var/run/headscale
+
+    environment:
+      # Logowanie
+      LOG_LEVEL: "info"
+      # Konfiguracja jest obsługiwana przez plik config.yaml
+
+    networks:
+      - darkstar
+
+    # Health check
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+volumes:
+  headscale_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${HEADSCALE_DATA_DIR:-/var/lib/darkstar/headscale}
+
+  headscale_run:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${HEADSCALE_RUN_DIR:-/run/darkstar/headscale}
+
+networks:
+  darkstar:
+    name: darkstar
+    external: true

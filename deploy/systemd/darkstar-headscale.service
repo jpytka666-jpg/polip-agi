@@ -1,0 +1,63 @@
+# darkstar-header-v1
+# po co: darkstar-headscale.service
+# nie wolno: hotspot, ruszac wlp2s0, wracac do 10.44, gasic DARKSTAR-WiFi, haslo w gicie
+# autor: Marcin
+# powstal: 2026-09-01
+# THIS IS VERY IMPORTANT!!!
+# ==========================================
+# AUTHOR: M. SZUL
+# AI MODEL: Claude Haiku 4.5
+# TIMESTAMP: 2026-09-02 00:19:00
+# REASON FOR CREATION: systemd lifecycle dla Headscale v0.29.3 mesh control server (Task 13, Step 13.8).
+# MECHANICS: Deleguje do docker-compose, czeka na Docker i native gateway, bounded restart policy.
+# SYSTEM PART: deploy/systemd - warstwa orkestracji usług Darkstar.
+# ARCHITECTURE FUNCTION: Service lifecycle dla Task 13 Step 13.9; uruchamia/restartuje Headscale z compose.
+# DEPENDENCIES/LINKS: deploy/headscale/compose.yml, docker.service, darkstar.service.
+# TECH STACK: systemd unit file - zgodnie z darkstar.service i darkstar-firewall.service.
+# LOCAL WORKSPACE: D:\codex-fresh-2026-08-28\worktrees\polip-agi-darkstar-plan
+# GIT COMMIT: PENDING
+# GITHUB METADATA: jpytka666-jpg/polip-agi, branch docs/darkstar-headscale-hotspot-plan
+# ==========================================
+
+[Unit]
+Description=Darkstar Headscale Mesh Control Server
+Documentation=https://github.com/juanfont/headscale
+After=docker.service darkstar.service darkstar-firewall.service
+Requires=docker.service darkstar.service
+PartOf=darkstar.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/darkstar/deploy/headscale
+
+# User/group — root dla dostępu do sieci i zarzadzania kontenerami
+User=root
+Group=root
+
+# Pre-start: upewnij się że sieć darkstar istnieje
+ExecStartPre=-/usr/bin/docker network create --driver bridge darkstar
+
+# Start: uruchom compose
+ExecStart=/usr/bin/docker compose up --no-build
+
+# Stop: zatrzymaj compose
+ExecStop=/usr/bin/docker compose down
+
+# Restart policy
+Restart=always
+RestartSec=30
+StartLimitInterval=300
+StartLimitBurst=5
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=darkstar-headscale
+
+# Security — read-only root filesystem gdzie możliwe
+# (Docker write to /var/lib/docker, więc nie możemy całej FS)
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

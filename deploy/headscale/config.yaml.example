@@ -1,0 +1,77 @@
+# darkstar-header-v1
+# po co: config.yaml.example
+# nie wolno: hotspot, ruszac wlp2s0, wracac do 10.44, gasic DARKSTAR-WiFi, haslo w gicie
+# autor: Marcin
+# powstal: 2026-09-01
+# THIS IS VERY IMPORTANT!!!
+# ==========================================
+# AUTHOR: M. SZUL
+# AI MODEL: Claude Haiku 4.5
+# TIMESTAMP: 2026-09-02 00:16:00
+# REASON FOR CREATION: Przykładowa konfiguracja Headscale v0.29.3 dla prywatnego mesh Darkstar (Task 13).
+# MECHANICS: Główne ustawienia: server URL, bind address, baza danych, logowanie, polityka, DERP relay.
+# SYSTEM PART: deploy/headscale - modul prywatnego mesh.
+# ARCHITECTURE FUNCTION: Template dla rzeczywistej config.yaml, stosowany przy Step 13.9.
+# DEPENDENCIES/LINKS: version.lock (v0.29.3), policy.hujson, compose.yml.
+# TECH STACK: YAML - zgodnie z domyslnym formatem Headscale; nigdy nie bedziesz modyfikowac tego pliku recznie.
+# LOCAL WORKSPACE: D:\codex-fresh-2026-08-28\worktrees\polip-agi-darkstar-plan
+# GIT COMMIT: PENDING
+# GITHUB METADATA: jpytka666-jpg/polip-agi, branch docs/darkstar-headscale-hotspot-plan
+# ==========================================
+
+# Adres serwera Headscale — reachable z prywatnej sieci Darkstar
+server_url: http://192.168.2.1:8080
+
+# Port nasluchu HTTP API — ograniczony do loopback; compose.yml bind'uje na host
+# UWAGA - to adres WEWNATRZ kontenera, nie na hoscie.
+# 127.0.0.1 oznaczaloby tu petle zwrotna samego kontenera, wiec mapowanie portow
+# z compose.yml nigdy by nie zadzialalo i usluga bylaby nieosiagalna.
+# Ekspozycje ogranicza compose: porty sa mapowane wylacznie na 127.0.0.1 i 192.168.2.1
+# hosta, dokladnie tak jak robi to dzialajacy darkstar (DARKSTAR_HOST: 0.0.0.0 + mapowanie).
+listen_addr: 0.0.0.0:8080
+
+# Katalog danych — przechowuje bazę danych, klucze, meta
+db_type: sqlite
+db_path: /var/lib/headscale/db.sqlite
+
+# Katalog stanu runtime
+state_dir: /var/lib/headscale
+
+# Ścieżka do pliku polityki
+policy_path: /etc/headscale/policy.hujson
+
+# Adresy routerów z basenu (tutaj pusty, będą wygenerowane przy starcie)
+ip_prefixes:
+  - fd7a:115c:a1e0::/48
+  - 100.64.0.0/10
+
+# Logowanie
+log:
+  level: info
+  format: json
+
+# DNS dla węzłów — bez dostępu do publicznych serwerów
+dns:
+  base_domains:
+    - darkstar.local
+
+# DERP — private relay nodes do tunelowania jeśli nie ma direct connectivity
+derp:
+  server:
+    enabled: false
+  urls:
+    # Wyłącz publiczne DERP relaye — klient testowy będzie używać direct/local relay
+    - https://controlplane.tailscale.com/derpmap/default
+
+# Adresy UDP dla tunnel discovery — bind na loopback i bramę prywatną
+metrics:
+  enable: false
+
+# tuning
+max_clients_per_user: 100
+
+# Minimum client version — z version.lock
+min_version: 1.80.0
+
+# Aby uniknąć wysyłania telemetrii na serwery Tailscale
+disable_check_updates: true

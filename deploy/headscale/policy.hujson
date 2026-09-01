@@ -1,0 +1,62 @@
+// THIS IS VERY IMPORTANT!!!
+// ==========================================
+// AUTHOR: M. SZUL
+// AI MODEL: Claude Haiku 4.5
+// TIMESTAMP: 2026-09-02 00:17:00
+// REASON FOR CREATION: Polityka dostępu Headscale dla isolated test namespace (Task 13, Step 13.5).
+// MECHANICS: Least-privilege: operator device dostaje SSH do Darkstar + Control Room, test clients bezpośrednie.
+// SYSTEM PART: deploy/headscale - modul prywatnego mesh.
+// ARCHITECTURE FUNCTION: Policy template dla Step 13.9; definuje co mogą robić węzły w sieci.
+// DEPENDENCIES/LINKS: version.lock (v0.29.3), config.yaml.
+// TECH STACK: HuJSON - format Headscale v0.29.3; komentarze + trailing commas dopuszczone.
+// LOCAL WORKSPACE: D:\codex-fresh-2026-08-28\worktrees\polip-agi-darkstar-plan
+// GIT COMMIT: PENDING
+// GITHUB METADATA: jpytka666-jpg/polip-agi, branch docs/darkstar-headscale-hotspot-plan
+// ==========================================
+
+{
+  "groups": {
+    "group:operators": ["user:operator@darkstar.local"],
+    "group:test": ["user:testclient@darkstar.local"],
+  },
+
+  "hosts": {
+    "darkstar_ssh": "192.168.2.1:22",
+    "darkstar_web": "192.168.2.1:8443",
+  },
+
+  "acls": [
+    // Operator: dostęp do SSH i Control Room
+    {
+      "action": "accept",
+      "src": ["group:operators"],
+      "dst": ["darkstar_ssh:22", "darkstar_web:443"],
+    },
+
+    // Test clients: bezpośrednia komunikacja między sobą (jeśli będzie kilka)
+    {
+      "action": "accept",
+      "src": ["group:test"],
+      "dst": ["group:test:*"],
+    },
+
+    // Test clients: dostęp do Darkstar SSH (dla testów)
+    {
+      "action": "accept",
+      "src": ["group:test"],
+      "dst": ["darkstar_ssh:22"],
+    },
+
+    // Default deny
+    {
+      "action": "deny",
+      "src": ["*"],
+      "dst": ["*"],
+    },
+  ],
+
+  "tagOwners": {
+    // Tag dla testów — operator może przypisywać
+    "tag:test": ["user:operator@darkstar.local"],
+  },
+}

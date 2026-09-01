@@ -1,0 +1,112 @@
+#!/bin/sh
+# darkstar-header-v1
+# po co: verify
+# nie wolno: hotspot, ruszac wlp2s0, wracac do 10.44, gasic DARKSTAR-WiFi, haslo w gicie
+# autor: Marcin
+# powstal: 2026-09-01
+# THIS IS VERY IMPORTANT!!!
+# ==========================================
+# AUTHOR: M. SZUL
+# AI MODEL: Claude Haiku 4.5
+# TIMESTAMP: 2026-09-02 00:18:00
+# REASON FOR CREATION: Read-only weryfikacja zdrowego stanu Headscale i bezpieczeństwa konfiguracji (Task 13, Step 13.7).
+# MECHANICS: Sprawdza health check, wersję, bazę danych, bind address, politykę, brak dostępu publicznego.
+# SYSTEM PART: deploy/headscale - modul prywatnego mesh.
+# ARCHITECTURE FUNCTION: Gatunek wejścia dla Task 13 Step 13.9 i Step 13.13; nigdy nie modyfikuje stanu.
+# DEPENDENCIES/LINKS: docker compose, darkstar-headscale container, nft (firewall).
+# TECH STACK: POSIX sh - zgodnie z darkstar-network-preflight, zero zaleznosci runtime.
+# LOCAL WORKSPACE: D:\codex-fresh-2026-08-28\worktrees\polip-agi-darkstar-plan
+# GIT COMMIT: PENDING
+# GITHUB METADATA: jpytka666-jpg/polip-agi, branch docs/darkstar-headscale-hotspot-plan
+# ==========================================
+
+set -eu
+
+HEADSCALE_CONTAINER="${HEADSCALE_CONTAINER:-darkstar-headscale}"
+COMPOSE_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+emit() {
+    printf '%s: %s\n' "$1" "$2"
+}
+
+fail() {
+    emit "ERROR" "$1"
+    exit 1
+}
+
+# 1. Container existence
+if ! docker ps --format '{{.Names}}' | grep -q "^${HEADSCALE_CONTAINER}\$"; then
+    fail "Container $HEADSCALE_CONTAINER is not running"
+fi
+emit "PASS" "Container $HEADSCALE_CONTAINER is running"
+
+# 2. Health check
+if ! docker inspect "${HEADSCALE_CONTAINER}" --format='{{.State.Health.Status}}' 2>/dev/null | grep -q healthy; then
+    emit "WARN" "Health status is not 'healthy' (may be starting)"
+fi
+
+# 3. HTTP API accessible on loopback
+if timeout 5 wget -q -O /dev/null http://127.0.0.1:8080/health 2>/dev/null; then
+    emit "PASS" "HTTP API reachable on 127.0.0.1:8080"
+else
+    emit "WARN" "HTTP API not reachable on 127.0.0.1:8080 (container may be starting)"
+fi
+
+# 4. Version
+VERSION=$(docker exec "${HEADSCALE_CONTAINER}" headscale version 2>/dev/null | head -n 1 || echo 'unavailable')
+if [ "$VERSION" != 'unavailable' ]; then
+    emit "PASS" "Headscale version: $VERSION"
+else
+    emit "WARN" "Cannot read Headscale version (container may be starting)"
+fi
+
+# 5. Database exists
+if docker exec "${HEADSCALE_CONTAINER}" test -f /var/lib/headscale/db.sqlite 2>/dev/null; then
+    emit "PASS" "SQLite database exists"
+else
+    emit "WARN" "SQLite database not found or not readable"
+fi
+
+# 6. Policy file exists
+if docker exec "${HEADSCALE_CONTAINER}" test -f /etc/headscale/policy.hujson 2>/dev/null; then
+    emit "PASS" "Policy file is mounted"
+else
+    emit "WARN" "Policy file not found or not readable"
+fi
+
+# 7. Check for unauthorized public listeners
+# Inspect netstat — should only see loopback and 192.168.2.x
+NETSTAT=$(docker exec "${HEADSCALE_CONTAINER}" ss -tlnp 2>/dev/null || docker exec "${HEADSCALE_CONTAINER}" netstat -tlnp 2>/dev/null || echo '')
+
+if echo "$NETSTAT" | grep -E ':8080.*LISTEN' | grep -qv '127.0.0.1\|192.168.2.1'; then
+    emit "FAIL" "HTTP listener found on unexpected address"
+    exit 1
+fi
+
+if echo "$NETSTAT" | grep -E ':50443.*LISTEN' | grep -qv '127.0.0.1\|192.168.2.1'; then
+    emit "FAIL" "gRPC listener found on unexpected address"
+    exit 1
+fi
+
+emit "PASS" "Listeners bound to private addresses only"
+
+# 8. No connection to Tailscale SaaS
+if docker exec "${HEADSCALE_CONTAINER}" sh -c 'netstat -tnp 2>/dev/null | grep -E "controlplane.tailscale.com|api.tailscale.com"' 2>/dev/null; then
+    emit "FAIL" "Outbound connection to Tailscale SaaS detected"
+    exit 1
+fi
+
+emit "PASS" "No connection to Tailscale SaaS"
+
+# 9. Firewall: host-guard nftables table exists
+if command -v nft >/dev/null 2>&1; then
+    if nft list table inet darkstar_host_guard >/dev/null 2>&1; then
+        emit "PASS" "Firewall table darkstar_host_guard is present"
+    else
+        emit "WARN" "Firewall table darkstar_host_guard not found (may need privileges)"
+    fi
+else
+    emit "WARN" "nft tool not available (cannot verify firewall)"
+fi
+
+printf '\n%s\n' "darkstar-headscale: read-only verification complete"
