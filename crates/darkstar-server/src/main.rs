@@ -1,3 +1,8 @@
+// darkstar-header-v1
+// po co: main.rs
+// nie wolno: hotspot, ruszac wlp2s0, wracac do 10.44, gasic DARKSTAR-WiFi, haslo w gicie
+// autor: Marcin
+// powstal: 2026-09-01
 //! Darkstar server entrypoint.
 //!
 //! THIS IS VERY IMPORTANT!!!
@@ -16,6 +21,7 @@
 //! GITHUB METADATA: jpytka666-jpg/polip-agi, branch Darkstar
 //! ==========================================
 
+mod gateway_http;
 mod http;
 
 use std::{env, net::SocketAddr};
@@ -40,7 +46,14 @@ async fn main() {
         .parse()
         .expect("DARKSTAR_HOST and DARKSTAR_PORT must form a valid socket address");
 
-    let app = http::router(AppState::from_env());
+    let state = AppState::from_env();
+    // Odczyt stanu bramy jest osobnym routerem z wlasnym stanem: wystawia wylacznie
+    // GET, wiec dolaczenie go nie dodaje zadnej sciezki zmieniajacej siec.
+    let gateway = gateway_http::gateway_router(gateway_http::GatewayState::new(
+        state.api_token.clone(),
+        std::sync::Arc::new(gateway_http::NmcliRunner),
+    ));
+    let app = http::router(state).merge(gateway);
     tracing::info!(%address, api_version = darkstar_core::API_VERSION, "darkstar server starting");
 
     let listener = tokio::net::TcpListener::bind(address)
