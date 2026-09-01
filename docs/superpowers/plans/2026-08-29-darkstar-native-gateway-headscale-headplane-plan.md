@@ -1,3 +1,8 @@
+<!-- darkstar-header-v1 -->
+<!-- po co: 2026-08-29-darkstar-native-gateway-headscale-headplane-plan.md -->
+<!-- nie wolno: hotspot, ruszac wlp2s0, wracac do 10.44, gasic DARKSTAR-WiFi, haslo w gicie -->
+<!-- autor: Marcin -->
+<!-- powstal: 2026-09-01 -->
 <!--
 THIS IS VERY IMPORTANT!!!
 ==========================================
@@ -651,6 +656,28 @@ git commit -m "feat(darkstar): add native gateway preflight"
 
 **Entry gate:** Task 4 selected a supported topology and Task 3 rollback remains available.
 
+**Live status 2026-09-01 — measured, not assumed.** An equivalent gateway is already running and
+was reached by a different route than this task describes, so most steps below stay unticked even
+though their outcome exists:
+
+- Gateway live: NetworkManager profile `DARKSTAR-WiFi` (`95a89b38-ee71-484e-98c2-a6d02e8b92b3`)
+  on `enp1s0`, `ipv4.method=shared`, `192.168.2.1/24`, `ipv6.method=disabled`, autoconnect on.
+  It predates this plan; `darkstar-gateway-apply` has never been run with `DARKSTAR_DRY_RUN=0`.
+- Host guard live: `darkstar_downstream_ipv4 = { 192.168.2.0/24 }` installed and loaded,
+  `darkstar-firewall.service` enabled and active, reboot persistence proven.
+- Downstream path live: EE hub at `192.168.2.2` acting as an access point with its DHCP server
+  off, SSID `EE-57GMTG`, cable in a LAN port.
+- Client live: Windows at `192.168.2.50/24`, gateway `192.168.2.1`, DNS `8.8.8.8`, reaching the
+  public Internet through Darkstar NAT.
+- **Known gap:** DHCP does not traverse the hub Wi-Fi — clients fell back to `169.254.x.x`, so
+  every wireless client currently needs a static address. Step 5.12 therefore stays unticked.
+- Deferred: the EE hub management GUI is unusable (`AppInitScreen` never renders); hotspot on
+  `wlp2s0` is out of scope by explicit instruction.
+
+Evidence: `docs/operations/evidence/2026-09-01-ee-hub-ap-static-windows-online.md`,
+`2026-09-01-host-guard-192-168-2-apply.md`, `2026-09-01-existing-downstream-gateway.md`,
+`2026-09-01-ee-hub-appinitscreen-dead.md`.
+
 **Files:**
 
 - Create: deploy/network/darkstar-gateway.env.example
@@ -667,8 +694,8 @@ git commit -m "feat(darkstar): add native gateway preflight"
 
 - Upstream: wlp2s0.
 - Preferred downstream: enp1s0.
-- Default private subnet: 10.44.0.0/24.
-- Darkstar downstream address: 10.44.0.1.
+- Default private subnet: 192.168.2.0/24.
+- Darkstar downstream address: 192.168.2.1.
 - Hotspot SSID and PSK: local environment/NetworkManager secret storage, never Git.
 
 - [ ] **Step 5.1: Write failing file and dry-run checks**
@@ -679,22 +706,22 @@ test -x deploy/network/darkstar-gateway-verify
 test -f deploy/systemd/darkstar-gateway.service
 ~~~
 
-- [ ] **Step 5.2: Define the environment contract**
+- [x] **Step 5.2: Define the environment contract**
 
 The example file contains non-secret values:
 
 ~~~text
 DARKSTAR_UPSTREAM_IFACE=wlp2s0
 DARKSTAR_DOWNSTREAM_IFACE=enp1s0
-DARKSTAR_DOWNSTREAM_CIDR=10.44.0.1/24
-DARKSTAR_DOWNSTREAM_SUBNET=10.44.0.0/24
+DARKSTAR_DOWNSTREAM_CIDR=192.168.2.1/24
+DARKSTAR_DOWNSTREAM_SUBNET=192.168.2.0/24
 DARKSTAR_CONNECTION_NAME=darkstar-downstream
 DARKSTAR_MODE=ethernet
 ~~~
 
 For hotspot mode, the actual SSID/PSK live in root-readable local configuration outside Git.
 
-- [ ] **Step 5.3: Create a NetworkManager profile template**
+- [x] **Step 5.3: Create a NetworkManager profile template**
 
 Use ipv4.method=shared for the private downstream and ipv6.method=disabled initially unless an explicitly tested IPv6 prefix delegation design is selected. Do not copy a host-generated UUID or secret into Git.
 
@@ -720,7 +747,7 @@ Stop deactivates only DARKSTAR_CONNECTION_NAME and leaves the profile available 
 Verify:
 
 - upstream has a default route;
-- downstream has 10.44.0.1/24;
+- downstream has 192.168.2.1/24;
 - DHCP/DNS for shared mode is present;
 - nft forward/NAT rules reference only expected interfaces/subnet;
 - Darkstar API remains localhost/private;
@@ -769,8 +796,8 @@ Run apply manually, then verify. Connect a test client to enp1s0 or the private 
 
 From the client verify:
 
-- address in 10.44.0.0/24;
-- default gateway 10.44.0.1;
+- address in 192.168.2.0/24;
+- default gateway 192.168.2.1;
 - DNS resolution;
 - public HTTPS;
 - public egress IP equals Darkstar upstream egress;
@@ -835,7 +862,7 @@ Record adapter names, enabled state, current WLAN profile, interface metrics, DH
 The script:
 
 1. requires an elevated PowerShell session;
-2. verifies Darkstar gateway 10.44.0.1 is reachable;
+2. verifies Darkstar gateway 192.168.2.1 is reachable;
 3. identifies the downstream Ethernet or Darkstar SSID by exact configured name;
 4. disables auto-connect or disconnects the home Wi-Fi profile;
 5. does not delete saved Wi-Fi profiles;
@@ -848,7 +875,7 @@ The script:
 Fail unless:
 
 - exactly one usable IPv4 default route exists;
-- its next hop is 10.44.0.1 or the selected Darkstar gateway;
+- its next hop is 192.168.2.1 or the selected Darkstar gateway;
 - no active home Wi-Fi interface has Internet connectivity;
 - Darkstar SSH/API private endpoints are reachable;
 - a public HTTPS probe succeeds;
@@ -1630,7 +1657,7 @@ Headplane receives only the Headscale access/config it requires. Secrets are mou
 
 - [ ] **Step 14.5: Configure private access**
 
-Bind Headplane to localhost or 10.44.0.1 only. Protect it with its supported authentication. Firewall permits access only from the Darkstar private client subnet.
+Bind Headplane to localhost or 192.168.2.1 only. Protect it with its supported authentication. Firewall permits access only from the Darkstar private client subnet.
 
 - [ ] **Step 14.6: Add systemd and verify script**
 

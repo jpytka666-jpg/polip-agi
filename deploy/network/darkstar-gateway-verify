@@ -1,4 +1,9 @@
 #!/bin/sh
+# darkstar-header-v1
+# po co: darkstar-gateway-verify
+# nie wolno: hotspot, ruszac wlp2s0, wracac do 10.44, gasic DARKSTAR-WiFi, haslo w gicie
+# autor: Marcin
+# powstal: 2026-09-01
 # THIS IS VERY IMPORTANT!!!
 # ==========================================
 # AUTHOR: M. SZUL
@@ -26,9 +31,9 @@ fi
 
 UPSTREAM_IFACE=${DARKSTAR_UPSTREAM_IFACE:-wlp2s0}
 DOWNSTREAM_IFACE=${DARKSTAR_DOWNSTREAM_IFACE:-enp1s0}
-DOWNSTREAM_CIDR=${DARKSTAR_DOWNSTREAM_CIDR:-10.44.0.1/24}
-DOWNSTREAM_SUBNET=${DARKSTAR_DOWNSTREAM_SUBNET:-10.44.0.0/24}
-CONNECTION_NAME=${DARKSTAR_CONNECTION_NAME:-darkstar-downstream}
+DOWNSTREAM_CIDR=${DARKSTAR_DOWNSTREAM_CIDR:-192.168.2.1/24}
+DOWNSTREAM_SUBNET=${DARKSTAR_DOWNSTREAM_SUBNET:-192.168.2.0/24}
+CONNECTION_NAME=${DARKSTAR_CONNECTION_NAME:-DARKSTAR-WiFi}
 TABLE_NAME=darkstar_host_guard
 
 emit() {

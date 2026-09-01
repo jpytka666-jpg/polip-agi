@@ -13,8 +13,8 @@ REASON FOR CREATION: Instrukcja instalacji, weryfikacji i rollbacku host guard D
 `host-guard.nft` owns only `table inet darkstar_host_guard`. It permits
 loopback, established traffic, ICMP/ICMPv6, temporary management on
 `tailscale0`, UDP `41641` on `wlp2s0`, DHCP client responses, and downstream
-SSH only from `10.44.0.0/24` through `enp1s0`. Forwarding and IPv4 masquerade
-are restricted to `10.44.0.0/24` from `enp1s0` to `wlp2s0`. It deliberately
+SSH only from `192.168.2.0/24` through `enp1s0`. Forwarding and IPv4 masquerade
+are restricted to `192.168.2.0/24` from `enp1s0` to `wlp2s0`. It deliberately
 does not open the Darkstar API to public input.
 
 ## Install
