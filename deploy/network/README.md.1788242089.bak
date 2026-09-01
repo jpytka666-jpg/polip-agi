@@ -43,24 +43,6 @@ sh -n deploy/network/darkstar-network-preflight
 shellcheck deploy/network/darkstar-network-preflight
 ~~~
 
-## Brama: probny przebieg (DRY_RUN)
-
-`darkstar-gateway-apply` i `darkstar-gateway-stop` startuja z bezpiecznikiem `DARKSTAR_DRY_RUN=1`.
-W tym trybie skrypty tylko drukuja linie `DRY_RUN would_run: ...` i **nie wolaja** nmcli, sysctl
-ani nft. Zdjecie bezpiecznika wymaga jawnego `DARKSTAR_DRY_RUN=0` i uprawnien root.
-
-~~~bash
-DARKSTAR_ENV_FILE=deploy/network/darkstar-gateway.env.example \
-DARKSTAR_PROFILE_TEMPLATE=deploy/network/nm-downstream.profile \
-  ./deploy/network/darkstar-gateway-apply
-
-DARKSTAR_ENV_FILE=deploy/network/darkstar-gateway.env.example \
-  ./deploy/network/darkstar-gateway-stop
-~~~
-
-`darkstar-gateway-verify` nie ma trybu probnego, bo wylacznie czyta; kazdy brak narzedzia daje
-`unavailable:...` i kod wyjscia 0.
-
 ## Zakres
 
 Odpowiada za Step 4.2 i Step 4.3 planu

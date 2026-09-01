@@ -1,0 +1,139 @@
+#!/bin/sh
+# THIS IS VERY IMPORTANT!!!
+# ==========================================
+# AUTHOR: M. SZUL
+# AI MODEL: Claude Opus 5
+# TIMESTAMP: 2026-09-01 05:44:48
+# REASON FOR CREATION: Tylko-do-odczytu sprawdzenie stanu natywnej bramy Darkstar (Task 5, Step 5.6).
+# MECHANICS: Emituje wylacznie pary klucz=wartosc. Brak narzedzia lub brak uprawnien daje wartosc "unavailable:..." i skrypt konczy sie kodem 0, zeby dowod dalo sie zebrac w jednym przebiegu na niekompletnym hoscie. Zadna komenda nie zmienia stanu.
+# SYSTEM PART: deploy/network - natywna brama Darkstar.
+# ARCHITECTURE FUNCTION: Bramka dowodowa po apply oraz zrodlo faktow dla evidence. Ocene zielony/czerwony podejmuje czlowiek albo apply, nie ten skrypt.
+# DEPENDENCIES/LINKS: ip, nmcli, nft, ss, /proc/sys/net; komplementarny wobec darkstar-firewall-verify i darkstar-network-preflight.
+# TECH STACK: POSIX sh - spojne z deploy/firewall i darkstar-network-preflight.
+# LOCAL WORKSPACE: D:\codex-fresh-2026-08-28\worktrees\polip-agi-darkstar-plan
+# GIT COMMIT: PENDING
+# GITHUB METADATA: jpytka666-jpg/polip-agi, branch docs/darkstar-headscale-hotspot-plan
+# ==========================================
+
+set -eu
+
+ENV_FILE=${DARKSTAR_ENV_FILE:-/etc/darkstar/gateway.env}
+
+if [ -r "$ENV_FILE" ]; then
+    # shellcheck disable=SC1090
+    . "$ENV_FILE"
+fi
+
+UPSTREAM_IFACE=${DARKSTAR_UPSTREAM_IFACE:-wlp2s0}
+DOWNSTREAM_IFACE=${DARKSTAR_DOWNSTREAM_IFACE:-enp1s0}
+DOWNSTREAM_CIDR=${DARKSTAR_DOWNSTREAM_CIDR:-10.44.0.1/24}
+DOWNSTREAM_SUBNET=${DARKSTAR_DOWNSTREAM_SUBNET:-10.44.0.0/24}
+CONNECTION_NAME=${DARKSTAR_CONNECTION_NAME:-darkstar-downstream}
+TABLE_NAME=darkstar_host_guard
+
+emit() {
+    printf '%s=%s\n' "$1" "$2"
+}
+
+have() {
+    command -v "$1" >/dev/null 2>&1
+}
+
+emit env_file_readable "$([ -r "$ENV_FILE" ] && printf 'yes' || printf 'no')"
+emit upstream_iface "$UPSTREAM_IFACE"
+emit downstream_iface "$DOWNSTREAM_IFACE"
+emit connection_name "$CONNECTION_NAME"
+
+if have ip; then
+    route=$(ip -4 route show default 2>/dev/null | head -n 1)
+    if printf '%s' "$route" | grep -Fq "dev $UPSTREAM_IFACE"; then
+        emit upstream_default_route 'present'
+    elif [ -n "$route" ]; then
+        emit upstream_default_route 'present-on-other-interface'
+    else
+        emit upstream_default_route 'absent'
+    fi
+
+    if ip -4 addr show dev "$DOWNSTREAM_IFACE" 2>/dev/null |
+        grep -Fq "inet $DOWNSTREAM_CIDR"; then
+        emit downstream_address 'present'
+    else
+        emit downstream_address 'absent'
+    fi
+else
+    emit upstream_default_route 'unavailable:ip-missing'
+    emit downstream_address 'unavailable:ip-missing'
+fi
+
+if have nmcli; then
+    if nmcli -t -f NAME connection show --active 2>/dev/null |
+        grep -Fxq "$CONNECTION_NAME"; then
+        emit downstream_profile_active 'yes'
+    else
+        emit downstream_profile_active 'no'
+    fi
+    emit downstream_ipv4_method \
+        "$(nmcli -t -g ipv4.method connection show "$CONNECTION_NAME" 2>/dev/null ||
+            printf 'unavailable:profile-absent')"
+else
+    emit downstream_profile_active 'unavailable:nmcli-missing'
+    emit downstream_ipv4_method 'unavailable:nmcli-missing'
+fi
+
+if have ss; then
+    if ss -lunp 2>/dev/null | grep -Fq ':67 '; then
+        emit shared_dhcp_listener 'present'
+    else
+        emit shared_dhcp_listener 'absent'
+    fi
+    if ss -lunp 2>/dev/null | grep -Fq ':53 '; then
+        emit shared_dns_listener 'present'
+    else
+        emit shared_dns_listener 'absent'
+    fi
+    # Darkstar API ma zostac na localhost/prywatnej sieci do czasu udowodnienia
+    # prywatnej trasy i uwierzytelnienia.
+    emit api_public_listeners \
+        "$(ss -ltn 2>/dev/null | awk 'NR > 1 && $4 ~ /^(0\.0\.0\.0|\*|\[::\]):18080$/' |
+            wc -l | tr -d ' ')"
+    emit unexpected_public_listeners \
+        "$(ss -ltn 2>/dev/null | awk 'NR > 1 && $4 ~ /^(0\.0\.0\.0|\*|\[::\]):/' |
+            wc -l | tr -d ' ')"
+else
+    emit shared_dhcp_listener 'unavailable:ss-missing'
+    emit shared_dns_listener 'unavailable:ss-missing'
+    emit api_public_listeners 'unavailable:ss-missing'
+    emit unexpected_public_listeners 'unavailable:ss-missing'
+fi
+
+if have nft; then
+    if ruleset=$(nft list table inet "$TABLE_NAME" 2>/dev/null); then
+        emit host_guard_table 'present'
+        if printf '%s' "$ruleset" | grep -Fq "$DOWNSTREAM_SUBNET"; then
+            emit nat_subnet_reference 'expected-subnet-only'
+        else
+            emit nat_subnet_reference 'expected-subnet-absent'
+        fi
+        if printf '%s' "$ruleset" | grep -Fq "oifname \"$UPSTREAM_IFACE\""; then
+            emit nat_upstream_reference 'present'
+        else
+            emit nat_upstream_reference 'absent'
+        fi
+    else
+        emit host_guard_table 'absent-or-unprivileged'
+        emit nat_subnet_reference 'unavailable:table-unreadable'
+        emit nat_upstream_reference 'unavailable:table-unreadable'
+    fi
+else
+    emit host_guard_table 'unavailable:nft-missing'
+    emit nat_subnet_reference 'unavailable:nft-missing'
+    emit nat_upstream_reference 'unavailable:nft-missing'
+fi
+
+if [ -r /proc/sys/net/ipv4/ip_forward ]; then
+    emit ipv4_forwarding "$(cat /proc/sys/net/ipv4/ip_forward)"
+else
+    emit ipv4_forwarding 'unavailable:absent'
+fi
+
+printf 'darkstar-gateway-verify=read-only-complete\n'

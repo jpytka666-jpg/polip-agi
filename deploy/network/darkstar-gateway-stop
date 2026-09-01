@@ -1,0 +1,75 @@
+#!/bin/sh
+# THIS IS VERY IMPORTANT!!!
+# ==========================================
+# AUTHOR: M. SZUL
+# AI MODEL: Claude Opus 5
+# TIMESTAMP: 2026-09-01 05:44:48
+# REASON FOR CREATION: Wylaczenie prywatnego downstreamu Darkstar bez kasowania profilu (Task 5, Step 5.5).
+# MECHANICS: Deaktywuje wylacznie DARKSTAR_CONNECTION_NAME. Profil zostaje w NetworkManager, zeby odzyskanie bylo mozliwe bez odtwarzania konfiguracji. Upstream i firewall nie sa dotykane. Domyslnie DARKSTAR_DRY_RUN=1 - tylko drukuje zamiar.
+# SYSTEM PART: deploy/network - natywna brama Darkstar.
+# ARCHITECTURE FUNCTION: ExecStop jednostki darkstar-gateway.service oraz reczna sciezka wycofania po nieudanym tescie.
+# DEPENDENCIES/LINKS: nmcli, darkstar-gateway.env.example, darkstar-gateway-apply.
+# TECH STACK: POSIX sh - spojne z deploy/firewall.
+# LOCAL WORKSPACE: D:\codex-fresh-2026-08-28\worktrees\polip-agi-darkstar-plan
+# GIT COMMIT: PENDING
+# GITHUB METADATA: jpytka666-jpg/polip-agi, branch docs/darkstar-headscale-hotspot-plan
+# ==========================================
+
+set -eu
+
+SCRIPT_NAME=darkstar-gateway-stop
+ENV_FILE=${DARKSTAR_ENV_FILE:-/etc/darkstar/gateway.env}
+
+# Bezpiecznik: domyslnie nic nie mutuje.
+DARKSTAR_DRY_RUN=${DARKSTAR_DRY_RUN:-1}
+
+fail() {
+    printf '%s: %s\n' "$SCRIPT_NAME" "$1" >&2
+    exit 1
+}
+
+note() {
+    printf '%s: %s\n' "$SCRIPT_NAME" "$1" >&2
+}
+
+run_mutation() {
+    if [ "$DARKSTAR_DRY_RUN" != 0 ]; then
+        printf 'DRY_RUN would_run:'
+        for arg in "$@"; do
+            printf ' %s' "$arg"
+        done
+        printf '\n'
+        return 0
+    fi
+    "$@"
+}
+
+[ -r "$ENV_FILE" ] || fail "missing readable environment contract: $ENV_FILE"
+# shellcheck disable=SC1090
+. "$ENV_FILE"
+
+: "${DARKSTAR_CONNECTION_NAME:?missing DARKSTAR_CONNECTION_NAME}"
+: "${DARKSTAR_UPSTREAM_IFACE:?missing DARKSTAR_UPSTREAM_IFACE}"
+
+command -v nmcli >/dev/null 2>&1 || fail 'required command not found: nmcli'
+
+# Zabezpieczenie przed odcieciem wlasnej drogi zarzadzania.
+if [ "$DARKSTAR_CONNECTION_NAME" = "$DARKSTAR_UPSTREAM_IFACE" ]; then
+    fail 'refusing to touch the upstream management connection'
+fi
+
+if [ "$DARKSTAR_DRY_RUN" != 0 ]; then
+    note 'dry run - no connection will be deactivated'
+else
+    [ "$(id -u)" -eq 0 ] || fail 'must run as root when DARKSTAR_DRY_RUN=0'
+fi
+
+if nmcli -t -f NAME connection show --active 2>/dev/null |
+    grep -Fxq "$DARKSTAR_CONNECTION_NAME"; then
+    run_mutation nmcli connection down "$DARKSTAR_CONNECTION_NAME"
+    note "deactivated $DARKSTAR_CONNECTION_NAME; profile kept for recovery"
+else
+    note "$DARKSTAR_CONNECTION_NAME is not active; nothing to deactivate"
+fi
+
+note 'upstream and firewall left untouched'

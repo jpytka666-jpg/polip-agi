@@ -1,0 +1,166 @@
+#!/bin/sh
+# THIS IS VERY IMPORTANT!!!
+# ==========================================
+# AUTHOR: M. SZUL
+# AI MODEL: Claude Opus 5
+# TIMESTAMP: 2026-09-01 05:44:48
+# REASON FOR CREATION: Idempotentne wlaczenie prywatnego downstreamu Darkstar, domyslnie w trybie prob nej (Task 5, Step 5.4).
+# MECHANICS: Waliduje kontrakt env i nazwy interfejsow wzgledem /sys/class/net, podstawia szablon profilu NetworkManager, po czym importuje, aktywuje profil, laduje wersjonowany firewall i sprawdza wynik. Kazda operacja mutujaca przechodzi przez run_mutation(); przy DARKSTAR_DRY_RUN=1 (domyslnie) jest tylko drukowana, nigdy wykonywana.
+# SYSTEM PART: deploy/network - natywna brama Darkstar.
+# ARCHITECTURE FUNCTION: Jedyna sciezka wlaczenia bramy. Fail-closed: brak narzedzia, zly interfejs lub zly CIDR konczy sie kodem niezerowym przed jakakolwiek zmiana.
+# DEPENDENCIES/LINKS: nmcli, ip, sysctl, /usr/local/sbin/darkstar-firewall-apply, darkstar-gateway-verify, nm-downstream.profile, darkstar-gateway.env.example.
+# TECH STACK: POSIX sh - spojne z deploy/firewall, zero zaleznosci runtime na Ubuntu.
+# LOCAL WORKSPACE: D:\codex-fresh-2026-08-28\worktrees\polip-agi-darkstar-plan
+# GIT COMMIT: PENDING
+# GITHUB METADATA: jpytka666-jpg/polip-agi, branch docs/darkstar-headscale-hotspot-plan
+# ==========================================
+
+set -eu
+
+SCRIPT_NAME=darkstar-gateway-apply
+SCRIPT_DIR=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
+ENV_FILE=${DARKSTAR_ENV_FILE:-/etc/darkstar/gateway.env}
+PROFILE_TEMPLATE=${DARKSTAR_PROFILE_TEMPLATE:-$SCRIPT_DIR/nm-downstream.profile}
+FIREWALL_APPLY=${DARKSTAR_FIREWALL_APPLY:-/usr/local/sbin/darkstar-firewall-apply}
+VERIFY_SCRIPT=${DARKSTAR_VERIFY_SCRIPT:-$SCRIPT_DIR/darkstar-gateway-verify}
+
+# Bezpiecznik: domyslnie nic nie mutuje. Zdjecie wymaga jawnego DARKSTAR_DRY_RUN=0.
+DARKSTAR_DRY_RUN=${DARKSTAR_DRY_RUN:-1}
+
+fail() {
+    printf '%s: %s\n' "$SCRIPT_NAME" "$1" >&2
+    exit 1
+}
+
+note() {
+    printf '%s: %s\n' "$SCRIPT_NAME" "$1" >&2
+}
+
+# Jedyna brama do swiata zewnetrznego. Przy DRY_RUN drukuje zamiar i wraca.
+run_mutation() {
+    if [ "$DARKSTAR_DRY_RUN" != 0 ]; then
+        printf 'DRY_RUN would_run:'
+        for arg in "$@"; do
+            printf ' %s' "$arg"
+        done
+        printf '\n'
+        return 0
+    fi
+    "$@"
+}
+
+require_tool() {
+    command -v "$1" >/dev/null 2>&1 || fail "required command not found: $1"
+}
+
+validate_iface() {
+    iface=$1
+    case $iface in
+        '' | */* | .*) fail "invalid interface name: $iface" ;;
+    esac
+    [ -d "/sys/class/net/$iface" ] || fail "interface absent from /sys/class/net: $iface"
+}
+
+validate_cidr() {
+    value=$1
+    prefix=${value##*/}
+    address=${value%%/*}
+    case $value in
+        */*) : ;;
+        *) fail "CIDR without prefix length: $value" ;;
+    esac
+    case $prefix in
+        '' | *[!0-9]*) fail "non-numeric prefix length: $value" ;;
+    esac
+    [ "$prefix" -ge 8 ] && [ "$prefix" -le 30 ] || fail "prefix length outside 8..30: $value"
+    printf '%s\n' "$address" | grep -Eq '^([0-9]{1,3}\.){3}[0-9]{1,3}$' ||
+        fail "not an IPv4 address: $value"
+}
+
+[ -r "$ENV_FILE" ] || fail "missing readable environment contract: $ENV_FILE"
+# shellcheck disable=SC1090
+. "$ENV_FILE"
+
+: "${DARKSTAR_UPSTREAM_IFACE:?missing DARKSTAR_UPSTREAM_IFACE}"
+: "${DARKSTAR_DOWNSTREAM_IFACE:?missing DARKSTAR_DOWNSTREAM_IFACE}"
+: "${DARKSTAR_DOWNSTREAM_CIDR:?missing DARKSTAR_DOWNSTREAM_CIDR}"
+: "${DARKSTAR_CONNECTION_NAME:?missing DARKSTAR_CONNECTION_NAME}"
+DARKSTAR_MODE=${DARKSTAR_MODE:-ethernet}
+
+require_tool nmcli
+require_tool ip
+validate_iface "$DARKSTAR_UPSTREAM_IFACE"
+validate_iface "$DARKSTAR_DOWNSTREAM_IFACE"
+validate_cidr "$DARKSTAR_DOWNSTREAM_CIDR"
+
+# Ten sam interfejs po obu stronach dozwolony wylacznie po jawnej zgodzie preflightu.
+if [ "$DARKSTAR_UPSTREAM_IFACE" = "$DARKSTAR_DOWNSTREAM_IFACE" ] &&
+    [ "${DARKSTAR_ALLOW_CONCURRENT:-0}" != 1 ]; then
+    fail "upstream and downstream are the same interface; preflight approval required"
+fi
+
+case $DARKSTAR_MODE in
+    ethernet) : ;;
+    hotspot)
+        [ "${DARKSTAR_ALLOW_CONCURRENT:-0}" = 1 ] ||
+            fail "hotspot mode requires preflight-approved AP capability"
+        [ -n "${DARKSTAR_HOTSPOT_SSID:-}" ] || fail "hotspot mode without DARKSTAR_HOTSPOT_SSID"
+        [ -n "${DARKSTAR_HOTSPOT_PSK:-}" ] || fail "hotspot mode without DARKSTAR_HOTSPOT_PSK"
+        ;;
+    *) fail "unsupported DARKSTAR_MODE: $DARKSTAR_MODE" ;;
+esac
+
+if [ "$DARKSTAR_DRY_RUN" != 0 ]; then
+    note 'dry run - no interface, sysctl or firewall change will be made'
+else
+    [ "$(id -u)" -eq 0 ] || fail 'must run as root when DARKSTAR_DRY_RUN=0'
+fi
+
+[ -r "$PROFILE_TEMPLATE" ] || fail "missing profile template: $PROFILE_TEMPLATE"
+
+RENDERED=${TMPDIR:-/tmp}/darkstar-downstream.$$.nmconnection
+cleanup() {
+    rm -f "$RENDERED"
+}
+trap cleanup EXIT HUP INT TERM
+
+sed \
+    -e "s|__DARKSTAR_CONNECTION_NAME__|$DARKSTAR_CONNECTION_NAME|g" \
+    -e "s|__DARKSTAR_DOWNSTREAM_IFACE__|$DARKSTAR_DOWNSTREAM_IFACE|g" \
+    -e "s|__DARKSTAR_DOWNSTREAM_CIDR__|$DARKSTAR_DOWNSTREAM_CIDR|g" \
+    "$PROFILE_TEMPLATE" > "$RENDERED"
+
+if grep -Fq '__DARKSTAR_' "$RENDERED"; then
+    fail 'profile template still contains placeholders'
+fi
+
+note "rendered profile for $DARKSTAR_CONNECTION_NAME on $DARKSTAR_DOWNSTREAM_IFACE"
+
+# Import tylko wlasnego profilu; cudze polaczenia pozostaja nietkniete.
+if nmcli -t -f NAME connection show 2>/dev/null | grep -Fxq "$DARKSTAR_CONNECTION_NAME"; then
+    note "profile already present, refreshing settings only"
+    run_mutation nmcli connection modify "$DARKSTAR_CONNECTION_NAME" \
+        connection.interface-name "$DARKSTAR_DOWNSTREAM_IFACE" \
+        ipv4.method shared ipv4.addresses "$DARKSTAR_DOWNSTREAM_CIDR" \
+        ipv4.never-default yes ipv6.method disabled
+else
+    run_mutation nmcli connection import type ethernet file "$RENDERED"
+fi
+
+run_mutation nmcli connection up "$DARKSTAR_CONNECTION_NAME"
+
+if [ -x "$FIREWALL_APPLY" ]; then
+    run_mutation "$FIREWALL_APPLY"
+else
+    note "firewall apply not installed at $FIREWALL_APPLY - skipped"
+fi
+
+if [ "$DARKSTAR_DRY_RUN" != 0 ]; then
+    note 'dry run complete - nothing was activated'
+    exit 0
+fi
+
+[ -x "$VERIFY_SCRIPT" ] || fail "verify script missing: $VERIFY_SCRIPT"
+"$VERIFY_SCRIPT" || fail 'post-apply verification failed - gateway is only partially active'
+
+note 'gateway active and verified'
