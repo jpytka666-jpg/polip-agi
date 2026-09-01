@@ -312,20 +312,6 @@ body {
   background: rgba(0, 0, 0, 0.18);
 }
 
-/* Wezly grafu na tym samym szkle co panele. */
-.react-flow__node {
-  background: rgba(214, 240, 160, 0.08) !important;
-  border: 1px solid var(--line) !important;
-  border-radius: 8px !important;
-  color: var(--ink) !important;
-  font-size: 0.72rem !important;
-}
-
-.react-flow__edge-text {
-  fill: var(--muted) !important;
-  font-size: 0.6rem !important;
-}
-
 .react-flow__controls-button {
   background: rgba(214, 240, 160, 0.10) !important;
   border-bottom: 1px solid var(--line) !important;
@@ -337,4 +323,152 @@ body {
   color: var(--muted);
   font-size: 0.76rem;
   padding: 0.8rem 1.5rem;
+}
+
+/* ---- Graf systemu: czytelne wezly, panel szczegolow ---- */
+
+.graph-layout {
+  display: grid;
+  grid-template-columns: 1fr minmax(16rem, 19rem);
+  gap: 0.9rem;
+  flex: 1;
+  min-height: 0;
+}
+
+@media (max-width: 1200px) {
+  .graph-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.gnode {
+  width: 232px;
+  height: 64px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.15rem;
+  padding: 0.5rem 0.8rem;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--muted);
+  background: rgba(214, 240, 160, 0.07);
+  backdrop-filter: blur(8px);
+  color: var(--ink);
+  transition: background 0.12s, border-color 0.12s, transform 0.12s;
+}
+
+.gnode__name {
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.gnode__kind {
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.gnode:hover {
+  background: rgba(198, 241, 53, 0.14);
+  border-color: var(--accent);
+  transform: translateY(-1px);
+}
+
+.gnode--active {
+  background: rgba(198, 241, 53, 0.2);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent), 0 0 18px rgba(198, 241, 53, 0.3);
+}
+
+/* Kolor lewej krawedzi koduje rodzaj wezla. */
+.gnode--repository { border-left-color: var(--accent); }
+.gnode--module     { border-left-color: var(--ok); }
+.gnode--runtime    { border-left-color: var(--warn); }
+.gnode--file       { border-left-color: #8fb26a; }
+.gnode--dependency { border-left-color: #b6c98a; }
+.gnode--directory  { border-left-color: var(--ink-soft); }
+
+.graph-details {
+  background: var(--glass);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 0.9rem 1rem;
+  overflow: auto;
+  min-height: 0;
+}
+
+.graph-details h3 {
+  margin: 0 0 0.7rem;
+  font-size: 0.95rem;
+  color: var(--accent);
+  overflow-wrap: anywhere;
+}
+
+.graph-details--empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  font-size: 0.82rem;
+}
+
+.graph-details__close {
+  margin-top: 0.9rem;
+  background: var(--glass-strong);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--ink);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.78rem;
+  padding: 0.32rem 0.8rem;
+}
+
+.graph-details__close:hover {
+  background: rgba(198, 241, 53, 0.18);
+  border-color: var(--accent);
+}
+
+/* Krawedzie: grubsze i z czytelna etykieta relacji. */
+.react-flow__edge-path {
+  stroke: rgba(230, 245, 190, 0.34);
+}
+
+.react-flow__edge.animated .react-flow__edge-path {
+  stroke: var(--accent);
+}
+
+.react-flow__edge-text {
+  fill: var(--ink-soft) !important;
+  font-size: 11px !important;
+  font-weight: 500;
+}
+
+.react-flow__edge-textbg {
+  fill: rgba(13, 18, 8, 0.86) !important;
+}
+
+.react-flow__handle {
+  width: 6px;
+  height: 6px;
+  background: var(--muted);
+  border: 0;
+}
+
+.react-flow__controls-button {
+  background: rgba(214, 240, 160, 0.1) !important;
+  border-bottom: 1px solid var(--line) !important;
+  fill: var(--ink) !important;
+}
+
+.react-flow__attribution {
+  background: transparent !important;
+}
+
+.react-flow__attribution a {
+  color: var(--muted) !important;
 }
