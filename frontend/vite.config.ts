@@ -29,7 +29,9 @@ GITHUB METADATA: jpytka666-jpg/polip-agi, branch docs/darkstar-headscale-hotspot
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
 
-const apiTarget = process.env.DARKSTAR_DEV_API ?? 'http://127.0.0.1:18081'
+// Domyslnie 18080 - tam slucha darkstar-server na CBMS, dostepny lokalnie przez
+// tunel ssh -L 127.0.0.1:18080:127.0.0.1:18080. Nic nie wychodzi poza petle zwrotna.
+const apiTarget = process.env.DARKSTAR_DEV_API ?? 'http://127.0.0.1:18080'
 
 // https://vite.dev/config/
 export default defineConfig({

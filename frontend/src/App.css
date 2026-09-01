@@ -176,3 +176,46 @@ body {
   font-size: 0.78rem;
   padding: 0.75rem 1.5rem;
 }
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  min-width: 0;
+}
+
+.search-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.82rem;
+  margin: 0.9rem 0 0.5rem;
+}
+
+.search-row input {
+  background: var(--ground);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--ink);
+  padding: 0.3rem 0.5rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.collections {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.8rem;
+}
+
+.collections li {
+  padding: 0.18rem 0;
+  border-bottom: 1px solid var(--line);
+  overflow-wrap: anywhere;
+}
+
+.dim {
+  color: var(--muted);
+}

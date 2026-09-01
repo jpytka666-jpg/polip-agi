@@ -25,6 +25,7 @@ GITHUB METADATA: jpytka666-jpg/polip-agi, branch docs/darkstar-headscale-hotspot
 */
 
 import { useState } from 'react'
+import { ContextPanel } from './ContextPanel'
 import { GatewayPanel } from './GatewayPanel'
 import { SystemGraph } from './SystemGraph'
 import { readToken, storeToken } from './api'
@@ -59,7 +60,10 @@ function App() {
       </header>
 
       <main className="control-room__body">
-        <GatewayPanel token={token} />
+        <div className="stack">
+          <GatewayPanel token={token} />
+          <ContextPanel token={token} />
+        </div>
         <SystemGraph token={token} />
       </main>
 

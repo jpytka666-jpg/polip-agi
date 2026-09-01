@@ -95,32 +95,3 @@ export function fetchGatewayStatus(token: string): Promise<GatewayStatus> {
 export function fetchSystemGraph(token: string): Promise<ArchitectureSnapshot> {
   return getJson<ArchitectureSnapshot>('/v1/system-graph', token)
 }
-
-export interface ContextHealth {
-  local_cbms_ok: boolean
-  remote_e_ok: boolean
-}
-
-export interface ContextCollection {
-  id: string
-  name: string
-  dimension: number | null
-}
-
-export interface ContextListing {
-  served_by: 'local_cbms' | 'remote_e'
-  collections: ContextCollection[]
-}
-
-export function fetchContextHealth(token: string): Promise<ContextHealth> {
-  return getJson<ContextHealth>('/v1/context/health', token)
-}
-
-export function searchContext(
-  token: string,
-  query: string,
-  limit = 10,
-): Promise<ContextListing> {
-  const params = new URLSearchParams({ q: query, limit: String(limit) })
-  return getJson<ContextListing>(`/v1/context/search?${params.toString()}`, token)
-}
