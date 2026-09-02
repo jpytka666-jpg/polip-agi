@@ -40,6 +40,7 @@ import {
   type NodeProps,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
+import { FlowEdge } from './FlowEdge'
 import { fetchSystemGraph, type ArchitectureNode, type ArchitectureSnapshot } from './api'
 
 const COLUMN: Record<string, number> = {
@@ -112,6 +113,7 @@ function ArchNode({ data }: NodeProps) {
 }
 
 const nodeTypes = { arch: ArchNode }
+const edgeTypes = { flow: FlowEdge }
 
 /**
  * Uklad: kolumny wedlug rodzaju, kolejnosc w kolumnie ustalana barycentrycznie.
@@ -174,6 +176,17 @@ export function SystemGraph({ token }: { token: string }) {
   const [snapshot, setSnapshot] = useState<ArchitectureSnapshot | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [selected, setSelected] = useState<ArchitectureNode | null>(null)
+  // Wylaczone nitki zyja TYLKO w widoku - API nie ma zadnej sciezki zapisu.
+  const [muted, setMuted] = useState<Set<string>>(new Set())
+
+  const toggleEdge = useCallback((id: string) => {
+    setMuted((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -226,15 +239,19 @@ export function SystemGraph({ token }: { token: string }) {
         id: edge.id,
         source: edge.from,
         target: edge.to,
-        label: edge.kind,
-        animated: lit,
-        className: lit ? 'edge--lit' : activeId ? 'edge--dim' : '',
-        style: { strokeWidth: lit ? 3 : 1.8 },
+        type: 'flow',
+        data: {
+          label: edge.kind,
+          enabled: !muted.has(edge.id),
+          lit,
+          dimmed: activeId !== null,
+          onToggle: toggleEdge,
+        },
       }
     })
 
     return { nodes, edges, onPath }
-  }, [snapshot, selected])
+  }, [snapshot, selected, muted, toggleEdge])
 
   const onNodeClick = useCallback((_: unknown, node: Node) => {
     setSelected((node.data as unknown as ArchitectureNode) ?? null)
@@ -259,6 +276,7 @@ export function SystemGraph({ token }: { token: string }) {
           {flow.nodes.length} wezlow / {flow.edges.length} krawedzi
         </span>
         {selected ? <span className="badge">sciezka: {linked} sasiadow</span> : null}
+        {muted.size ? <span className="badge badge--muted">ukryte nitki: {muted.size}</span> : null}
       </h2>
 
       <div className="graph-layout">
@@ -267,6 +285,7 @@ export function SystemGraph({ token }: { token: string }) {
             nodes={flow.nodes}
             edges={flow.edges}
             nodeTypes={nodeTypes}
+            edgeTypes={edgeTypes}
             onNodeClick={onNodeClick}
             onPaneClick={() => setSelected(null)}
             fitView
@@ -306,7 +325,11 @@ export function SystemGraph({ token }: { token: string }) {
           </aside>
         ) : (
           <aside className="graph-details graph-details--empty">
-            <p className="dim">Kliknij wezel, zeby podswietlic jego sciezke.</p>
+            <p className="dim">
+              Kliknij wezel, zeby podswietlic jego sciezke.
+              <br />
+              Przelacznik na nitce ukrywa ja na plotnie - nie zmienia systemu.
+            </p>
           </aside>
         )}
       </div>
