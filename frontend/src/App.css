@@ -37,9 +37,19 @@ GITHUB METADATA: jpytka666-jpg/polip-agi, branch docs/darkstar-headscale-hotspot
   box-sizing: border-box;
 }
 
-body {
-  margin: 0;
+html,
+body,
+#root,
+.control-room {
+  width: 100%;
+  height: 100%;
   min-height: 100vh;
+  min-width: 100vw;
+  margin: 0;
+  overflow: hidden;
+}
+
+body {
   background: linear-gradient(170deg, var(--ground-2) 0%, var(--ground) 60%);
   background-attachment: fixed;
   color: var(--ink);
@@ -50,12 +60,6 @@ body {
 .control-room {
   display: grid;
   grid-template-rows: auto 1fr auto;
-  width: 100%;
-  height: 100%;
-  min-height: 100vh;
-  min-width: 100vw;
-  margin: 0;
-  overflow-x: hidden;
 }
 
 .control-room__header {
@@ -141,11 +145,12 @@ body {
 
 .control-room__body {
   display: grid;
-  grid-template-columns: minmax(240px, 280px) minmax(0, 1fr) minmax(280px, 22vw);
+  grid-template-columns: 280px minmax(0, 1fr) minmax(280px, 22vw);
   gap: 12px;
   width: 100%;
   height: 100%;
   min-height: 0;
+  overflow: hidden;
   padding: 12px 0 12px 12px;
 }
 
