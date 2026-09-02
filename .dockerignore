@@ -1,0 +1,7 @@
+# Do not send local build outputs, dependencies or repository metadata to Docker.
+target
+frontend/node_modules
+frontend/dist
+.git
+.gitignore
+deploy/.env

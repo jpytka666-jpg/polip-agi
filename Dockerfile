@@ -1,3 +1,10 @@
+FROM node:22.14.0-bookworm-slim AS frontend-builder
+WORKDIR /workspace/frontend
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci
+COPY frontend/ ./
+RUN npm run build
+
 FROM rust:1-bookworm AS builder
 WORKDIR /workspace
 COPY . .
@@ -16,5 +23,7 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 RUN useradd --create-home --uid 10001 darkstar
 COPY --from=builder /workspace/target/release/darkstar-server /usr/local/bin/darkstar-server
+COPY --from=frontend-builder /workspace/frontend/dist /opt/darkstar/frontend-dist
+ENV DARKSTAR_FRONTEND_DIST=/opt/darkstar/frontend-dist
 USER darkstar
 ENTRYPOINT ["/usr/local/bin/darkstar-server"]

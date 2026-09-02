@@ -28,6 +28,7 @@ mod system_graph_view;
 use std::{
     collections::HashMap,
     env,
+    path::Path as FsPath,
     sync::Arc,
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
@@ -49,6 +50,7 @@ use run_stream::{RunEvent, RunStreamHub};
 use serde::Serialize;
 use tokio::{spawn, time::sleep};
 use tokio_stream::{StreamExt, wrappers::BroadcastStream};
+use tower_http::services::ServeDir;
 use uuid::Uuid;
 
 #[derive(Clone)]
@@ -125,7 +127,18 @@ pub(crate) fn now_unix_ms() -> i64 {
         .as_millis() as i64
 }
 
+fn frontend_dist_path() -> String {
+    env::var("DARKSTAR_FRONTEND_DIST").unwrap_or_else(|_| "frontend/dist".into())
+}
+
 pub fn router(state: AppState) -> Router {
+    router_with_frontend_dist(state, frontend_dist_path())
+}
+
+pub(crate) fn router_with_frontend_dist(
+    state: AppState,
+    frontend_dist: impl AsRef<FsPath>,
+) -> Router {
     Router::new()
         .route("/health", get(health))
         .route("/ready", get(ready))
@@ -140,6 +153,7 @@ pub fn router(state: AppState) -> Router {
             put(write_memory).get(read_memory),
         )
         .with_state(state)
+        .fallback_service(ServeDir::new(frontend_dist).append_index_html_on_directories(true))
 }
 
 async fn health() -> Json<StatusResponse<'static>> {
