@@ -7,8 +7,8 @@ TIMESTAMP: 2026-09-01 23:20:00
 REASON FOR CREATION: Warstwa dostepu Control Room do API Darkstara - wylacznie odczyt (Task 10).
 MECHANICS: Dwa zapytania GET: /v1/system-graph i /v1/gateway/status. Typy odwzorowuja kontrakty
 z darkstar-core (ArchitectureSnapshot, GatewayStatus). Nie ma tu ani jednej funkcji zapisujacej -
-sterowanie brama nie istnieje w API i nie wolno go tu udawac. Token czytany z pamieci przegladarki,
-nigdy z kodu.
+sterowanie brama nie istnieje w API i nie wolno go tu udawac. PIN przychodzi wylacznie z pamieci
+biezacej karty i nigdy z kodu ani localStorage.
 SYSTEM PART: Control Room / warstwa danych.
 ARCHITECTURE FUNCTION: Jedyne miejsce, w ktorym interfejs dotyka sieci. Reszta widokow dostaje
 gotowe dane, wiec nie da sie przypadkiem wywolac czegos zmieniajacego z komponentu.
@@ -25,6 +25,8 @@ GIT COMMIT: PENDING
 GITHUB METADATA: jpytka666-jpg/polip-agi, branch docs/darkstar-headscale-hotspot-plan
 ==========================================
 */
+
+import { authorizationHeaders } from './operatorPin'
 
 export type GatewayHealth = 'offline' | 'starting' | 'ready' | 'degraded' | 'failed'
 export type GatewayMode = 'ethernet' | 'hotspot'
@@ -62,22 +64,13 @@ export interface ArchitectureSnapshot {
   edges: ArchitectureEdge[]
 }
 
-/** Token operatora zyje w pamieci przegladarki, nigdy w repozytorium. */
-export function readToken(): string {
-  return localStorage.getItem('darkstar_api_token') ?? ''
-}
-
-export function storeToken(token: string): void {
-  localStorage.setItem('darkstar_api_token', token)
-}
-
-async function getJson<T>(path: string, token: string): Promise<T> {
+async function getJson<T>(path: string, pin: string): Promise<T> {
   const response = await fetch(path, {
     method: 'GET',
-    headers: token ? { authorization: `Bearer ${token}` } : {},
+    headers: authorizationHeaders(pin),
   })
   if (response.status === 401) {
-    throw new Error('Brak autoryzacji - podaj token operatora.')
+    throw new Error('Brak autoryzacji - podaj PIN operatora.')
   }
   if (response.status === 503) {
     throw new Error('Brama nieodczytywalna - host nie odpowiada.')
@@ -143,11 +136,11 @@ export interface ReadCommandResult {
  * Zawsze GET. Zwraca prawdziwy kod odpowiedzi - 401 i 503 wracaja jako `ok: false`
  * razem z trescia, ktora przyslal serwer. Nic tu nie udaje sukcesu.
  */
-export async function runReadCommand(path: string, token: string): Promise<ReadCommandResult> {
+export async function runReadCommand(path: string, pin: string): Promise<ReadCommandResult> {
   const started = performance.now()
   const response = await fetch(path, {
     method: 'GET',
-    headers: token ? { authorization: `Bearer ${token}` } : {},
+    headers: authorizationHeaders(pin),
   })
   const text = await response.text()
   let body: unknown = text
