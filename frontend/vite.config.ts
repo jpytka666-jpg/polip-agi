@@ -26,16 +26,75 @@ GITHUB METADATA: jpytka666-jpg/polip-agi, branch docs/darkstar-headscale-hotspot
 ==========================================
 */
 
+import { execFile } from 'node:child_process'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import react from '@vitejs/plugin-react'
-import { defineConfig } from 'vite'
+import { defineConfig, type Plugin } from 'vite'
 
 // Domyslnie 18080 - tam slucha darkstar-server na CBMS, dostepny lokalnie przez
 // tunel ssh -L 127.0.0.1:18080:127.0.0.1:18080. Nic nie wychodzi poza petle zwrotna.
 const apiTarget = process.env.DARKSTAR_DEV_API ?? 'http://127.0.0.1:18080'
+const gitWorktree = path.resolve(fileURLToPath(new URL('..', import.meta.url)))
+
+type GitCommandResult = {
+  stdout: string
+  stderr: string
+  exit_code: number
+}
+
+function runGit(args: string[]): Promise<GitCommandResult> {
+  return new Promise((resolve) => {
+    execFile(
+      'git',
+      ['-C', gitWorktree, ...args],
+      {
+        cwd: gitWorktree,
+        windowsHide: true,
+        timeout: 5000,
+        maxBuffer: 256 * 1024,
+      },
+      (error, stdout, stderr) => {
+        resolve({
+          stdout,
+          stderr,
+          exit_code: typeof error?.code === 'number' ? error.code : error ? 1 : 0,
+        })
+      },
+    )
+  })
+}
+
+function localGitRail(): Plugin {
+  return {
+    name: 'darkstar-local-git-rail',
+    configureServer(server) {
+      server.middlewares.use('/__darkstar/git', (request, response) => {
+        if (request.method !== 'GET') {
+          response.statusCode = 405
+          response.setHeader('Allow', 'GET')
+          response.end()
+          return
+        }
+
+        Promise.all([
+          runGit(['status', '-sb']),
+          runGit(['log', '-15', '--oneline', '--decorate']),
+          runGit(['rev-parse', 'HEAD']),
+          runGit(['rev-parse', '@{u}']),
+        ]).then(([status, log, head, upstream]) => {
+          response.statusCode = 200
+          response.setHeader('Content-Type', 'application/json; charset=utf-8')
+          response.end(JSON.stringify({ worktree: gitWorktree, status, log, head, upstream }))
+        })
+      })
+    },
+  }
+}
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), localGitRail()],
   server: {
     // Tylko petla zwrotna. Nie zmieniac na 0.0.0.0.
     host: '127.0.0.1',

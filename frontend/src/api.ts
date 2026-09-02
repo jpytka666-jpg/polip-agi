@@ -169,3 +169,22 @@ export async function runReadCommand(path: string, token: string): Promise<ReadC
     warning,
   }
 }
+
+export interface GitCommandResult {
+  stdout: string
+  stderr: string
+  exit_code: number
+}
+
+export interface GitRailSnapshot {
+  worktree: string
+  status: GitCommandResult
+  log: GitCommandResult
+  head: GitCommandResult
+  upstream: GitCommandResult
+}
+
+/** Odczyt lokalnego Windows WORKTREE przez middleware Vite, nigdy przez kontener CBMS. */
+export function fetchGitRail(): Promise<GitRailSnapshot> {
+  return getJson<GitRailSnapshot>('/__darkstar/git', '')
+}

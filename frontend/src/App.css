@@ -151,11 +151,152 @@ body {
   }
 }
 
+@media (max-width: 620px) {
+  .git-panel__commands {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 .stack {
   display: flex;
   flex-direction: column;
   gap: 1.1rem;
   min-width: 0;
+}
+
+.workspace {
+  display: flex;
+  flex-direction: column;
+  gap: 1.1rem;
+  min-width: 0;
+  min-height: 0;
+}
+
+.workspace > .panel--graph {
+  flex: 1;
+  min-height: 0;
+}
+
+/* Prawy szary panel jest lokalnym odczytem Windows WORKTREE, nie kontenera CBMS. */
+.git-panel {
+  --git-state: #b4b4b4;
+  flex: 0 0 auto;
+  background: #252526;
+  border-color: #666666;
+}
+
+.git-panel::before {
+  background: var(--git-state);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--git-state) 50%, transparent);
+}
+
+.git-panel--dirty {
+  --git-state: #c9a227;
+}
+
+.git-panel--ahead {
+  --git-state: #b7f36b;
+}
+
+.git-panel--synced {
+  --git-state: #7ee08a;
+}
+
+.git-panel__state {
+  border: 1px solid color-mix(in srgb, var(--git-state) 65%, #2e2e2e);
+  border-radius: 999px;
+  color: var(--git-state);
+  font-size: 0.68rem;
+  letter-spacing: 0.04em;
+  padding: 0.12rem 0.6rem;
+  text-transform: none;
+}
+
+.git-panel__toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  margin-bottom: 0.7rem;
+  min-width: 0;
+}
+
+.git-panel__toolbar code {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: #d4d4d4;
+  font-size: 0.72rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.git-panel__toolbar button {
+  flex: 0 0 auto;
+  border: 1px solid #5d5d5d;
+  border-radius: 7px;
+  background: #1b1b1c;
+  color: #f0f0f0;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.72rem;
+  padding: 0.32rem 0.7rem;
+}
+
+.git-panel__toolbar button:hover:not(:disabled),
+.git-panel__toolbar button:focus-visible {
+  border-color: var(--git-state);
+}
+
+.git-panel__toolbar button:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.git-panel__error {
+  color: var(--bad);
+  font-size: 0.78rem;
+  margin: 0 0 0.7rem;
+}
+
+.git-panel__commands {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.55rem;
+}
+
+.git-command {
+  min-width: 0;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid #414143;
+  border-radius: 8px;
+  background: #1b1b1c;
+}
+
+.git-command code {
+  display: block;
+  overflow: hidden;
+  color: #bfc8d0;
+  font-size: 0.68rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.git-command pre {
+  max-height: 6.2rem;
+  overflow: auto;
+  margin: 0.4rem 0 0;
+  color: #f0f0f0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.7rem;
+  line-height: 1.35;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.git-command--status pre,
+.git-command--head pre,
+.git-command--upstream pre {
+  max-height: 2.2rem;
 }
 
 .panel {
