@@ -5,7 +5,7 @@ AUTHOR: M. SZUL
 AI MODEL: Claude Opus 5
 TIMESTAMP: 2026-09-02 09:30:00
 REASON FOR CREATION: Interaktywna krawedz grafu - zywy ruch wzdluz nitki i przelacznik na jej srodku.
-MECHANICS: Rysuje gruba sciezke Beziera - zielona gdy nitka zyje, czerwona i przerywana gdy jest
+MECHANICS: Rysuje gruby przewod prowadzony pod katem prostym (getSmoothStepPath) - zielona gdy nitka zyje, czerwona i przerywana gdy jest
 wygaszona - a po niej puszcza dwie kropki animowane przez SVG animateMotion, wiec ruch widac bez
 zadnej petli w JavaScripcie. Na srodku siedzi przelacznik, ktory wlacza i
 wylacza te nitke NA PLOTNIE.
@@ -27,7 +27,7 @@ GITHUB METADATA: jpytka666-jpg/polip-agi, branch docs/darkstar-headscale-hotspot
 ==========================================
 */
 
-import { BaseEdge, EdgeLabelRenderer, getBezierPath, type EdgeProps } from '@xyflow/react'
+import { BaseEdge, EdgeLabelRenderer, getSmoothStepPath, type EdgeProps } from '@xyflow/react'
 
 export type FlowEdgeData = {
   label: string
@@ -48,13 +48,18 @@ export function FlowEdge({
   data,
 }: EdgeProps) {
   const d = data as unknown as FlowEdgeData
-  const [path, labelX, labelY] = getBezierPath({
+  // Trasa jak w instalacji elektrycznej: odcinki poziome i pionowe, zaokraglone
+  // narozniki, staly odstep od gniazda. Krzywe Beziera plataly sie na gestym grafie -
+  // przy prostokatnym prowadzeniu widac, ktory przewod dokad biegnie.
+  const [path, labelX, labelY] = getSmoothStepPath({
     sourceX,
     sourceY,
     sourcePosition,
     targetX,
     targetY,
     targetPosition,
+    borderRadius: 10,
+    offset: 26,
   })
 
   // Zywa nitka = zielona, martwa = ciemna krew i przerywana. Zmierzone na jasnym

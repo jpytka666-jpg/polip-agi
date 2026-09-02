@@ -4,10 +4,10 @@ THIS IS VERY IMPORTANT!!!
 AUTHOR: M. SZUL
 AI MODEL: Claude Opus 5
 TIMESTAMP: 2026-09-02 07:00:00
-REASON FOR CREATION: Warstwa wizualna Control Room - kwasne oliwkowe szklo, bez niebieskiego.
-MECHANICS: Tlo #0d1208/#12180c z dwoma poswiatami w limonce, panele na polprzezroczystym
-oliwkowym szkle z rozmyciem, obramowanie 1px, akcent #c6f135. Zero niebieskiego w calym pliku.
-Kazdy kolor tekstu zmierzony na kontrast >= 7:1 wzgledem panelu - liczby w komentarzu.
+REASON FOR CREATION: Warstwa wizualna Control Room - spokojna paleta edytora, czytelnosc przed ozdoba.
+MECHANICS: Paleta w duchu edytora kodu - neutralne szarosci #1b1b1c/#252526, cienka jasna linia
+zamiast zlota, jeden chlodny akcent #7cc4ff. Plotno grafu zostaje jasnoszare, bo przewody czyta
+sie jak rysunek techniczny. Kazdy kolor tekstu zmierzony na kontrast >= 7:1 wzgledem panelu.
 SYSTEM PART: Control Room / style.
 ARCHITECTURE FUNCTION: Stan czytelny na pierwszy rzut oka; lewa krawedz panelu koduje kondycje.
 DEPENDENCIES/LINKS: App.tsx, GatewayPanel.tsx, ContextPanel.tsx, SystemGraph.tsx.
@@ -21,32 +21,32 @@ GITHUB METADATA: jpytka666-jpg/polip-agi, branch docs/darkstar-headscale-hotspot
 :root {
   color-scheme: dark;
 
-  /* Kwasna olixa zamiast granatu. Dwa pasy tla: ciemniejszy i cieplejszy. */
-  --ground: #0d1208;
-  --ground-2: #12180c;
-  /* Szklo o oliwkowym odcieniu; panel po zlozeniu z tlem daje #181d13. */
-  --glass: rgba(214, 240, 160, 0.05);
-  --glass-strong: rgba(214, 240, 160, 0.09);
-  --line: rgba(230, 245, 190, 0.14);
+  /* Paleta w duchu edytora kodu: neutralne szarosci, jeden chlodny akcent.
+     Spokojniejsza od oliwki ze zlotem - kolor niesie znaczenie, nie dekoracje. */
+  --ground: #1b1b1c;
+  --ground-2: #202021;
+  --panel-solid: #252526;
+  --glass: rgba(255, 255, 255, 0.045);
+  --glass-strong: rgba(255, 255, 255, 0.08);
+  --line: #3c3c3d;
 
-  /* Zmierzone wzgledem panelu #181d13 - wszystkie >= 7:1:
-     ink 15.2 | soft 9.8 | muted 7.9 | akcent 13.1 | ok 11.5 | warn 12.1 | bad 7.9 */
-  --ink: #f4f1e8;
-  --ink-soft: #c9c4b0;
-  --muted: #b5b09c;
+  /* Zmierzone wzgledem panelu #252526 - wszystkie >= 7:1:
+     ink 12.3 | soft 9.2 | muted 7.4 | akcent 8.2 | ok 7.5 | warn 10.8 | bad 7.7 */
+  --ink: #e6e6e6;
+  --ink-soft: #c8c8c8;
+  --muted: #b4b4b4;
 
-  --accent: #c6f135;
-  /* Chrom Aero: zloto na obwodkach i belkach, 8.2:1 na panelu - czytelne. */
-  --gold: #d4af37;
-  --gold-line: rgba(212, 175, 55, 0.55);
-  --value: #d8d8d8;
-  --hint: #c8c8c8;
-  /* Lustrzane swiatlo od gory - biel 20% na pierwszym pikselu krawedzi. */
-  --sheen: rgba(255, 255, 255, 0.2);
-  --ok: #9ae86a;
-  --warn: #f5d76e;
-  /* #e23b3b dawalo 4.0:1 - za ciemne na tym tle. Rozjasnione do 7.9:1. */
-  --bad: #f59595;
+  --accent: #7cc4ff;
+  --ok: #4ec9b0;
+  --warn: #dcdcaa;
+  --bad: #ff9e8a;
+
+  /* Chrom: cienka jasna linia zamiast zlota. */
+  --gold: #c8c8c8;
+  --gold-line: rgba(255, 255, 255, 0.16);
+  --value: #e6e6e6;
+  --hint: #b4b4b4;
+  --sheen: rgba(255, 255, 255, 0.09);
 }
 
 * {
@@ -56,10 +56,7 @@ GITHUB METADATA: jpytka666-jpg/polip-agi, branch docs/darkstar-headscale-hotspot
 body {
   margin: 0;
   min-height: 100vh;
-  background:
-    radial-gradient(1100px 620px at 12% -8%, rgba(198, 241, 53, 0.10), transparent 62%),
-    radial-gradient(900px 520px at 92% 4%, rgba(154, 232, 106, 0.07), transparent 58%),
-    linear-gradient(160deg, var(--ground-2) 0%, var(--ground) 55%);
+  background: linear-gradient(170deg, var(--ground-2) 0%, var(--ground) 60%);
   background-attachment: fixed;
   color: var(--ink);
   font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -82,7 +79,7 @@ body {
   justify-content: space-between;
   gap: 1rem;
   padding: 0.9rem 1.5rem;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(13, 18, 8, 0.78));
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(27, 27, 28, 0.92));
   backdrop-filter: blur(16px) saturate(140%);
   -webkit-backdrop-filter: blur(16px) saturate(140%);
   border-bottom: 1px solid var(--gold-line);
@@ -119,7 +116,7 @@ body {
 
 .token-row input,
 .search-row input {
-  background: rgba(214, 240, 160, 0.06);
+  background: rgba(255, 255, 255, 0.05);
   border: 1px solid var(--line);
   border-radius: 8px;
   color: var(--ink);
@@ -149,7 +146,7 @@ body {
 }
 
 .token-row button:hover {
-  background: rgba(198, 241, 53, 0.18);
+  background: rgba(124, 196, 255, 0.18);
   border-color: var(--accent);
 }
 
@@ -177,12 +174,7 @@ body {
 .panel {
   position: relative;
   /* Szklo, nie plyta: przezroczystosc + rozmycie tla + lustrzane swiatlo od gory. */
-  background: linear-gradient(
-    180deg,
-    rgba(255, 255, 255, 0.09) 0%,
-    rgba(214, 240, 160, 0.05) 42%,
-    rgba(214, 240, 160, 0.03) 100%
-  );
+  background: linear-gradient(180deg, #2a2a2b 0%, #252526 100%);
   backdrop-filter: blur(16px) saturate(140%);
   -webkit-backdrop-filter: blur(16px) saturate(140%);
   border: 1px solid var(--gold-line);
@@ -240,7 +232,7 @@ body {
 }
 
 .badge {
-  background: rgba(212, 175, 55, 0.12);
+  background: rgba(124, 196, 255, 0.12);
   border: 1px solid var(--gold-line);
   border-radius: 999px;
   color: var(--gold);
@@ -293,7 +285,7 @@ body {
 }
 
 .collections li {
-  border-bottom: 1px solid rgba(230, 245, 190, 0.09);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.09);
   color: var(--ink-soft);
   overflow-wrap: anywhere;
   padding: 0.22rem 0;
@@ -348,7 +340,7 @@ body {
 }
 
 .react-flow__controls-button {
-  background: rgba(214, 240, 160, 0.10) !important;
+  background: rgba(255, 255, 255, 0.09) !important;
   border-bottom: 1px solid var(--line) !important;
   fill: var(--ink) !important;
 }
@@ -467,7 +459,7 @@ body {
 .gnode--runtime .gnode__icon    { color: #8a5a00; }
 
 .graph-details {
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(214, 240, 160, 0.04));
+  background: linear-gradient(180deg, #2a2a2b 0%, #252526 100%);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   box-shadow: inset 0 1px 0 var(--sheen);
@@ -510,7 +502,7 @@ body {
 }
 
 .graph-details__close:hover {
-  background: rgba(198, 241, 53, 0.18);
+  background: rgba(124, 196, 255, 0.18);
   border-color: var(--accent);
 }
 
@@ -549,13 +541,13 @@ body {
 }
 
 .react-flow__controls-button {
-  background: rgba(214, 240, 160, 0.1) !important;
+  background: rgba(255, 255, 255, 0.09) !important;
   border-bottom: 1px solid var(--line) !important;
   fill: var(--ink) !important;
 }
 
 .react-flow__minimap {
-  background: rgba(42, 42, 42, 0.82) !important;
+  background: rgba(30, 30, 31, 0.88) !important;
   backdrop-filter: blur(16px);
   border: 1px solid var(--gold-line);
   border-radius: 8px;
@@ -563,12 +555,12 @@ body {
 }
 
 .react-flow__minimap-mask {
-  fill: rgba(198, 241, 53, 0.12) !important;
+  fill: rgba(124, 196, 255, 0.14) !important;
 }
 
 .react-flow__minimap-node {
   fill: rgba(216, 216, 216, 0.6) !important;
-  stroke: rgba(212, 175, 55, 0.5) !important;
+  stroke: rgba(124, 196, 255, 0.45) !important;
 }
 
 .react-flow__attribution {
@@ -638,7 +630,7 @@ body {
 }
 
 .eswitch--on .eswitch__toggle {
-  background: #6f9c2a;
+  background: #3e8e41;
 }
 
 .eswitch__knob {
