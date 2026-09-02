@@ -57,10 +57,10 @@ export function FlowEdge({
     targetPosition,
   })
 
-  // Zywa nitka = zielona, martwa = czerwona i przerywana. Kolory dobrane pod jasne
-  // plotno (#dcdcd8): #2b8a3e daje 3.2:1, #c92a2a 4.0:1 - to elementy graficzne,
-  // nie tekst, wiec prog 3:1 dla grafiki jest spelniony z zapasem przy tej grubosci.
-  const stroke = d.enabled ? (d.lit ? '#1f7a32' : '#2b8a3e') : '#c92a2a'
+  // Zywa nitka = zielona, martwa = ciemna krew i przerywana. Zmierzone na jasnym
+  // plotnie #dcdcd8: zielen #2b8a3e 3.2:1, krew #6b0f1a 8.9:1. Biel na krwi 12.3:1,
+  // wiec etykieta martwej nitki jest bialym tekstem na jej wlasnym kolorze.
+  const stroke = d.enabled ? (d.lit ? '#1f7a32' : '#2b8a3e') : '#6b0f1a'
   const width = d.lit ? 9 : 6
 
   return (
@@ -77,20 +77,41 @@ export function FlowEdge({
         }}
       />
 
-      {/* Zywy ruch: kropki wedruja po tej samej sciezce. Czysty SVG, bez petli w JS. */}
+      {/* Zywy ruch: znaczniki kierunku wedruja po sciezce. rotate="auto" obraca grot
+          zgodnie z biegiem nitki, wiec od razu widac, w ktora strone plynie.
+          Pomarancz sam w sobie ma na jasnym plotnie tylko 1.7:1, dlatego dostaje
+          ciemna obwodke, a grot jest czarny - 8.1:1 na pomaranczy. */}
       {d.enabled ? (
         <>
-          <circle r={d.lit ? 5.5 : 4.5} fill={d.lit ? 'var(--accent)' : '#b8f27a'} stroke="#14532d" strokeWidth="1">
-            <animateMotion dur={d.lit ? '1.6s' : '3.2s'} repeatCount="indefinite" path={path} />
-          </circle>
-          <circle r={d.lit ? 4 : 3.2} fill={d.lit ? 'var(--gold)' : '#e8d48a'} stroke="#5a4a10" strokeWidth="0.8">
+          <g>
+            <circle
+              r={d.lit ? 11 : 9}
+              fill="#ff8c1a"
+              stroke="#7a3b00"
+              strokeWidth="2"
+            />
+            <path
+              d={d.lit ? 'M -3.5 -5 L 5.5 0 L -3.5 5 Z' : 'M -3 -4 L 4.5 0 L -3 4 Z'}
+              fill="#111111"
+            />
+            <animateMotion
+              dur={d.lit ? '1.6s' : '3.2s'}
+              repeatCount="indefinite"
+              rotate="auto"
+              path={path}
+            />
+          </g>
+          <g>
+            <circle r={d.lit ? 9 : 7.5} fill="#ffb45c" stroke="#7a3b00" strokeWidth="1.6" />
+            <path d="M -2.6 -3.6 L 4 0 L -2.6 3.6 Z" fill="#111111" />
             <animateMotion
               dur={d.lit ? '1.6s' : '3.2s'}
               begin="0.8s"
               repeatCount="indefinite"
+              rotate="auto"
               path={path}
             />
-          </circle>
+          </g>
         </>
       ) : null}
 

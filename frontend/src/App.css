@@ -599,6 +599,23 @@ body {
   white-space: nowrap;
 }
 
+/* Martwa nitka: etykieta na kolorze krwi z biala trescia - 12.3:1. */
+.eswitch:not(.eswitch--on) {
+  background: #6b0f1a;
+  border-color: #3d070f;
+  color: #ffffff;
+}
+
+.eswitch:not(.eswitch--on) .eswitch__toggle {
+  background: #3d070f;
+  border-color: #ffffff;
+}
+
+.eswitch:not(.eswitch--on) .eswitch__label {
+  color: #ffffff;
+  font-weight: 700;
+}
+
 .eswitch--lit {
   border-color: #111111;
   box-shadow:
