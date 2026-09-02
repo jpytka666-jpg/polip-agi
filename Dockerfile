@@ -17,10 +17,16 @@ FROM debian:bookworm-slim
 # sieciowy z maszyna, wiec `ip` widzi te same interfejsy; `nmcli` rozmawia z
 # NetworkManagerem hosta przez gniazdo DBus podmontowane read-only.
 # CommandRunner nie ma metody zapisu, wiec zadne z tych narzedzi nic nie zmieni.
+# git daje odczyt stanu repozytorium przez GitRunner. Ten sam wzorzec: uruchamiane sa
+# wylacznie polecenia czytajace, a worktree jest podmontowany read-only.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-        ca-certificates curl iproute2 network-manager \
+        ca-certificates curl git iproute2 network-manager \
     && rm -rf /var/lib/apt/lists/*
+# Worktree nalezy do operatora hosta, a proces biegnie jako uid 10001. Bez tego git
+# odmawia odczytu cudzego repozytorium ("dubious ownership") i widok gita jest pusty.
+# Zgoda dotyczy wylacznie ODCZYTU - kontener nie ma zadnej sciezki zapisu do repozytorium.
+RUN git config --system --add safe.directory '*'
 RUN useradd --create-home --uid 10001 darkstar
 COPY --from=builder /workspace/target/release/darkstar-server /usr/local/bin/darkstar-server
 COPY --from=frontend-builder /workspace/frontend/dist /opt/darkstar/frontend-dist

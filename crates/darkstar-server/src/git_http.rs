@@ -86,6 +86,10 @@ impl GitState {
 ///
 /// Katalog idzie przez `current_dir`, a nie przez argument `-C`, zeby lista argumentow
 /// pozostala dokladnie taka, jaka opisuje kontrakt w tescie.
+///
+/// `--no-optional-locks` jest doklejane przed podpoleceniem, bo `git status` domyslnie
+/// odswieza indeks, czyli PISZE do .git. Worktree jest podmontowany read-only, wiec bez
+/// tej flagi odczyt statusu przewrocilby sie na braku prawa zapisu.
 pub struct SystemGitRunner {
     worktree: PathBuf,
 }
@@ -102,6 +106,7 @@ impl GitRunner for SystemGitRunner {
     fn run(&self, args: &[&str]) -> Result<String, GitReadError> {
         let out = Command::new("git")
             .current_dir(&self.worktree)
+            .arg("--no-optional-locks")
             .args(args)
             .output()
             .map_err(|e| GitReadError::new(e.to_string()))?;

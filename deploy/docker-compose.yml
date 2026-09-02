@@ -21,12 +21,19 @@ services:
       # zostaje tam, gdzie byla - bez nowego adresu nasluchu i bez zmiany zapory.
       DARKSTAR_CONTEXT_LOCAL: ${DARKSTAR_CONTEXT_LOCAL:-http://127.0.0.1:8000}
       DARKSTAR_CONTEXT_REMOTE: ${DARKSTAR_CONTEXT_REMOTE:-http://100.71.8.70:8000}
+      # Worktree czytany przez GET /v1/git/overview. Sciezka jest KONTENEROWA i stala;
+      # co jest pod nia podstawione, decyduje montaz nizej.
+      DARKSTAR_GIT_WORKTREE: /srv/repo
     # Bez mapowania portow: przy network_mode host wiazanie robi sam serwer (DARKSTAR_HOST).
     network_mode: host
     # Tylko gniazdo DBus i tylko do odczytu: nmcli w kontenerze pyta NetworkManagera
     # hosta o stan bramy. Warstwa mutujaca nie istnieje w kodzie, a montaz jest read-only.
     volumes:
       - /run/dbus/system_bus_socket:/run/dbus/system_bus_socket:ro
+      # Repozytorium do odczytu. Zrodlo jest wzgledne wobec tego pliku (deploy/..), wiec
+      # sciezka hosta nie jest wpisana w repo i dziala tak samo na kazdej kopii roboczej.
+      # read-only: kontener ma widziec stan repozytorium, a nie moc go zmienic.
+      - ..:/srv/repo:ro
     restart: on-failure:5
     healthcheck:
       test: ["CMD", "curl", "--fail", "--silent", "--show-error", "http://127.0.0.1:${DARKSTAR_HOST_PORT}/health"]
