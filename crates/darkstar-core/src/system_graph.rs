@@ -1,3 +1,8 @@
+// darkstar-header-v1
+// po co: system_graph.rs
+// nie wolno: hotspot, ruszac wlp2s0, wracac do 10.44, gasic DARKSTAR-WiFi, haslo w gicie
+// autor: Marcin
+// powstal: 2026-09-02
 //! Read-only architecture graph projection for Darkstar.
 //!
 //! THIS IS VERY IMPORTANT!!!
@@ -167,6 +172,16 @@ pub fn current_snapshot() -> ArchitectureSnapshot {
             "Linux",
             "design-contract",
         ),
+        // Wlasny serwer sterujacy prywatnego mesh, stojacy OBOK dzialajacego Tailscale,
+        // nigdy zamiast niego. Na grafie jest wylacznie do ogladania: ta projekcja
+        // architektury nie ma zadnej sciezki, ktora cokolwiek w mesh by zmieniala.
+        runtime(
+            "headscale",
+            "Headscale",
+            "private mesh control",
+            "Go",
+            "active",
+        ),
     ];
 
     let edges = vec![
@@ -215,6 +230,14 @@ pub fn current_snapshot() -> ArchitectureSnapshot {
             "egress_through",
         ),
         edge("e15", "file:capability-gate", "runtime:audit", "records"),
+        // Prywatny mesh steruje granica wyjscia. Krawedz opisuje zaleznosc, nie akcje -
+        // graf niczego nie uruchamia.
+        edge(
+            "e16",
+            "runtime:headscale",
+            "runtime:ghost-gate",
+            "mesh_control",
+        ),
     ];
 
     ArchitectureSnapshot {

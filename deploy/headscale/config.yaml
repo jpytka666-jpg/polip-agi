@@ -28,18 +28,15 @@
 
 # Adres serwera Headscale — reachable z prywatnej sieci Darkstar
 server_url: http://127.0.0.1:8080
-
-# Port nasluchu HTTP API — ograniczony do loopback; compose.yml bind'uje na host
-# UWAGA - to adres WEWNATRZ kontenera, nie na hoscie.
-# 127.0.0.1 oznaczaloby tu petle zwrotna samego kontenera, wiec mapowanie portow
-# z compose.yml nigdy by nie zadzialalo i usluga bylaby nieosiagalna.
-# Ekspozycje ogranicza compose: porty sa mapowane wylacznie na 127.0.0.1 i 192.168.2.1
-# hosta, dokladnie tak jak robi to dzialajacy darkstar (DARKSTAR_HOST: 0.0.0.0 + mapowanie).
+# Nasluch WYLACZNIE na petli zwrotnej. Compose stoi w sieci hosta, wiec ten adres jest
+# adresem HOSTA, nie kontenera - 0.0.0.0 wystawiloby usluge takze na wlp2s0.
 listen_addr: 127.0.0.1:8080
 
 # Katalog danych — przechowuje bazę danych, klucze, meta
-db_type: sqlite
-db_path: /var/lib/headscale/db.sqlite
+database:
+  type: sqlite
+  sqlite:
+    path: /var/lib/headscale/db.sqlite
 
 # Katalog stanu runtime
 state_dir: /var/lib/headscale
@@ -48,9 +45,9 @@ state_dir: /var/lib/headscale
 policy_path: /etc/headscale/policy.hujson
 
 # Adresy routerów z basenu (tutaj pusty, będą wygenerowane przy starcie)
-ip_prefixes:
-  - fd7a:115c:a1e0::/48
-  - 100.64.0.0/10
+prefixes:
+  v4: 100.64.0.0/10
+  v6: fd7a:115c:a1e0::/48
 
 # Logowanie
 log:
@@ -70,8 +67,8 @@ dns:
   # klientom. Przejecie zmienialoby rozwiazywanie nazw na maszynach w domu, czyli
   # dokladnie ta klase zmiany, ktorej ten host ma nie robic.
   override_local_dns: false
-  base_domains:
-    - darkstar.local
+  magic_dns: false
+  base_domain: darkstar.local
 
 # DERP — private relay nodes do tunelowania jeśli nie ma direct connectivity
 derp:
