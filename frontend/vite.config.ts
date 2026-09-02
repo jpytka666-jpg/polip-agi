@@ -66,27 +66,55 @@ function runGit(args: string[]): Promise<GitCommandResult> {
 }
 
 function localGitRail(): Plugin {
+  const readSnapshot = async () => {
+    const [status, log, head, upstream] = await Promise.all([
+      runGit(['status', '-sb']),
+      runGit([
+        'log',
+        '--all',
+        '--topo-order',
+        '--max-count=18',
+        '--pretty=format:%H%x1f%P%x1f%D%x1f%s%x1e',
+      ]),
+      runGit(['rev-parse', 'HEAD']),
+      runGit(['rev-parse', '@{u}']),
+    ])
+    return { worktree: gitWorktree, status, log, head, upstream }
+  }
+
   return {
     name: 'darkstar-local-git-rail',
     configureServer(server) {
       server.middlewares.use('/__darkstar/git', (request, response) => {
-        if (request.method !== 'GET') {
+        const isFetch = request.url === '/fetch'
+        if (isFetch && request.method !== 'POST') {
+          response.statusCode = 405
+          response.setHeader('Allow', 'POST')
+          response.end()
+          return
+        }
+        if (!isFetch && request.method !== 'GET') {
           response.statusCode = 405
           response.setHeader('Allow', 'GET')
           response.end()
           return
         }
 
-        Promise.all([
-          runGit(['status', '-sb']),
-          runGit(['log', '-15', '--oneline', '--decorate']),
-          runGit(['rev-parse', 'HEAD']),
-          runGit(['rev-parse', '@{u}']),
-        ]).then(([status, log, head, upstream]) => {
+        void (async () => {
+          if (isFetch) {
+            const fetched = await runGit(['fetch', '--prune', 'origin'])
+            if (fetched.exit_code !== 0) {
+              response.statusCode = 502
+              response.setHeader('Content-Type', 'application/json; charset=utf-8')
+              response.end(JSON.stringify({ error: fetched.stderr.trim() || 'git fetch origin nie powiodl sie.' }))
+              return
+            }
+          }
+
           response.statusCode = 200
           response.setHeader('Content-Type', 'application/json; charset=utf-8')
-          response.end(JSON.stringify({ worktree: gitWorktree, status, log, head, upstream }))
-        })
+          response.end(JSON.stringify(await readSnapshot()))
+        })()
       })
     },
   }

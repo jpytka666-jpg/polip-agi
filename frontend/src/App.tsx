@@ -65,14 +65,14 @@ function App() {
           <GatewayPanel token={token} />
           <ContextPanel token={token} />
         </div>
-        <div className="workspace">
+        <SystemGraph token={token} />
+        <aside className="git-rail-column" aria-label="Graf commitow lokalnego Git">
           <GitPanel />
-          <SystemGraph token={token} />
-        </div>
+        </aside>
       </main>
 
       <footer className="control-room__footer">
-        Widok tylko do odczytu. Zadne polecenie systemowe nie jest uruchamiane z przegladarki.
+        Graf systemu tylko do odczytu. Git pozwala wylacznie odswiezyc widok albo pobrac origin — bez checkout.
       </footer>
     </div>
   )

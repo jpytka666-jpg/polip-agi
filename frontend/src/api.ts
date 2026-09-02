@@ -188,3 +188,13 @@ export interface GitRailSnapshot {
 export function fetchGitRail(): Promise<GitRailSnapshot> {
   return getJson<GitRailSnapshot>('/__darkstar/git', '')
 }
+
+/** Aktualizuje wylacznie referencje origin. Nie wykonuje checkout, merge ani reset. */
+export async function fetchGitOrigin(): Promise<GitRailSnapshot> {
+  const response = await fetch('/__darkstar/git/fetch', { method: 'POST' })
+  if (!response.ok) {
+    const body = await response.json().catch(() => null) as { error?: string } | null
+    throw new Error(body?.error ?? `Fetch nie powiodl sie (${response.status}).`)
+  }
+  return (await response.json()) as GitRailSnapshot
+}

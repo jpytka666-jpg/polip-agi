@@ -50,7 +50,9 @@ body {
 .control-room {
   display: flex;
   flex-direction: column;
+  width: 100vw;
   min-height: 100vh;
+  overflow-x: hidden;
 }
 
 .control-room__header {
@@ -136,24 +138,17 @@ body {
 
 .control-room__body {
   display: grid;
-  /* minmax(0, 1fr), nie samo 1fr: domyslne minimum kolumny to szerokosc jej
-     zawartosci, a kanwa React Flow jest szeroka - przez to panel po prawej
-     wyjezdzal poza ekran i byl ucinany. */
-  grid-template-columns: minmax(17rem, 20rem) minmax(0, 1fr);
-  gap: 1.1rem;
-  padding: 0.9rem 1.1rem;
+  grid-template-columns: 280px minmax(0, 1fr) 320px;
+  gap: 12px;
+  width: 100%;
+  padding: 12px 0 12px 12px;
   flex: 1;
 }
 
-@media (max-width: 980px) {
+@media (max-width: 1180px) {
   .control-room__body {
     grid-template-columns: 1fr;
-  }
-}
-
-@media (max-width: 620px) {
-  .git-panel__commands {
-    grid-template-columns: minmax(0, 1fr);
+    padding-right: 12px;
   }
 }
 
@@ -164,25 +159,36 @@ body {
   min-width: 0;
 }
 
-.workspace {
-  display: flex;
-  flex-direction: column;
-  gap: 1.1rem;
+.control-room__body > .panel--graph {
+  height: 100%;
   min-width: 0;
   min-height: 0;
 }
 
-.workspace > .panel--graph {
-  flex: 1;
+.git-rail-column {
+  display: flex;
   min-height: 0;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  border-left: 1px solid #666666;
+  border-radius: 0;
+  background: #252526;
 }
 
-/* Prawy szary panel jest lokalnym odczytem Windows WORKTREE, nie kontenera CBMS. */
+/* Pelnowysokosciowy graf Git czyta Windows WORKTREE, nigdy kontener CBMS. */
 .git-panel {
   --git-state: #b4b4b4;
-  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  padding: 0.9rem 0.85rem 0.7rem;
   background: #252526;
-  border-color: #666666;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
 }
 
 .git-panel::before {
@@ -194,7 +200,7 @@ body {
   --git-state: #c9a227;
 }
 
-.git-panel--ahead {
+.git-panel--local {
   --git-state: #b7f36b;
 }
 
@@ -212,7 +218,7 @@ body {
   text-transform: none;
 }
 
-.git-panel__toolbar {
+.git-panel__heading {
   display: flex;
   align-items: center;
   gap: 0.7rem;
@@ -220,36 +226,23 @@ body {
   min-width: 0;
 }
 
-.git-panel__toolbar code {
+.git-panel__heading > div {
   flex: 1;
   min-width: 0;
+}
+
+.git-panel__heading h2 {
+  margin: 0;
+}
+
+.git-panel__heading p {
   overflow: hidden;
-  color: #d4d4d4;
-  font-size: 0.72rem;
+  margin: 0.18rem 0 0;
+  color: #b4b4b4;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.68rem;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.git-panel__toolbar button {
-  flex: 0 0 auto;
-  border: 1px solid #5d5d5d;
-  border-radius: 7px;
-  background: #1b1b1c;
-  color: #f0f0f0;
-  cursor: pointer;
-  font: inherit;
-  font-size: 0.72rem;
-  padding: 0.32rem 0.7rem;
-}
-
-.git-panel__toolbar button:hover:not(:disabled),
-.git-panel__toolbar button:focus-visible {
-  border-color: var(--git-state);
-}
-
-.git-panel__toolbar button:disabled {
-  cursor: wait;
-  opacity: 0.65;
 }
 
 .git-panel__error {
@@ -258,45 +251,166 @@ body {
   margin: 0 0 0.7rem;
 }
 
-.git-panel__commands {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.55rem;
-}
-
-.git-command {
+.git-graph {
+  position: relative;
+  flex: 1;
   min-width: 0;
-  padding: 0.55rem 0.65rem;
-  border: 1px solid #414143;
-  border-radius: 8px;
-  background: #1b1b1c;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid #3c3c3e;
+  border-radius: 9px;
+  background:
+    linear-gradient(90deg, rgba(255, 255, 255, 0.018) 1px, transparent 1px) 0 0 / 18px 18px,
+    #1b1b1c;
 }
 
-.git-command code {
+.git-graph__canvas {
+  position: relative;
+  min-width: 100%;
+}
+
+.git-graph__rails {
+  position: absolute;
+  inset: 0 auto auto 0;
+  overflow: visible;
+}
+
+.git-graph__rails path {
+  fill: none;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.git-graph__dirty-edge {
+  stroke: #c9a227 !important;
+  stroke-dasharray: 3 3;
+}
+
+.git-graph__dirty-node {
+  fill: #c9a227;
+  stroke: #f5d66d;
+  stroke-width: 1.5;
+}
+
+.git-graph__node {
+  stroke: #161616;
+  stroke-width: 2;
+}
+
+.git-graph__node--merge {
+  stroke: #f0f0f0;
+}
+
+.git-graph__node--head {
+  fill: var(--git-state);
+  stroke: var(--git-state);
+  filter: drop-shadow(0 0 4px var(--git-state));
+}
+
+.git-graph__row {
+  position: absolute;
+  right: 0;
+  display: grid;
+  grid-template-columns: 3.9rem minmax(0, 1fr);
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  height: 48px;
+  min-width: 0;
+  padding-right: 0.55rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.045);
+  font-size: 0.72rem;
+}
+
+.git-graph__row code {
+  color: var(--git-state);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.git-graph__label {
+  min-width: 0;
+}
+
+.git-graph__label > span {
   display: block;
   overflow: hidden;
-  color: #bfc8d0;
-  font-size: 0.68rem;
+  color: #d8d8d8;
+  line-height: 1.3;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.git-command pre {
-  max-height: 6.2rem;
-  overflow: auto;
-  margin: 0.4rem 0 0;
-  color: #f0f0f0;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 0.7rem;
-  line-height: 1.35;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
+.git-graph__refs {
+  display: flex;
+  gap: 0.28rem;
+  min-width: 0;
+  margin-bottom: 0.13rem;
 }
 
-.git-command--status pre,
-.git-command--head pre,
-.git-command--upstream pre {
-  max-height: 2.2rem;
+.git-graph__refs span {
+  max-width: 8.5rem;
+  overflow: hidden;
+  padding: 0.04rem 0.32rem;
+  border: 1px solid color-mix(in srgb, var(--git-state) 55%, #454545);
+  border-radius: 999px;
+  color: var(--git-state);
+  font-size: 0.6rem;
+  line-height: 1.15;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.git-graph__row--dirty code,
+.git-graph__row--dirty span {
+  color: #f5d66d;
+}
+
+.git-graph__empty {
+  margin: 1rem;
+  color: #b4b4b4;
+  font-size: 0.76rem;
+}
+
+.git-panel__bar {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr);
+  align-items: center;
+  gap: 0.45rem;
+  margin-top: 0.6rem;
+  padding-top: 0.6rem;
+  border-top: 1px solid #454547;
+}
+
+.git-panel__bar button {
+  border: 1px solid #5d5d5d;
+  border-radius: 7px;
+  background: #1b1b1c;
+  color: #f0f0f0;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.7rem;
+  padding: 0.34rem 0.56rem;
+}
+
+.git-panel__bar button:hover:not(:disabled),
+.git-panel__bar button:focus-visible {
+  border-color: var(--git-state);
+}
+
+.git-panel__bar button:disabled {
+  cursor: wait;
+  opacity: 0.62;
+}
+
+.git-panel__bar > span {
+  overflow: hidden;
+  color: var(--git-state);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.66rem;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .panel {

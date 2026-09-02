@@ -478,11 +478,8 @@ export function SystemGraph({ token }: { token: string }) {
             edgeTypes={edgeTypes}
             onNodeClick={onNodeClick}
             onPaneClick={() => setSelected(null)}
-            // Bez fitView: przy 17 wezlach i szerokich korytarzach dopasowanie
-            // schodzilo do 0.27-0.35 i karta 340x132 rysowala sie jako 93x36,
-            // a wynik byl niestabilny miedzy odswiezeniami. Staly punkt startowy
-            // jest przewidywalny; reszte robi operator - przyciskami albo kolkiem.
-            defaultViewport={{ x: 48, y: 40, zoom: 0.85 }}
+            fitView
+            fitViewOptions={{ padding: 0.12, minZoom: 0.12, maxZoom: 0.85 }}
             // Oddalac wolno do woli.
             minZoom={0.12}
             maxZoom={2.5}
