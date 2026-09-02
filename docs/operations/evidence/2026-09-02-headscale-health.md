@@ -161,3 +161,93 @@ Drugi profil albo osobny stan `tailscaled` wymaga uprawnien roota (wlasna jednos
 systemd i wlasne urzadzenie `tun`). Przelaczenie profilu w istniejacym demonie
 odpielo by biezace polaczenie do SaaS, czyli zlamalo warunek "SaaS zostaje".
 Zapisano wiec komende dolaczenia i czekano na zgode, zgodnie z poleceniem.
+
+---
+
+# Nasluch na bramie prywatnej — i sciana zapory, 2026-09-02
+
+Headscale slucha teraz na `192.168.2.1:8080`. Petla zwrotna przestala odpowiadac, bo
+Headscale przyjmuje **jeden** adres nasluchu. Darkstar zostal przestawiony na ten sam
+adres przez `DARKSTAR_HEADSCALE_URL`; przy sieci hosta to ta sama maszyna i ruch jej nie
+opuszcza.
+
+## Pomiar
+
+```
+1 headscale przez brame   : 200
+2 headscale przez petle   : 000        <- jeden adres nasluchu, skutek zamierzony
+3 darkstar->headscale     : 200
+4 tresc                   : {"baseUrl":"http://192.168.2.1:8080","health":"pass",
+                             "nodeCount":null,"nodes":null,
+                             "nodesReason":"no_api_key","reachable":true}
+5 nasluch 8080            : 192.168.2.1:8080
+6 sshd zapas z Windows    : 192.168.2.1:22 -> TcpTestSucceeded: True
+7 sieci docker            : bridge deploy_default host none   (bez zmian)
+8 tailscale               : 2 wezly, ControlURL: controlplane.tailscale.com
+```
+
+## Zapasowa droga dziala — i nie jest wystawiona na Vodafone
+
+`sshd` nasluchuje na `0.0.0.0:22`, co samo w sobie wyglada szeroko, ale zapora
+`darkstar_host_guard` zwezа to do jednego zrodla. Z `host-guard.nft`:
+
+```
+type filter hook input priority filter; policy drop;
+iifname @downstream_ifaces ip saddr @darkstar_downstream_ipv4 tcp dport 22 accept
+iifname @upstream_ifaces udp dport 41641 accept
+iifname @upstream_ifaces udp sport 67 udp dport 68 accept
+```
+
+Z sieci nadrzednej Vodafone dopuszczony jest wylacznie transport WireGuard i klient DHCP.
+SSH z `wlp2s0` **nie przechodzi**. Zmierzone z Windows `192.168.2.50`: port 22 odpowiada.
+Droga zapasowa na wypadek padu SaaS jest wiec sprawna.
+
+## Sciana: dolaczenie wezla jest zablokowane przez zapore
+
+Zmierzone z Windows `192.168.2.50`:
+
+```
+192.168.2.1:22   -> TcpTestSucceeded: True
+192.168.2.1:8080 -> TcpTestSucceeded: False
+```
+
+Powod jest w wersjonowanym `host-guard.nft` i jest jednoznaczny: z sieci prywatnej
+przepuszczany jest **wylacznie port 22**. Polityka wejscia to `drop`, wiec port 8080
+przepada po cichu. To nie jest problem klucza, adresu ani konfiguracji Headscale —
+serwer slucha poprawnie i odpowiada lokalnie.
+
+Otwarcie 8080 dla `192.168.2.0/24` wymaga zmiany `host-guard.nft` i przeladowania regul.
+To jest wprost zakazane w tej sesji, wiec **nie zostalo zrobione**. Bez tej zmiany zaden
+wezel spoza samego CBMS nie dolaczy do wlasnego mesh.
+
+## Komendy JOIN — zapisane, NIEWYKONANE
+
+Zadna z nich nie zostala uruchomiona. Wykonanie ktorejkolwiek na CBMS zerwaloby
+`100.71.8.70`, czyli jedyna zdalna droge do hosta.
+
+Windows (po otwarciu portu 8080 w zaporze):
+
+```
+tailscale login --login-server http://192.168.2.1:8080 --authkey <klucz z preauthkeys>
+```
+
+CBMS — wylacznie z osobnym stanem, nigdy na dzialajacym demonie:
+
+```
+# NIE uruchamiac na biezacym tailscaled - zerwie polaczenie do SaaS.
+# Wymaga roota: osobna jednostka systemd, osobny --statedir i osobne urzadzenie tun.
+tailscale --socket /run/tailscale-darkstar.sock up \
+    --login-server http://192.168.2.1:8080 --authkey <klucz>
+```
+
+Weryfikacja po dolaczeniu:
+
+```
+docker exec darkstar-headscale headscale nodes list
+```
+
+## Warunek wyjscia, ktory nadal NIE jest spelniony
+
+SaaS zostaje, dopoki **dwa** wezly nie odpowiedza na nowym serwerze. Odpowiada zero.
+`tailscale down` i `tailscale logout` nie padly i nie padna, dopoki ten warunek nie
+zostanie spelniony.
