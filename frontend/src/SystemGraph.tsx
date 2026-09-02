@@ -81,6 +81,16 @@ const KIND_PLAIN: Record<string, string> = {
   runtime: 'program, ktory naprawde chodzi i pracuje',
 }
 
+/** Kolory rodzajow na miniaturze - te same, co kropka przy nazwie na karcie. */
+const MINIMAP_COLOR: Record<string, string> = {
+  repository: '#b8860b',
+  directory: '#8a6d3b',
+  module: '#2f7d32',
+  file: '#1e5aa8',
+  dependency: '#6b6b6b',
+  runtime: '#0b3d4a',
+}
+
 const KIND_ICON: Record<string, string> = {
   repository: '▣',
   directory: '▤',
@@ -341,6 +351,11 @@ export function SystemGraph({ token }: { token: string }) {
         dimmed: activeId !== null && !onPath.has(node.id),
       } as unknown as Record<string, unknown>,
       draggable: true,
+      // Wymiary podane wprost. React Flow potrafi je zmierzyc po renderze, ale
+      // minimapa rysuje wylacznie wezly, ktore znaja swoj rozmiar - bez tego
+      // pokazywala pusta ramke z sama maska widoku.
+      width: NODE_W,
+      height: NODE_H,
     }))
 
     // Stopien wezla docelowego - realna liczba z danych, uzywana jako liczba wagonow.
@@ -485,7 +500,18 @@ export function SystemGraph({ token }: { token: string }) {
             maxZoom={2.5}
           >
             <Background gap={24} size={1} />
-            <MiniMap pannable zoomable nodeStrokeWidth={2} />
+            <MiniMap
+              pannable
+              zoomable
+              onNodeClick={onNodeClick}
+              nodeStrokeWidth={2}
+              ariaLabel="Miniatura grafu: przeciagaj, przyblizaj albo kliknij wezel, aby zobaczyc szczegoly"
+              // Ten sam kolor co kropka rodzaju na karcie, wiec miniatura czyta sie
+              // tak samo jak plotno.
+              nodeColor={(node) =>
+                MINIMAP_COLOR[(node.data as unknown as ArchitectureNode).kind] ?? '#6b6b6b'
+              }
+            />
             <Controls showInteractive={false} />
           </ReactFlow>
         </div>

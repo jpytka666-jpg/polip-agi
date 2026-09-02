@@ -248,17 +248,106 @@ body {
   margin: 0 0 0.7rem;
 }
 
+.git-panel__inspect {
+  flex: 0 0 7.2rem;
+  min-width: 0;
+  min-height: 7.2rem;
+  overflow: hidden;
+  margin-bottom: 0.6rem;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid #3c3c3e;
+  border-radius: 8px;
+  background: rgba(18, 18, 20, 0.76);
+  color: #d8d8d8;
+  font-size: 0.67rem;
+}
+
+.git-panel__inspect-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.2rem;
+  color: var(--git-state);
+}
+
+.git-panel__inspect-head time {
+  overflow: hidden;
+  color: #b4b4b4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.git-panel__inspect > code {
+  display: block;
+  overflow: hidden;
+  color: var(--git-state);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.62rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.git-panel__inspect > p:not(.git-panel__inspect-hint) {
+  display: -webkit-box;
+  overflow: hidden;
+  margin: 0.28rem 0 0.16rem;
+  color: #f0f0f0;
+  font-size: 0.72rem;
+  line-height: 1.3;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.git-panel__inspect > span {
+  display: block;
+  overflow: hidden;
+  color: #b4b4b4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.git-panel__inspect-hint {
+  margin: 0;
+  color: #b4b4b4;
+  line-height: 1.45;
+}
+
 .git-graph {
   position: relative;
   flex: 1;
   min-width: 0;
   min-height: 0;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-color: var(--git-state) #1b1b1c;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
   border: 1px solid #3c3c3e;
   border-radius: 9px;
   background:
-    linear-gradient(90deg, rgba(255, 255, 255, 0.018) 1px, transparent 1px) 0 0 / 18px 18px,
-    #1b1b1c;
+    linear-gradient(90deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px) 0 0 / 18px 18px,
+    #303034;
+  box-shadow: inset 0 0 28px rgba(0, 0, 0, 0.28);
+}
+
+.git-graph::-webkit-scrollbar {
+  width: 10px;
+}
+
+.git-graph::-webkit-scrollbar-track {
+  background: #202023;
+}
+
+.git-graph::-webkit-scrollbar-thumb {
+  border: 2px solid #202023;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--git-state) 72%, #6b6b6f);
+}
+
+.git-graph::-webkit-scrollbar-thumb:hover {
+  background: var(--git-state);
 }
 
 .git-graph__canvas {
@@ -270,6 +359,7 @@ body {
   position: absolute;
   inset: 0 auto auto 0;
   overflow: visible;
+  pointer-events: none;
 }
 
 .git-graph__rails path {
@@ -277,6 +367,19 @@ body {
   stroke-width: 2;
   stroke-linecap: round;
   stroke-linejoin: round;
+  transition: opacity 0.15s, stroke-width 0.15s;
+}
+
+.git-graph__edge--active {
+  opacity: 1;
+}
+
+.git-graph--selected .git-graph__edge--active {
+  stroke-width: 3;
+}
+
+.git-graph__edge--dim {
+  opacity: 0.16;
 }
 
 .git-graph__dirty-edge {
@@ -291,8 +394,10 @@ body {
 }
 
 .git-graph__node {
+  fill-opacity: 0.82;
   stroke: #161616;
   stroke-width: 2;
+  transition: opacity 0.15s, r 0.15s;
 }
 
 .git-graph__node--merge {
@@ -303,6 +408,16 @@ body {
   fill: var(--git-state);
   stroke: var(--git-state);
   filter: drop-shadow(0 0 4px var(--git-state));
+}
+
+.git-graph__node--selected {
+  opacity: 1;
+  stroke: #ffffff;
+  stroke-width: 3;
+}
+
+.git-graph__node--dim {
+  opacity: 0.18;
 }
 
 .git-graph__row {
@@ -316,8 +431,33 @@ body {
   height: 48px;
   min-width: 0;
   padding-right: 0.55rem;
+  border: 0;
   border-bottom: 1px solid rgba(255, 255, 255, 0.045);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
   font-size: 0.72rem;
+  text-align: left;
+  transition: background 0.12s, opacity 0.15s;
+}
+
+.git-graph__row:hover,
+.git-graph__row:focus-visible {
+  background: color-mix(in srgb, var(--git-state) 12%, transparent);
+  outline: none;
+}
+
+.git-graph__row:focus-visible {
+  box-shadow: inset 0 0 0 1px var(--git-state);
+}
+
+.git-graph__row--selected {
+  background: color-mix(in srgb, var(--git-state) 18%, transparent);
+}
+
+.git-graph__row--dim {
+  opacity: 0.34;
 }
 
 .git-graph__row code {
@@ -327,6 +467,21 @@ body {
 
 .git-graph__label {
   min-width: 0;
+  overflow: hidden;
+  padding: 0.24rem 0.45rem;
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  border-radius: 8px;
+  background: rgba(17, 17, 19, 0.62);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(5px);
+  transition: background 0.12s, border-color 0.12s;
+}
+
+.git-graph__row:hover .git-graph__label,
+.git-graph__row:focus-visible .git-graph__label,
+.git-graph__row--selected .git-graph__label {
+  border-color: color-mix(in srgb, var(--git-state) 55%, transparent);
+  background: color-mix(in srgb, var(--git-state) 14%, rgba(17, 17, 19, 0.72));
 }
 
 .git-graph__label > span {
@@ -849,9 +1004,18 @@ body {
   fill: rgba(124, 196, 255, 0.14) !important;
 }
 
+/* Bez !important na wypelnieniu: kolor rodzaju przychodzi z nodeColor w kodzie,
+   a wymuszony styl kasowal go i miniatura byla jednolicie szara. */
 .react-flow__minimap-node {
-  fill: rgba(216, 216, 216, 0.6) !important;
-  stroke: rgba(124, 196, 255, 0.45) !important;
+  cursor: pointer;
+  stroke: rgba(255, 255, 255, 0.55) !important;
+  stroke-width: 2;
+  transition: filter 0.12s, stroke 0.12s;
+}
+
+.react-flow__minimap-node:hover {
+  filter: drop-shadow(0 0 3px #c9a227);
+  stroke: #ffffff !important;
 }
 
 .react-flow__attribution {

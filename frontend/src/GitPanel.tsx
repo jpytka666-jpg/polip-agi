@@ -18,6 +18,8 @@ type GitCommit = {
   parents: string[]
   decorations: string
   subject: string
+  author: string
+  authoredAt: string
 }
 
 type GitRailView = {
@@ -44,6 +46,10 @@ type GraphEdge = {
 const ROW_HEIGHT = 48
 const LANE_GAP = 18
 const LANE_COLORS = ['#7cc4ff', '#bd93f9', '#ff8c69', '#50c878', '#d7ba7d']
+const COMMIT_DATE = new Intl.DateTimeFormat('pl-PL', {
+  dateStyle: 'medium',
+  timeStyle: 'short',
+})
 
 function parseCommits(output: string): GitCommit[] {
   return output
@@ -51,12 +57,15 @@ function parseCommits(output: string): GitCommit[] {
     .map((record) => record.trim())
     .filter(Boolean)
     .map((record) => {
-      const [sha = '', parents = '', decorations = '', ...subject] = record.split('\x1f')
+      const [sha = '', parents = '', decorations = '', subject = '', author = '', authoredAt = ''] =
+        record.split('\x1f')
       return {
         sha,
         parents: parents.split(' ').filter(Boolean),
         decorations,
-        subject: subject.join('\x1f') || '(bez tematu)',
+        subject: subject || '(bez tematu)',
+        author: author || 'autor nieznany',
+        authoredAt,
       }
     })
     .filter((commit) => /^[0-9a-f]{40}$/i.test(commit.sha))
@@ -144,6 +153,30 @@ function refsOf(decorations: string): string[] {
     .filter(Boolean)
 }
 
+function ancestorsOf(commits: GitCommit[], selectedSha: string | null): Set<string> {
+  if (!selectedSha) return new Set()
+
+  const bySha = new Map(commits.map((commit) => [commit.sha, commit]))
+  const ancestors = new Set<string>()
+  const pending = [selectedSha]
+
+  while (pending.length) {
+    const sha = pending.pop()!
+    if (ancestors.has(sha)) continue
+    ancestors.add(sha)
+    bySha.get(sha)?.parents.forEach((parent) => {
+      if (bySha.has(parent)) pending.push(parent)
+    })
+  }
+
+  return ancestors
+}
+
+function formatCommitDate(value: string): string {
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? 'data nieznana' : COMMIT_DATE.format(date)
+}
+
 const STATE_LABEL: Record<RailState, string> = {
   dirty: 'dirty',
   local: 'brak origin',
@@ -155,6 +188,8 @@ export function GitPanel() {
   const [rail, setRail] = useState<GitRailSnapshot | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [action, setAction] = useState<'refresh' | 'fetch' | null>(null)
+  const [selectedSha, setSelectedSha] = useState<string | null>(null)
+  const [hoveredSha, setHoveredSha] = useState<string | null>(null)
 
   const refresh = useCallback(async () => {
     setAction('refresh')
@@ -202,10 +237,15 @@ export function GitPanel() {
   const view = useMemo(() => (rail ? viewOf(rail) : null), [rail])
   const state = useMemo(() => (rail && view ? stateOf(rail, view) : 'unknown'), [rail, view])
   const graph = useMemo(() => graphOf(view?.commits ?? [], view?.dirty ?? false), [view])
+  const selectedCommit = view?.commits.find((commit) => commit.sha === selectedSha) ?? null
+  const activeSelectedSha = selectedCommit?.sha ?? null
+  const selectedPath = ancestorsOf(view?.commits ?? [], activeSelectedSha)
   const relation = view?.hasUpstream
     ? `ahead ${view.ahead} / behind ${view.behind}`
     : 'brak origin'
   const headRow = graph.rows.find((row) => row.commit.sha === view?.head)
+  const inspectedCommit =
+    view?.commits.find((commit) => commit.sha === hoveredSha) ?? selectedCommit
 
   return (
     <section className={`panel git-panel git-panel--${state}`} aria-labelledby="git-panel-title">
@@ -217,7 +257,32 @@ export function GitPanel() {
         <span className="git-panel__state">{STATE_LABEL[state]}</span>
       </div>
       {error ? <p className="git-panel__error" role="alert">{error}</p> : null}
-      <div className="git-graph" aria-label="Drzewo commitow z galeziami i merge">
+      <div className="git-panel__inspect" aria-live="polite">
+        {inspectedCommit ? (
+          <>
+            <div className="git-panel__inspect-head">
+              <strong>{inspectedCommit.sha === activeSelectedSha ? 'Wybrany commit' : 'Podglad commita'}</strong>
+              <time dateTime={inspectedCommit.authoredAt}>{formatCommitDate(inspectedCommit.authoredAt)}</time>
+            </div>
+            <code>{inspectedCommit.sha}</code>
+            <p title={inspectedCommit.subject}>{inspectedCommit.subject}</p>
+            <span>
+              {inspectedCommit.author} · rodzice {inspectedCommit.parents.length}
+              {refsOf(inspectedCommit.decorations).length
+                ? ` · ${refsOf(inspectedCommit.decorations).join(', ')}`
+                : ''}
+            </span>
+          </>
+        ) : (
+          <p className="git-panel__inspect-hint">
+            Najedz, aby podejrzec commit. Kliknij, aby przypiac szczegoly i podswietlic jego rodzicow.
+          </p>
+        )}
+      </div>
+      <div
+        className={`git-graph${activeSelectedSha ? ' git-graph--selected' : ''}`}
+        aria-label="Drzewo commitow z galeziami i merge"
+      >
         {view?.commits.length ? (
           <div className="git-graph__canvas" style={{ height: graph.height }}>
             <svg
@@ -233,9 +298,13 @@ export function GitPanel() {
                 const x2 = 14 + to.lane * LANE_GAP
                 const y2 = to.row * ROW_HEIGHT + ROW_HEIGHT / 2
                 const bend = Math.min(18, Math.max(8, (y2 - y1) / 2))
+                const onSelectedPath =
+                  !activeSelectedSha ||
+                  (selectedPath.has(from.commit.sha) && selectedPath.has(to.commit.sha))
                 return (
                   <path
                     key={`${from.commit.sha}-${to.commit.sha}`}
+                    className={onSelectedPath ? 'git-graph__edge--active' : 'git-graph__edge--dim'}
                     d={`M ${x1} ${y1} C ${x1} ${y1 + bend}, ${x2} ${y2 - bend}, ${x2} ${y2}`}
                     stroke={LANE_COLORS[to.lane % LANE_COLORS.length]}
                   />
@@ -264,6 +333,8 @@ export function GitPanel() {
                     'git-graph__node',
                     row.commit.sha === view.head ? 'git-graph__node--head' : '',
                     row.commit.parents.length > 1 ? 'git-graph__node--merge' : '',
+                    row.commit.sha === activeSelectedSha ? 'git-graph__node--selected' : '',
+                    activeSelectedSha && !selectedPath.has(row.commit.sha) ? 'git-graph__node--dim' : '',
                   ].filter(Boolean).join(' ')}
                   cx={14 + row.lane * LANE_GAP}
                   cy={row.row * ROW_HEIGHT + ROW_HEIGHT / 2}
@@ -281,10 +352,23 @@ export function GitPanel() {
             {graph.rows.map((row) => {
               const refs = refsOf(row.commit.decorations)
               return (
-                <div
-                  className="git-graph__row"
+                <button
+                  type="button"
+                  className={[
+                    'git-graph__row',
+                    row.commit.sha === activeSelectedSha ? 'git-graph__row--selected' : '',
+                    activeSelectedSha && !selectedPath.has(row.commit.sha) ? 'git-graph__row--dim' : '',
+                  ].filter(Boolean).join(' ')}
                   key={row.commit.sha}
                   style={{ top: row.row * ROW_HEIGHT, paddingLeft: graph.graphWidth }}
+                  aria-pressed={row.commit.sha === activeSelectedSha}
+                  onMouseEnter={() => setHoveredSha(row.commit.sha)}
+                  onMouseLeave={() => setHoveredSha(null)}
+                  onFocus={() => setHoveredSha(row.commit.sha)}
+                  onBlur={() => setHoveredSha(null)}
+                  onClick={() =>
+                    setSelectedSha((current) => current === row.commit.sha ? null : row.commit.sha)
+                  }
                 >
                   <code>{row.commit.sha.slice(0, 7)}</code>
                   <div className="git-graph__label">
@@ -296,7 +380,7 @@ export function GitPanel() {
                     ) : null}
                     <span title={row.commit.subject}>{row.commit.subject}</span>
                   </div>
-                </div>
+                </button>
               )
             })}
           </div>

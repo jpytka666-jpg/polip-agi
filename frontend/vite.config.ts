@@ -74,7 +74,7 @@ function localGitRail(): Plugin {
         '--all',
         '--topo-order',
         '--max-count=18',
-        '--pretty=format:%H%x1f%P%x1f%D%x1f%s%x1e',
+        '--pretty=format:%H%x1f%P%x1f%D%x1f%s%x1f%an%x1f%aI%x1e',
       ]),
       runGit(['rev-parse', 'HEAD']),
       runGit(['rev-parse', '@{u}']),
