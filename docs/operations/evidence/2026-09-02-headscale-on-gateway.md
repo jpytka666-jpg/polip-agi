@@ -100,3 +100,59 @@ dopoki ten warunek nie zostanie spelniony.
 Siec domowa, `nft` (plik zmieniony, reguly NIE przeladowane), dysk E, pociagi w Sterowni.
 Zadna nowa siec dockerowa nie powstala. `0.0.0.0` nigdzie nie zostalo uzyte jako adres
 nasluchu Headscale ani Darkstara.
+
+---
+
+# Dopuszczenie portu 8080 z sieci prywatnej — stan przed, 2026-09-02
+
+## Pomiar PRZED, z Windows 192.168.2.50
+
+```
+1 port 8080        : TcpTestSucceeded = False
+2 port 22 (zapas)  : TcpTestSucceeded = True
+3 ping 192.168.2.1 : True
+4 ping 8.8.8.8     : True
+5 curl health      : brak odpowiedzi
+```
+
+Regula jest na maszynie, w wersjonowanym pliku, linia 69:
+
+```
+iifname @downstream_ifaces ip saddr @darkstar_downstream_ipv4 tcp dport 8080 accept \
+    comment "downstream Headscale control server, Task 13"
+```
+
+## Dlaczego NIE `nft -f` prosto na tym pliku
+
+Plik zawiera wylacznie `table inet darkstar_host_guard { ... }` i **nie ma w sobie
+`flush ruleset` ani `delete table`**. Wczytanie go przez `nft -f` nie podmieni regul —
+**dopisze je drugi raz** do istniejacych lancuchow. Duplikaty regul `accept` nie sa
+grozne, ale ruleset przestaje odpowiadac plikowi i kazde kolejne przeladowanie mnozy je
+dalej.
+
+Wlasny skrypt tego katalogu robi to poprawnie. Z `darkstar-firewall-apply`:
+
+```
+if nft list table "$TABLE_FAMILY" "$TABLE_NAME" >/dev/null 2>&1; then
+    printf 'delete table %s %s\n' "$TABLE_FAMILY" "$TABLE_NAME" > "$CANDIDATE"
+fi
+cat "$RULESET" >> "$CANDIDATE"
+nft -c -f "$CANDIDATE"   # walidacja
+nft -f "$CANDIDATE"      # dopiero teraz zaladowanie
+```
+
+Kasuje **wylacznie** tabele `inet darkstar_host_guard`. Zadnego innego lancucha ani tabeli
+nie dotyka, wiec warunek "nie ruszaj innych lancuchow" jest spelniony. Skrypt czyta
+`/etc/darkstar/host-guard.nft`, wiec plik z repozytorium trzeba tam najpierw skopiowac.
+
+## Czego nie wykonano
+
+Przeladowania. `sudo` na tym hoscie wymaga hasla, a wpisywanie hasel nie nalezy do
+zakresu tej sesji. Reguła czeka zastosowana **zero razy**; port 8080 jest nadal z sieci
+prywatnej nieosiagalny, co potwierdza pomiar PRZED.
+
+## Stan sieci przed zmiana — punkt odniesienia
+
+Brama i swiat odpowiadaja (`ping 192.168.2.1` oraz `ping 8.8.8.8` — oba True), SSH na
+porcie 22 dziala. Te trzy pomiary sa punktem odniesienia: jesli po przeladowaniu
+ktorykolwiek z nich przestanie odpowiadac, zmiana ma zostac cofnieta natychmiast.
