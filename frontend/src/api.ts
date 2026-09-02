@@ -26,7 +26,9 @@ GITHUB METADATA: jpytka666-jpg/polip-agi, branch docs/darkstar-headscale-hotspot
 ==========================================
 */
 
-import { authorizationHeaders } from './operatorPin'
+// Jawne rozszerzenie, tak samo jak w main.tsx: bez niego loader ESM Node-a nie znajdzie
+// modulu i testy `node --test` nie ruszaja. Vite i tsc (allowImportingTsExtensions) to znosza.
+import { authorizationHeaders } from './operatorPin.ts'
 
 export type GatewayHealth = 'offline' | 'starting' | 'ready' | 'degraded' | 'failed'
 export type GatewayMode = 'ethernet' | 'hotspot'
@@ -180,6 +182,59 @@ export interface GitRailSnapshot {
 /** Odczyt lokalnego Windows WORKTREE przez middleware Vite, nigdy przez kontener CBMS. */
 export function fetchGitRail(): Promise<GitRailSnapshot> {
   return getJson<GitRailSnapshot>('/__darkstar/git', '')
+}
+
+export interface GitCommit {
+  hash: string
+  parents: string[]
+  refs: string[]
+  subject: string
+  author: string
+  date: string
+}
+
+/** Odwzorowanie odpowiedzi GET /v1/git/overview z darkstar-server. */
+export interface GitOverview {
+  /** null przy detached HEAD - to normalny stan repozytorium, nie blad. */
+  branch: string | null
+  head: string
+  dirty: boolean
+  ahead: number
+  behind: number
+  hasUpstream: boolean
+  upstream: string | null
+  commits: GitCommit[]
+}
+
+/**
+ * Odczyt stanu repozytorium z darkstar-server.
+ *
+ * `null` oznacza "ten serwer nie ma takiego widoku" - starszy obraz kontenera odpowiada 404.
+ * Zwracamy wtedy pusty widok zamiast wywalac surowy blad na operatora. 401 i 503 to co innego:
+ * endpoint istnieje i ma nam cos do powiedzenia, wiec leca dalej jako bledy.
+ *
+ * Naglowek budowany jest tutaj, a nie przez authorizationHeaders() - ta funkcja przepuszcza
+ * wylacznie PIN o dlugosci OPERATOR_PIN_LENGTH, a ten odczyt ma dotrzec do serwera takze
+ * wtedy, gdy PIN jest niepelny; odpowiedzia jest wtedy uczciwe 401 z Rusta.
+ */
+export async function fetchGitOverview(pin: string): Promise<GitOverview | null> {
+  const response = await fetch('/v1/git/overview', {
+    method: 'GET',
+    headers: { authorization: `Bearer ${pin}` },
+  })
+  if (response.status === 404) {
+    return null
+  }
+  if (response.status === 401) {
+    throw new Error('Brak autoryzacji - podaj PIN operatora.')
+  }
+  if (response.status === 503) {
+    throw new Error('Git nieodczytywalny - repozytorium nie jest podmontowane.')
+  }
+  if (!response.ok) {
+    throw new Error(`Blad ${response.status}`)
+  }
+  return (await response.json()) as GitOverview
 }
 
 /** Aktualizuje wylacznie referencje origin. Nie wykonuje checkout, merge ani reset. */

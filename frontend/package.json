@@ -8,6 +8,7 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "test:pin": "node --experimental-strip-types --disable-warning=ExperimentalWarning --test tests/operatorPin.test.ts",
+    "test:git": "node --experimental-strip-types --disable-warning=ExperimentalWarning --test tests/gitOverview.test.ts",
     "preview": "vite preview"
   },
   "dependencies": {

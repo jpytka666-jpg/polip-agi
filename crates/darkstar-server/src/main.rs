@@ -23,6 +23,7 @@
 
 mod context_http;
 mod gateway_http;
+mod git_http;
 mod http;
 
 use std::{env, net::SocketAddr};
@@ -58,7 +59,17 @@ async fn main() {
         state.api_token.clone(),
         std::sync::Arc::new(context_http::ReadOnlyHttp),
     ));
-    let app = http::router(state).merge(gateway).merge(context);
+    // Worktree do odczytu przez gita. W kontenerze repozytorium jest podmontowane, wiec
+    // sciezka przychodzi ze srodowiska - nigdy nie jest wpisana w kod.
+    let git_worktree = env::var("DARKSTAR_GIT_WORKTREE").unwrap_or_else(|_| ".".into());
+    let git = git_http::git_router(git_http::GitState::new(
+        state.api_token.clone(),
+        std::sync::Arc::new(git_http::SystemGitRunner::new(&git_worktree)),
+    ));
+    let app = http::router(state)
+        .merge(gateway)
+        .merge(context)
+        .merge(git);
     tracing::info!(%address, api_version = darkstar_core::API_VERSION, "darkstar server starting");
 
     let listener = tokio::net::TcpListener::bind(address)
