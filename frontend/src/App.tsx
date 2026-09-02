@@ -115,8 +115,8 @@ function App() {
           <ContextPanel token={pin} />
         </div>
         <SystemGraph token={pin} />
-        <aside className="git-rail-column" aria-label="Graf commitow lokalnego Git">
-          <GitPanel />
+        <aside className="git-rail-column" aria-label="Graf commitow z darkstar-server">
+          <GitPanel token={pin} />
         </aside>
       </main>
 

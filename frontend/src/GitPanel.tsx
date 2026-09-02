@@ -5,11 +5,15 @@ AUTHOR: M. SZUL
 AI MODEL: GPT-5 Codex
 TIMESTAMP: 2026-09-02 03:20:00 Europe/London
 REASON FOR CREATION: Pokazanie operatorowi stanu Git z lokalnego Windows WORKTREE, a nie z kontenera CBMS.
+ZMIANA ZRODLA DANYCH: panel czytal /__darkstar/git - posrednika, ktory istnieje wylacznie
+w trybie deweloperskim Vite. Pod adresem produkcyjnym ta sciezka nie istnieje, wiec panel
+dostawal 404 i swiecil pustka. Teraz czyta GET /v1/git/overview z darkstar-server, z PIN-em
+operatora w naglowku. Rysunek grafu zostaje bez zmian - zmienilo sie tylko to, skad plyna dane.
 ==========================================
 */
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { fetchGitOrigin, fetchGitRail, type GitRailSnapshot } from './api'
+import { fetchGitOverview, type GitOverview } from './api'
 
 type RailState = 'dirty' | 'local' | 'synced' | 'unknown'
 
@@ -51,44 +55,35 @@ const COMMIT_DATE = new Intl.DateTimeFormat('pl-PL', {
   timeStyle: 'short',
 })
 
-function parseCommits(output: string): GitCommit[] {
-  return output
-    .split('\x1e')
-    .map((record) => record.trim())
-    .filter(Boolean)
-    .map((record) => {
-      const [sha = '', parents = '', decorations = '', subject = '', author = '', authoredAt = ''] =
-        record.split('\x1f')
-      return {
-        sha,
-        parents: parents.split(' ').filter(Boolean),
-        decorations,
-        subject: subject || '(bez tematu)',
-        author: author || 'autor nieznany',
-        authoredAt,
-      }
-    })
-    .filter((commit) => /^[0-9a-f]{40}$/i.test(commit.sha))
-}
-
-function viewOf(rail: GitRailSnapshot): GitRailView {
-  const statusLines = rail.status.stdout.trim().split(/\r?\n/)
-  const summary = statusLines[0] ?? ''
-  const branchPart = summary.replace(/^##\s*/, '').split('...')[0]?.trim()
-
+/**
+ * Przepisuje odpowiedz serwera na ksztalt, ktorego oczekuje rysunek grafu.
+ *
+ * Rozbieranie surowego wyjscia gita na pola przenioslo sie do Rusta - przegladarka
+ * dostaje gotowa liste. Zostaje samo przemianowanie pol i zlozenie referencji
+ * z powrotem w jeden napis, bo refsOf() nizej oczekuje wlasnie takiego wejscia.
+ * Brak galezi to detached HEAD, czyli normalny stan repozytorium, a nie blad.
+ */
+function viewOf(overview: GitOverview): GitRailView {
   return {
-    branch: branchPart || 'nieznany',
-    head: rail.head.stdout.trim(),
-    dirty: statusLines.slice(1).some((line) => line.trim()),
-    ahead: Number(summary.match(/\bahead (\d+)/)?.[1] ?? 0),
-    behind: Number(summary.match(/\bbehind (\d+)/)?.[1] ?? 0),
-    hasUpstream: rail.upstream.exit_code === 0 && Boolean(rail.upstream.stdout.trim()),
-    commits: parseCommits(rail.log.stdout),
+    branch: overview.branch ?? 'detached HEAD',
+    head: overview.head,
+    dirty: overview.dirty,
+    ahead: overview.ahead,
+    behind: overview.behind,
+    hasUpstream: overview.hasUpstream,
+    commits: overview.commits.map((commit) => ({
+      sha: commit.hash,
+      parents: commit.parents,
+      decorations: commit.refs.join(', '),
+      subject: commit.subject || '(bez tematu)',
+      author: commit.author || 'autor nieznany',
+      authoredAt: commit.date,
+    })),
   }
 }
 
-function stateOf(rail: GitRailSnapshot, view: GitRailView): RailState {
-  if (rail.status.exit_code !== 0 || rail.head.exit_code !== 0) return 'unknown'
+function stateOf(view: GitRailView | null): RailState {
+  if (!view) return 'unknown'
   if (view.dirty) return 'dirty'
   if (!view.hasUpstream || view.ahead > 0) return 'local'
   return 'synced'
@@ -184,58 +179,57 @@ const STATE_LABEL: Record<RailState, string> = {
   unknown: 'brak danych',
 }
 
-export function GitPanel() {
-  const [rail, setRail] = useState<GitRailSnapshot | null>(null)
+/** Komunikat, gdy serwer nie zna tej sciezki - starszy obraz odpowiada 404. */
+const NO_ENDPOINT = 'Ten serwer nie wystawia widoku Git.'
+const READ_FAILED = 'Nie udalo sie odczytac stanu repozytorium.'
+
+export function GitPanel({ token }: { token: string }) {
+  const [overview, setOverview] = useState<GitOverview | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [action, setAction] = useState<'refresh' | 'fetch' | null>(null)
+  const [action, setAction] = useState<'refresh' | null>(null)
   const [selectedSha, setSelectedSha] = useState<string | null>(null)
   const [hoveredSha, setHoveredSha] = useState<string | null>(null)
 
   const refresh = useCallback(async () => {
+    // Bez PIN-u nie ma po co pytac - serwer i tak odpowie 401.
+    if (!token) return
     setAction('refresh')
     try {
-      setRail(await fetchGitRail())
-      setError(null)
+      const next = await fetchGitOverview(token)
+      setOverview(next)
+      setError(next === null ? NO_ENDPOINT : null)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Nie udalo sie odczytac lokalnego WORKTREE.')
+      setError(err instanceof Error ? err.message : READ_FAILED)
     } finally {
       setAction(null)
     }
-  }, [])
-
-  const fetchOrigin = useCallback(async () => {
-    setAction('fetch')
-    try {
-      setRail(await fetchGitOrigin())
-      setError(null)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'git fetch origin nie powiodl sie.')
-    } finally {
-      setAction(null)
-    }
-  }, [])
+  }, [token])
 
   useEffect(() => {
     let cancelled = false
-    fetchGitRail()
+    // Bez PIN-u nie pytamy i nie kasujemy stanu tutaj - widok nizej i tak go nie pokaze,
+    // dopoki PIN-u nie ma. Zapis stanu wprost w ciele efektu wywoluje kaskade renderow.
+    if (!token) return
+    fetchGitOverview(token)
       .then((next) => {
-        if (!cancelled) {
-          setRail(next)
-          setError(null)
-        }
+        if (cancelled) return
+        setOverview(next)
+        setError(next === null ? NO_ENDPOINT : null)
       })
       .catch((err) => {
         if (!cancelled) {
-          setError(err instanceof Error ? err.message : 'Nie udalo sie odczytac lokalnego WORKTREE.')
+          setError(err instanceof Error ? err.message : READ_FAILED)
         }
       })
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [token])
 
-  const view = useMemo(() => (rail ? viewOf(rail) : null), [rail])
-  const state = useMemo(() => (rail && view ? stateOf(rail, view) : 'unknown'), [rail, view])
+  // Widok jest bramkowany PIN-em: po jego wyczyszczeniu stary graf znika, choc dane
+  // zostaja w stanie. Dzieki temu efekt niczego nie kasuje i nie ma kaskady renderow.
+  const view = useMemo(() => (token && overview ? viewOf(overview) : null), [token, overview])
+  const state = useMemo(() => stateOf(view), [view])
   const graph = useMemo(() => graphOf(view?.commits ?? [], view?.dirty ?? false), [view])
   const selectedCommit = view?.commits.find((commit) => commit.sha === selectedSha) ?? null
   const activeSelectedSha = selectedCommit?.sha ?? null
@@ -252,11 +246,11 @@ export function GitPanel() {
       <div className="git-panel__heading">
         <div>
           <h2 id="git-panel-title">Git · graf commitow</h2>
-          <p title={view?.branch}>{view?.branch ?? 'lokalny worktree'}</p>
+          <p title={view?.branch}>{view?.branch ?? (token ? 'czytam z serwera…' : 'podaj PIN operatora')}</p>
         </div>
         <span className="git-panel__state">{STATE_LABEL[state]}</span>
       </div>
-      {error ? <p className="git-panel__error" role="alert">{error}</p> : null}
+      {token && error ? <p className="git-panel__error" role="alert">{error}</p> : null}
       <div className="git-panel__inspect" aria-live="polite">
         {inspectedCommit ? (
           <>
@@ -385,17 +379,16 @@ export function GitPanel() {
             })}
           </div>
         ) : (
-          <p className="git-graph__empty">Czekam na graf lokalnego worktree…</p>
+          <p className="git-graph__empty">
+            {token ? 'Czekam na graf z serwera…' : 'Podaj PIN operatora, zeby zobaczyc graf.'}
+          </p>
         )}
       </div>
       <div className="git-panel__bar">
-        <button type="button" onClick={() => void refresh()} disabled={action !== null}>
+        <button type="button" onClick={() => void refresh()} disabled={action !== null || !token}>
           {action === 'refresh' ? 'Czytam…' : 'Odswiez'}
         </button>
-        <button type="button" onClick={() => void fetchOrigin()} disabled={action !== null}>
-          {action === 'fetch' ? 'Fetch…' : 'Fetch'}
-        </button>
-        <span>{view ? relation : 'czekam…'}</span>
+        <span>{view ? relation : token ? 'czekam…' : 'podaj PIN'}</span>
       </div>
     </section>
   )
