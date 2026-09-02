@@ -62,6 +62,16 @@ const KIND_LABEL: Record<string, string> = {
   runtime: 'runtime',
 }
 
+/** To samo co KIND_LABEL, tylko powiedziane tak, zeby nie trzeba bylo znac zargonu. */
+const KIND_PLAIN: Record<string, string> = {
+  repository: 'caly projekt — najwyzsze pudlo, w ktorym siedzi reszta',
+  directory: 'folder — pudlo grupujace pliki',
+  module: 'kawalek programu odpowiedzialny za jedna rzecz',
+  file: 'pojedynczy plik z kodem',
+  dependency: 'cudza biblioteka, ktorej uzywamy',
+  runtime: 'program, ktory naprawde chodzi i pracuje',
+}
+
 const KIND_ICON: Record<string, string> = {
   repository: '▣',
   directory: '▤',
@@ -123,20 +133,20 @@ function ArchNode({ data }: NodeProps) {
               <div className="gpop__body">
                 <span className="gpop__title">{d.name}</span>
                 <dl className="gpop__facts">
-                  <dt>id</dt>
+                  <dt>co to jest</dt>
+                  <dd>{KIND_PLAIN[d.kind] ?? KIND_LABEL[d.kind] ?? d.kind}</dd>
+                  <dt>do czego sluzy</dt>
+                  <dd>{d.role ?? 'nie opisano'}</dd>
+                  <dt>czesc czego</dt>
+                  <dd>{d.system ?? 'nie przypisano'}</dd>
+                  <dt>w czym napisane</dt>
+                  <dd>{d.language === 'mixed' ? 'kilka roznych jezykow' : (d.language ?? 'nie dotyczy')}</dd>
+                  <dt>nazwa w kodzie</dt>
                   <dd>{d.id}</dd>
-                  <dt>rodzaj</dt>
-                  <dd>{KIND_LABEL[d.kind] ?? d.kind}</dd>
-                  <dt>rola</dt>
-                  <dd>{d.role ?? '—'}</dd>
-                  <dt>system</dt>
-                  <dd>{d.system ?? '—'}</dd>
-                  <dt>jezyk</dt>
-                  <dd>{d.language ?? '—'}</dd>
                 </dl>
                   <p className="gpop__note">
-                    Tresc mozna zaznaczyc i skopiowac. Okno znika po zjechaniu myszka
-                    albo po kliknieciu w tlo.
+                    Mozna zaznaczyc i skopiowac. Okno znika, gdy odsuniesz myszke
+                    albo klikniesz w szare tlo.
                   </p>
                 </div>
               </div>
@@ -271,8 +281,53 @@ export function SystemGraph({ token }: { token: string }) {
       draggable: true,
     }))
 
+    // Stopien wezla docelowego - realna liczba z danych, uzywana jako liczba wagonow.
+    // To NIE jest zmierzony wolumen ruchu; API takiego pola nie ma i nie udajemy, ze ma.
+    const degree = new Map<string, number>()
+    for (const e of snapshot.edges) {
+      degree.set(e.to, (degree.get(e.to) ?? 0) + 1)
+      degree.set(e.from, (degree.get(e.from) ?? 0) + 1)
+    }
+    const kindOf = new Map(snapshot.nodes.map((n) => [n.id, n.kind]))
+
+    // Zanurzenie = odleglosc od korzenia (repozytorium) liczona wszerz.
+    // To miara struktury grafu, NIE glebokosc w jakiejkolwiek sieci.
+    const adj = new Map<string, string[]>()
+    for (const e of snapshot.edges) {
+      adj.set(e.from, [...(adj.get(e.from) ?? []), e.to])
+      adj.set(e.to, [...(adj.get(e.to) ?? []), e.from])
+    }
+    const root = snapshot.nodes.find((n) => n.kind === 'repository')?.id ?? snapshot.nodes[0]?.id
+    const depthOf = new Map<string, number>()
+    if (root) {
+      depthOf.set(root, 0)
+      const queue = [root]
+      while (queue.length) {
+        const cur = queue.shift()!
+        for (const nx of adj.get(cur) ?? []) {
+          if (!depthOf.has(nx)) {
+            depthOf.set(nx, (depthOf.get(cur) ?? 0) + 1)
+            queue.push(nx)
+          }
+        }
+      }
+    }
+
     const edges: Edge[] = snapshot.edges.map((edge) => {
       const lit = activeId !== null && (edge.from === activeId || edge.to === activeId)
+      // Krawedz dotykajaca runtime laczy osobne procesy, czyli biegnie przez siec -
+      // rysujemy ja jako trase lotnicza. Reszta zyje w jednym procesie: tor.
+      // Trzy rodzaje trasy, kazdy wyprowadzony z danych, nie zgadniety:
+      //  sea  - relacja wyjscia poza system (egress) albo wezel bramy wyjsciowej,
+      //  air  - dotyka runtime, czyli laczy osobne procesy przez siec,
+      //  rail - reszta, czyli polaczenie w jednym procesie.
+      const touchesGate =
+        edge.kind.includes('egress') ||
+        edge.from.includes('ghost-gate') ||
+        edge.to.includes('ghost-gate')
+      const touchesRuntime =
+        kindOf.get(edge.from) === 'runtime' || kindOf.get(edge.to) === 'runtime'
+      const mode: 'rail' | 'air' | 'sea' = touchesGate ? 'sea' : touchesRuntime ? 'air' : 'rail'
       return {
         id: edge.id,
         source: edge.from,
@@ -283,6 +338,9 @@ export function SystemGraph({ token }: { token: string }) {
           enabled: !muted.has(edge.id),
           lit,
           dimmed: activeId !== null,
+          cars: Math.max(1, Math.min(degree.get(edge.to) ?? 1, 6)),
+          mode,
+          depth: depthOf.get(edge.to) ?? depthOf.get(edge.from) ?? 0,
           onToggle: toggleEdge,
         },
       }
