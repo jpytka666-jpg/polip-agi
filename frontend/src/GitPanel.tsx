@@ -7,8 +7,10 @@ TIMESTAMP: 2026-09-02 03:20:00 Europe/London
 REASON FOR CREATION: Pokazanie operatorowi stanu Git z lokalnego Windows WORKTREE, a nie z kontenera CBMS.
 ZMIANA ZRODLA DANYCH: panel czytal /__darkstar/git - posrednika, ktory istnieje wylacznie
 w trybie deweloperskim Vite. Pod adresem produkcyjnym ta sciezka nie istnieje, wiec panel
-dostawal 404 i swiecil pustka. Teraz czyta GET /v1/git/overview z darkstar-server, z PIN-em
-operatora w naglowku. Rysunek grafu zostaje bez zmian - zmienilo sie tylko to, skad plyna dane.
+dostawal 404 i swiecil pustka. Teraz czyta GET /v1/git/overview z darkstar-server. Sterownia
+jest otwarta na petli zwrotnej, wiec panel pyta od razu po wejsciu, bez naglowka Authorization;
+wpuszczenie rozstrzyga serwer po adresie polaczenia. Rysunek grafu zostaje bez zmian - zmienilo
+sie tylko to, skad plyna dane.
 ==========================================
 */
 
@@ -191,8 +193,7 @@ export function GitPanel({ token }: { token: string }) {
   const [hoveredSha, setHoveredSha] = useState<string | null>(null)
 
   const refresh = useCallback(async () => {
-    // Bez PIN-u nie ma po co pytac - serwer i tak odpowie 401.
-    if (!token) return
+    // Sterownia jest otwarta: pusty token znaczy "bez naglowka", a nie "nie pytaj".
     setAction('refresh')
     try {
       const next = await fetchGitOverview(token)
@@ -207,9 +208,7 @@ export function GitPanel({ token }: { token: string }) {
 
   useEffect(() => {
     let cancelled = false
-    // Bez PIN-u nie pytamy i nie kasujemy stanu tutaj - widok nizej i tak go nie pokaze,
-    // dopoki PIN-u nie ma. Zapis stanu wprost w ciele efektu wywoluje kaskade renderow.
-    if (!token) return
+    // Wpuszczenie zalatwia serwer po adresie polaczenia, wiec pytamy od razu po wejsciu.
     fetchGitOverview(token)
       .then((next) => {
         if (cancelled) return
@@ -226,9 +225,7 @@ export function GitPanel({ token }: { token: string }) {
     }
   }, [token])
 
-  // Widok jest bramkowany PIN-em: po jego wyczyszczeniu stary graf znika, choc dane
-  // zostaja w stanie. Dzieki temu efekt niczego nie kasuje i nie ma kaskady renderow.
-  const view = useMemo(() => (token && overview ? viewOf(overview) : null), [token, overview])
+  const view = useMemo(() => (overview ? viewOf(overview) : null), [overview])
   const state = useMemo(() => stateOf(view), [view])
   const graph = useMemo(() => graphOf(view?.commits ?? [], view?.dirty ?? false), [view])
   const selectedCommit = view?.commits.find((commit) => commit.sha === selectedSha) ?? null
@@ -246,11 +243,11 @@ export function GitPanel({ token }: { token: string }) {
       <div className="git-panel__heading">
         <div>
           <h2 id="git-panel-title">Git · graf commitow</h2>
-          <p title={view?.branch}>{view?.branch ?? (token ? 'czytam z serwera…' : 'podaj PIN operatora')}</p>
+          <p title={view?.branch}>{view?.branch ?? 'czytam z serwera…'}</p>
         </div>
         <span className="git-panel__state">{STATE_LABEL[state]}</span>
       </div>
-      {token && error ? <p className="git-panel__error" role="alert">{error}</p> : null}
+      {error ? <p className="git-panel__error" role="alert">{error}</p> : null}
       <div className="git-panel__inspect" aria-live="polite">
         {inspectedCommit ? (
           <>
@@ -380,15 +377,15 @@ export function GitPanel({ token }: { token: string }) {
           </div>
         ) : (
           <p className="git-graph__empty">
-            {token ? 'Czekam na graf z serwera…' : 'Podaj PIN operatora, zeby zobaczyc graf.'}
+            Czekam na graf z serwera…
           </p>
         )}
       </div>
       <div className="git-panel__bar">
-        <button type="button" onClick={() => void refresh()} disabled={action !== null || !token}>
+        <button type="button" onClick={() => void refresh()} disabled={action !== null}>
           {action === 'refresh' ? 'Czytam…' : 'Odswiez'}
         </button>
-        <span>{view ? relation : token ? 'czekam…' : 'podaj PIN'}</span>
+        <span>{view ? relation : 'czekam…'}</span>
       </div>
     </section>
   )

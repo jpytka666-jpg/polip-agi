@@ -24,104 +24,44 @@ GITHUB METADATA: jpytka666-jpg/polip-agi, branch docs/darkstar-headscale-hotspot
 ==========================================
 */
 
-import { useRef, useState, type ClipboardEvent, type KeyboardEvent } from 'react'
 import { ContextPanel } from './ContextPanel'
 import { GatewayPanel } from './GatewayPanel'
 import { GitPanel } from './GitPanel'
 import { SystemGraph } from './SystemGraph'
-import {
-  OPERATOR_PIN_LENGTH,
-  createEmptyPinCells,
-  pinCellsFromText,
-  pinFromCells,
-  replacePinCell,
-} from './operatorPin'
 import './App.css'
 
+/**
+ * Sterownia jest otwarta: wejscie na strone od razu pokazuje brame, pamiec, graf i Git.
+ *
+ * Panele nadal przyjmuja `token`, tylko dostaja pusty napis - a pusty napis znaczy
+ * "nie wysylaj naglowka Authorization". Wpuszczenie zalatwia serwer w Ruscie: zapytanie
+ * z petli zwrotnej przechodzi bez naglowka, adres spoza petli nadal dostaje 401.
+ *
+ * Przewod na token zostaje CELOWO. Zamkniecie Sterowni z powrotem to podanie tym czterem
+ * miejscom prawdziwej wartosci, a nie przepisywanie kazdego panelu od nowa.
+ */
+const NO_TOKEN = ''
+
 function App() {
-  const [pin, setPin] = useState('')
-  const [pinCells, setPinCells] = useState(createEmptyPinCells)
-  const pinInputRefs = useRef<Array<HTMLInputElement | null>>([])
-  const draftPin = pinFromCells(pinCells)
-
-  const applyPin = () => {
-    if (draftPin) {
-      setPin(draftPin)
-    }
-  }
-
-  const updatePinCell = (index: number, value: string) => {
-    setPinCells((current) => replacePinCell(current, index, value))
-    if (value && index < OPERATOR_PIN_LENGTH - 1) {
-      pinInputRefs.current[index + 1]?.focus()
-    }
-  }
-
-  const handlePinKeyDown = (index: number, event: KeyboardEvent<HTMLInputElement>) => {
-    if (event.key === 'Backspace' && !pinCells[index] && index > 0) {
-      pinInputRefs.current[index - 1]?.focus()
-    }
-  }
-
-  const handlePinPaste = (event: ClipboardEvent<HTMLDivElement>) => {
-    event.preventDefault()
-    const pastedCells = pinCellsFromText(event.clipboardData.getData('text'))
-    setPinCells(pastedCells)
-    const lastFilled = Math.max(0, pastedCells.findLastIndex(Boolean))
-    pinInputRefs.current[lastFilled]?.focus()
-  }
-
   return (
     <div className="control-room">
       <header className="control-room__header">
         <h1>Darkstar Control Room</h1>
-        <div className="operator-pin">
-          <span className="operator-pin__label">PIN operatora</span>
-          <div
-            className="operator-pin__cells"
-            role="group"
-            aria-label="Czteroznakowy PIN operatora"
-            onPaste={handlePinPaste}
-          >
-            {pinCells.map((value, index) => (
-              <input
-                key={index}
-                ref={(element) => {
-                  pinInputRefs.current[index] = element
-                }}
-                className="operator-pin__cell"
-                type="password"
-                inputMode="text"
-                autoComplete="off"
-                autoCapitalize="none"
-                spellCheck={false}
-                maxLength={1}
-                value={value}
-                aria-label={`Znak PIN ${index + 1} z ${OPERATOR_PIN_LENGTH}`}
-                onChange={(event) => updatePinCell(index, event.target.value)}
-                onKeyDown={(event) => handlePinKeyDown(index, event)}
-              />
-            ))}
-          </div>
-          <button type="button" disabled={!draftPin} onClick={applyPin}>
-            Zastosuj
-          </button>
-        </div>
       </header>
 
       <main className="control-room__body">
         <div className="stack">
-          <GatewayPanel token={pin} />
-          <ContextPanel token={pin} />
+          <GatewayPanel token={NO_TOKEN} />
+          <ContextPanel token={NO_TOKEN} />
         </div>
-        <SystemGraph token={pin} />
+        <SystemGraph token={NO_TOKEN} />
         <aside className="git-rail-column" aria-label="Graf commitow z darkstar-server">
-          <GitPanel token={pin} />
+          <GitPanel token={NO_TOKEN} />
         </aside>
       </main>
 
       <footer className="control-room__footer">
-        Graf systemu tylko do odczytu. Git pozwala wylacznie odswiezyc widok albo pobrac origin — bez checkout.
+        Wszystko tylko do odczytu. Git pozwala wylacznie odswiezyc widok — bez checkout, merge i reset.
       </footer>
     </div>
   )

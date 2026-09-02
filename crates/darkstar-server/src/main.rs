@@ -25,6 +25,7 @@ mod context_http;
 mod gateway_http;
 mod git_http;
 mod http;
+mod loopback;
 
 use std::{env, net::SocketAddr};
 
@@ -66,18 +67,32 @@ async fn main() {
         state.api_token.clone(),
         std::sync::Arc::new(git_http::SystemGitRunner::new(&git_worktree)),
     ));
+    // Zdjecie zamka dla lokalnego operatora. Warstwa jest JEDNA i obejmuje cale drzewo
+    // sciezek: zapytanie z petli zwrotnej bez wlasnego naglowka dostaje doklejony token.
+    // Adres spoza petli przechodzi nietkniety, wiec konczy sie 401 tak jak wczesniej.
+    // Przywrocenie zamka to usuniecie tej jednej warstwy.
+    let loopback_state = loopback::LoopbackState::new(state.api_token.clone());
     let app = http::router(state)
         .merge(gateway)
         .merge(context)
-        .merge(git);
+        .merge(git)
+        .layer(axum::middleware::from_fn_with_state(
+            loopback_state,
+            loopback::allow_loopback,
+        ));
     tracing::info!(%address, api_version = darkstar_core::API_VERSION, "darkstar server starting");
 
     let listener = tokio::net::TcpListener::bind(address)
         .await
         .expect("bind Darkstar listener");
-    axum::serve(listener, app)
-        .await
-        .expect("serve Darkstar HTTP application");
+    // Adres drugiej strony polaczenia musi dojechac do warstwy posredniej, inaczej
+    // nie da sie odroznic petli zwrotnej od reszty i wszystko konczy sie 401.
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .await
+    .expect("serve Darkstar HTTP application");
 }
 
 #[cfg(test)]

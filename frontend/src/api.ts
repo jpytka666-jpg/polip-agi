@@ -214,13 +214,17 @@ export interface GitOverview {
  * endpoint istnieje i ma nam cos do powiedzenia, wiec leca dalej jako bledy.
  *
  * Naglowek budowany jest tutaj, a nie przez authorizationHeaders() - ta funkcja przepuszcza
- * wylacznie PIN o dlugosci OPERATOR_PIN_LENGTH, a ten odczyt ma dotrzec do serwera takze
- * wtedy, gdy PIN jest niepelny; odpowiedzia jest wtedy uczciwe 401 z Rusta.
+ * wylacznie napis o dlugosci OPERATOR_PIN_LENGTH, a ten odczyt ma dotrzec do serwera takze
+ * przy napisie niepelnym; odpowiedzia jest wtedy uczciwe 401 z Rusta.
+ *
+ * Pusty napis oznacza BRAK naglowka, a nie naglowek pusty. To rozroznienie jest istotne:
+ * serwer wpuszcza petle zwrotna tylko wtedy, gdy zapytanie wlasnego naglowka nie przynioslo.
+ * "Bearer " bez wartosci bylby naglowkiem bledym i skonczylby sie 401.
  */
 export async function fetchGitOverview(pin: string): Promise<GitOverview | null> {
   const response = await fetch('/v1/git/overview', {
     method: 'GET',
-    headers: { authorization: `Bearer ${pin}` },
+    headers: pin ? { authorization: `Bearer ${pin}` } : {},
   })
   if (response.status === 404) {
     return null
