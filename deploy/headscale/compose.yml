@@ -28,6 +28,11 @@ services:
     container_name: darkstar-headscale
     restart: unless-stopped
 
+    # Bez tego kontener startuje `headscale` bez podpolecenia, wypisuje pomoc i konczy sie
+    # natychmiast - zmierzone: obraz wstawal, po czym /health nie odpowiadal wcale.
+    # `serve` to jedyne podpolecenie uruchamiajace serwer; nie zmienia niczego w mesh.
+    command: ["serve"]
+
     # Siec hosta zamiast mostka z publikowaniem portow. Powod jest twardy: ten host jest
     # brama domowa. Wlasna siec dockerowa dokladalaby nowy mostek i reguly przekierowania
     # do zywej maszyny routujacej. network_mode: host nie dodaje ANI JEDNEJ reguly -
