@@ -28,6 +28,7 @@ GITHUB METADATA: jpytka666-jpg/polip-agi, branch docs/darkstar-headscale-hotspot
 */
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { createPortal } from 'react-dom'
 import {
   Background,
   Controls,
@@ -70,22 +71,21 @@ const KIND_ICON: Record<string, string> = {
   runtime: '●',
 }
 
-const NODE_W = 280
-const NODE_H = 96
+const NODE_W = 340
+const NODE_H = 132
 // Wieksze korytarze: przewody prowadzone pod katem prostym potrzebuja miejsca
 // miedzy kolumnami, inaczej nakladaja sie na siebie.
-const GAP_Y = 54
-const GAP_X = 210
+const GAP_Y = 58
+const GAP_X = 230
 
 type NodeData = ArchitectureNode & { active: boolean; dimmed: boolean }
 
 function ArchNode({ data }: NodeProps) {
   const d = data as unknown as NodeData
-  const tip = [
-    `id: ${d.id}`,
-    `rodzaj: ${KIND_LABEL[d.kind] ?? d.kind}`,
-    `rola: ${d.role ?? 'brak'}`,
-  ].join('\n')
+  // Popup renderujemy PRZEZ PORTAL do body. Wewnatrz plotna position: fixed liczy
+  // sie wzgledem transformowanego rodzica, wiec okno wedrowaloby razem z widokiem
+  // i skalowalo sie z zoomem. Poza plotnem siedzi na srodku ekranu i ma staly rozmiar.
+  const [open, setOpen] = useState(false)
 
   const cls = [
     'gnode',
@@ -97,18 +97,54 @@ function ArchNode({ data }: NodeProps) {
     .join(' ')
 
   return (
-    <div className={cls} title={tip}>
+    <div className={cls} onMouseEnter={() => setOpen(true)} onMouseLeave={() => setOpen(false)}>
       <Handle type="target" position={Position.Left} />
       <span className="gnode__icon" aria-hidden="true">
         {KIND_ICON[d.kind] ?? '·'}
       </span>
       <span className="gnode__text">
         <span className="gnode__name">{d.name}</span>
-        <span className="gnode__kind">
-          {KIND_LABEL[d.kind] ?? d.kind}
-          {d.role ? ` · ${d.role}` : ''}
-        </span>
+        <span className="gnode__kind">{KIND_LABEL[d.kind] ?? d.kind}</span>
+        {d.role ? <span className="gnode__role">{d.role}</span> : null}
       </span>
+
+      {/* Okno szczegolow: zawsze na srodku ekranu, staly rozmiar, mysz moze na nie wejsc. */}
+      {open
+        ? createPortal(
+            <>
+              {/* Klikniecie w tlo zamyka okno - tak jak zjechanie z niego myszka. */}
+              <div className="gpop__backdrop" onClick={() => setOpen(false)} />
+              <div
+                className="gpop"
+                role="tooltip"
+                onMouseEnter={() => setOpen(true)}
+                onMouseLeave={() => setOpen(false)}
+              >
+              <div className="gpop__body">
+                <span className="gpop__title">{d.name}</span>
+                <dl className="gpop__facts">
+                  <dt>id</dt>
+                  <dd>{d.id}</dd>
+                  <dt>rodzaj</dt>
+                  <dd>{KIND_LABEL[d.kind] ?? d.kind}</dd>
+                  <dt>rola</dt>
+                  <dd>{d.role ?? '—'}</dd>
+                  <dt>system</dt>
+                  <dd>{d.system ?? '—'}</dd>
+                  <dt>jezyk</dt>
+                  <dd>{d.language ?? '—'}</dd>
+                </dl>
+                  <p className="gpop__note">
+                    Tresc mozna zaznaczyc i skopiowac. Okno znika po zjechaniu myszka
+                    albo po kliknieciu w tlo.
+                  </p>
+                </div>
+              </div>
+            </>,
+            document.body,
+          )
+        : null}
+
       <Handle type="source" position={Position.Right} />
     </div>
   )
@@ -279,9 +315,14 @@ export function SystemGraph({ token }: { token: string }) {
         </span>
         {selected ? <span className="badge">sciezka: {linked} sasiadow</span> : null}
         {muted.size ? <span className="badge badge--muted">ukryte nitki: {muted.size}</span> : null}
+        {!selected ? (
+          <span className="graph-hint">
+            klik wezla = sciezka · przelacznik na przewodzie ukrywa go tylko na plotnie
+          </span>
+        ) : null}
       </h2>
 
-      <div className="graph-layout">
+      <div className={`graph-layout${selected ? ' graph-layout--split' : ''}`}>
         <div className="graph-canvas">
           <ReactFlow
             nodes={flow.nodes}
@@ -290,13 +331,14 @@ export function SystemGraph({ token }: { token: string }) {
             edgeTypes={edgeTypes}
             onNodeClick={onNodeClick}
             onPaneClick={() => setSelected(null)}
-            fitView
-            // Dopasowanie do calosci potrafilo zejsc do 0.33 i wtedy wezel 280x96
-            // rysowal sie nieczytelnie. Podloga 0.68 trzyma tekst
-            // w rozmiarze, a operator doscrolluje reszte.
-            fitViewOptions={{ padding: 0.12, minZoom: 0.68, maxZoom: 1 }}
-            minZoom={0.3}
-            maxZoom={2}
+            // Bez fitView: przy 17 wezlach i szerokich korytarzach dopasowanie
+            // schodzilo do 0.27-0.35 i karta 340x132 rysowala sie jako 93x36,
+            // a wynik byl niestabilny miedzy odswiezeniami. Staly punkt startowy
+            // jest przewidywalny; reszte robi operator - przyciskami albo kolkiem.
+            defaultViewport={{ x: 48, y: 40, zoom: 0.85 }}
+            // Oddalac wolno do woli.
+            minZoom={0.12}
+            maxZoom={2.5}
           >
             <Background gap={24} size={1} />
             <MiniMap pannable zoomable nodeStrokeWidth={2} />
@@ -325,15 +367,7 @@ export function SystemGraph({ token }: { token: string }) {
               Zamknij
             </button>
           </aside>
-        ) : (
-          <aside className="graph-details graph-details--empty">
-            <p className="dim">
-              Kliknij wezel, zeby podswietlic jego sciezke.
-              <br />
-              Przelacznik na nitce ukrywa ja na plotnie - nie zmienia systemu.
-            </p>
-          </aside>
-        )}
+        ) : null}
       </div>
     </section>
   )
