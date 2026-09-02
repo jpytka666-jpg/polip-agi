@@ -1,3 +1,8 @@
+# darkstar-header-v1
+# po co: host-guard.nft
+# nie wolno: hotspot, ruszac wlp2s0, wracac do 10.44, gasic DARKSTAR-WiFi, haslo w gicie
+# autor: Marcin
+# powstal: 2026-09-02
 # THIS IS VERY IMPORTANT!!!
 # ==========================================
 # AUTHOR: M. SZUL
@@ -50,6 +55,18 @@ table inet darkstar_host_guard {
         iifname @upstream_ifaces udp sport 547 udp dport 546 accept comment "IPv6 DHCP client"
 
         iifname @downstream_ifaces ip saddr @darkstar_downstream_ipv4 tcp dport 22 accept comment "downstream SSH management after Task 5"
+
+        # NIEZASTOSOWANA. Regula lezy w pliku i czeka na swiadome przeladowanie zapory
+        # przez operatora - w tej sesji nie wykonano ani `nft -f`, ani restartu
+        # darkstar-firewall.service. Dopoki tego nie ma, port 8080 jest z sieci prywatnej
+        # nieosiagalny: zmierzone z Windows 192.168.2.50 - TcpTestSucceeded False na 8080
+        # przy jednoczesnym True na porcie 22.
+        #
+        # Zakres jest ten sam co u SSH powyzej: wylacznie interfejs downstream i wylacznie
+        # zrodla z @darkstar_downstream_ipv4, czyli 192.168.2.0/24. Z sieci nadrzednej
+        # Vodafone (@upstream_ifaces) nadal nie przechodzi nic poza transportem WireGuard
+        # i klientem DHCP - ta regula tego nie zmienia.
+        iifname @downstream_ifaces ip saddr @darkstar_downstream_ipv4 tcp dport 8080 accept comment "downstream Headscale control server, Task 13"
     }
 
     chain forward {
