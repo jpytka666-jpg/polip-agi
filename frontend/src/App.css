@@ -36,6 +36,13 @@ GITHUB METADATA: jpytka666-jpg/polip-agi, branch docs/darkstar-headscale-hotspot
   --muted: #b5b09c;
 
   --accent: #c6f135;
+  /* Chrom Aero: zloto na obwodkach i belkach, 8.2:1 na panelu - czytelne. */
+  --gold: #d4af37;
+  --gold-line: rgba(212, 175, 55, 0.55);
+  --value: #d8d8d8;
+  --hint: #c8c8c8;
+  /* Lustrzane swiatlo od gory - biel 20% na pierwszym pikselu krawedzi. */
+  --sheen: rgba(255, 255, 255, 0.2);
   --ok: #9ae86a;
   --warn: #f5d76e;
   /* #e23b3b dawalo 4.0:1 - za ciemne na tym tle. Rozjasnione do 7.9:1. */
@@ -75,9 +82,11 @@ body {
   justify-content: space-between;
   gap: 1rem;
   padding: 0.9rem 1.5rem;
-  background: rgba(13, 18, 8, 0.74);
-  backdrop-filter: blur(14px) saturate(140%);
-  border-bottom: 1px solid var(--line);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(13, 18, 8, 0.78));
+  backdrop-filter: blur(16px) saturate(140%);
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
+  border-bottom: 1px solid var(--gold-line);
+  box-shadow: inset 0 1px 0 var(--sheen);
 }
 
 .control-room__header h1 {
@@ -167,12 +176,22 @@ body {
 
 .panel {
   position: relative;
-  background: var(--glass);
-  backdrop-filter: blur(18px) saturate(135%);
-  border: 1px solid var(--line);
+  /* Szklo, nie plyta: przezroczystosc + rozmycie tla + lustrzane swiatlo od gory. */
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.09) 0%,
+    rgba(214, 240, 160, 0.05) 42%,
+    rgba(214, 240, 160, 0.03) 100%
+  );
+  backdrop-filter: blur(16px) saturate(140%);
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
+  border: 1px solid var(--gold-line);
   border-radius: 14px;
   padding: 1.05rem 1.15rem;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.32);
+  box-shadow:
+    inset 0 1px 0 var(--sheen),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.25),
+    0 10px 30px rgba(0, 0, 0, 0.38);
   min-width: 0;
 }
 
@@ -212,17 +231,19 @@ body {
   font-weight: 600;
   letter-spacing: 0.09em;
   text-transform: uppercase;
-  color: var(--ink-soft);
+  color: var(--gold);
   display: flex;
   align-items: center;
   gap: 0.55rem;
+  padding-bottom: 0.55rem;
+  border-bottom: 1px solid var(--gold-line);
 }
 
 .badge {
-  background: rgba(198, 241, 53, 0.14);
-  border: 1px solid rgba(198, 241, 53, 0.38);
+  background: rgba(212, 175, 55, 0.12);
+  border: 1px solid var(--gold-line);
   border-radius: 999px;
-  color: var(--accent);
+  color: var(--gold);
   font-size: 0.68rem;
   font-weight: 600;
   letter-spacing: 0.04em;
@@ -244,7 +265,7 @@ body {
 
 .facts dd {
   margin: 0;
-  color: var(--ink);
+  color: var(--value);
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   overflow-wrap: anywhere;
 }
@@ -287,7 +308,7 @@ body {
 }
 
 .note {
-  color: var(--muted);
+  color: var(--gold);
   font-size: 0.76rem;
   margin: 0.95rem 0 0;
 }
@@ -306,7 +327,8 @@ body {
 .graph-canvas {
   flex: 1;
   min-height: 27rem;
-  border: 1px solid var(--line);
+  border: 1px solid var(--gold-line);
+  box-shadow: inset 0 1px 0 var(--sheen);
   border-radius: 10px;
   overflow: hidden;
   background: rgba(0, 0, 0, 0.18);
@@ -319,8 +341,8 @@ body {
 }
 
 .control-room__footer {
-  border-top: 1px solid var(--line);
-  color: var(--muted);
+  border-top: 1px solid var(--gold-line);
+  color: var(--gold);
   font-size: 0.76rem;
   padding: 0.8rem 1.5rem;
 }
@@ -419,8 +441,11 @@ body {
 .gnode--runtime .gnode__icon    { color: #8a5a00; }
 
 .graph-details {
-  background: var(--glass);
-  border: 1px solid var(--line);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(214, 240, 160, 0.04));
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  box-shadow: inset 0 1px 0 var(--sheen);
+  border: 1px solid var(--gold-line);
   border-radius: 12px;
   padding: 0.9rem 1rem;
   overflow: auto;
@@ -440,6 +465,10 @@ body {
   justify-content: center;
   text-align: center;
   font-size: 0.82rem;
+}
+
+.graph-details--empty .dim {
+  color: var(--hint);
 }
 
 .graph-details__close {
@@ -500,9 +529,11 @@ body {
 }
 
 .react-flow__minimap {
-  background: rgba(13, 18, 8, 0.8) !important;
-  border: 1px solid var(--line);
+  background: rgba(42, 42, 42, 0.82) !important;
+  backdrop-filter: blur(16px);
+  border: 1px solid var(--gold-line);
   border-radius: 8px;
+  box-shadow: inset 0 1px 0 var(--sheen);
 }
 
 .react-flow__minimap-mask {
@@ -510,8 +541,8 @@ body {
 }
 
 .react-flow__minimap-node {
-  fill: rgba(214, 240, 160, 0.45) !important;
-  stroke: var(--line) !important;
+  fill: rgba(216, 216, 216, 0.6) !important;
+  stroke: rgba(212, 175, 55, 0.5) !important;
 }
 
 .react-flow__attribution {
