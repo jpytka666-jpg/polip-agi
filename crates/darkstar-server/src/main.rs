@@ -24,13 +24,38 @@
 mod context_http;
 mod gateway_http;
 mod git_http;
+mod headscale_http;
 mod http;
 mod loopback;
 
 use std::{env, net::SocketAddr};
 
+use darkstar_core::context_client::ContextTransport;
+use headscale_http::{HeadscaleError, HeadscaleReader};
 use http::AppState;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+
+/// Odczyt Headscale oparty o klienta, ktory juz stoi w warstwie kontekstu.
+///
+/// Swiadomie NIE powstaje tu drugi klient HTTP. `ReadOnlyHttp` umie wylacznie GET bez
+/// naglowkow i to wystarcza na `/health`, ktore Headscale wystawia bez autoryzacji.
+/// Lista wezlow wymaga klucza API w naglowku, wiec dopoki klucza nie ma, ta sciezka
+/// zwraca blad zamiast udawac, ze odczytala pusta liste - `read_nodes` i tak jej nie
+/// wola, poki DARKSTAR_HEADSCALE_APIKEY nie jest ustawione.
+struct HeadscaleViaReadOnlyHttp(context_http::ReadOnlyHttp);
+
+impl HeadscaleReader for HeadscaleViaReadOnlyHttp {
+    fn get(&self, url: &str, api_key: Option<&str>) -> Result<String, HeadscaleError> {
+        if api_key.is_some() {
+            return Err(HeadscaleError::new(
+                "klucz API wymaga klienta z naglowkami - jeszcze niepodpiety",
+            ));
+        }
+        self.0
+            .get(url)
+            .map_err(|err| HeadscaleError::new(err.to_string()))
+    }
+}
 
 #[tokio::main]
 async fn main() {
@@ -67,6 +92,19 @@ async fn main() {
         state.api_token.clone(),
         std::sync::Arc::new(git_http::SystemGitRunner::new(&git_worktree)),
     ));
+    // Prywatny mesh OBOK dzialajacego Tailscale, nigdy zamiast niego. Adres domyslny to
+    // petla zwrotna - Headscale nie jest tu nigdy szukany pod adresem publicznym.
+    let headscale_url = env::var("DARKSTAR_HEADSCALE_URL")
+        .unwrap_or_else(|_| "http://127.0.0.1:8080".into());
+    let headscale = headscale_http::headscale_router(headscale_http::HeadscaleState::new(
+        state.api_token.clone(),
+        std::sync::Arc::new(HeadscaleViaReadOnlyHttp(context_http::ReadOnlyHttp)),
+        headscale_url,
+        env::var("DARKSTAR_HEADSCALE_APIKEY")
+            .ok()
+            .filter(|value| !value.is_empty())
+            .map(std::sync::Arc::from),
+    ));
     // Zdjecie zamka dla lokalnego operatora. Warstwa jest JEDNA i obejmuje cale drzewo
     // sciezek: zapytanie z petli zwrotnej bez wlasnego naglowka dostaje doklejony token.
     // Adres spoza petli przechodzi nietkniety, wiec konczy sie 401 tak jak wczesniej.
@@ -76,6 +114,7 @@ async fn main() {
         .merge(gateway)
         .merge(context)
         .merge(git)
+        .merge(headscale)
         .layer(axum::middleware::from_fn_with_state(
             loopback_state,
             loopback::allow_loopback,
