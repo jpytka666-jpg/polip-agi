@@ -27,7 +27,7 @@ GITHUB METADATA: jpytka666-jpg/polip-agi, branch docs/darkstar-headscale-hotspot
 ==========================================
 */
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import {
   Background,
@@ -37,6 +37,7 @@ import {
   Position,
   ReactFlow,
   type Edge,
+  type MiniMapNodeProps,
   type Node,
   type NodeProps,
 } from '@xyflow/react'
@@ -108,6 +109,78 @@ const GAP_Y = 46
 const GAP_X = 200
 
 type NodeData = ArchitectureNode & { active: boolean; dimmed: boolean }
+
+type MiniMapInteraction = {
+  showPreview: (nodeId: string | null) => void
+  selectNode: (nodeId: string) => void
+}
+
+const MiniMapInteractionContext = createContext<MiniMapInteraction>({
+  showPreview: () => undefined,
+  selectNode: () => undefined,
+})
+
+/**
+ * Wlasny prostokat minimapy dodaje jedynie semantyczny hover. Nawigacja, pan i zoom
+ * nadal naleza do React Flow, wiec nie powstaje drugi silnik grafu.
+ */
+function InteractiveMiniMapNode({
+  id,
+  x,
+  y,
+  width,
+  height,
+  style,
+  color,
+  strokeColor,
+  strokeWidth,
+  className,
+  borderRadius,
+  selected,
+}: MiniMapNodeProps) {
+  const { showPreview, selectNode } = useContext(MiniMapInteractionContext)
+  const fill = color ?? (
+    typeof style?.background === 'string'
+      ? style.background
+      : typeof style?.backgroundColor === 'string'
+        ? style.backgroundColor
+        : undefined
+  )
+
+  return (
+    <rect
+      className={[
+        'react-flow__minimap-node',
+        selected ? 'selected' : '',
+        className,
+      ].filter(Boolean).join(' ')}
+      data-node-id={id}
+      x={x}
+      y={y}
+      rx={borderRadius}
+      ry={borderRadius}
+      width={width}
+      height={height}
+      style={{ fill, stroke: strokeColor, strokeWidth }}
+      role="button"
+      tabIndex={0}
+      aria-label={`Pokaz szczegoly wezla ${id}`}
+      onMouseEnter={() => showPreview(id)}
+      onMouseLeave={() => showPreview(null)}
+      onPointerDown={(event) => event.stopPropagation()}
+      onClick={(event) => {
+        event.stopPropagation()
+        selectNode(id)
+      }}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault()
+          selectNode(id)
+        }
+      }}
+    />
+  )
+}
 
 function ArchNode({ data }: NodeProps) {
   const d = data as unknown as NodeData
@@ -255,6 +328,7 @@ export function SystemGraph({ token }: { token: string }) {
   const [result, setResult] = useState<{ nodeId: string; data: ReadCommandResult } | null>(null)
   const [running, setRunning] = useState(false)
   const [runError, setRunError] = useState<string | null>(null)
+  const [minimapPreviewId, setMinimapPreviewId] = useState<string | null>(null)
 
   const toggleEdge = useCallback((id: string) => {
     setMuted((prev) => {
@@ -427,11 +501,26 @@ export function SystemGraph({ token }: { token: string }) {
     return { nodes, edges, onPath }
   }, [snapshot, selected, muted, hiddenModes, run])
 
-  const onNodeClick = useCallback((_: unknown, node: Node) => {
-    setSelected((node.data as unknown as ArchitectureNode) ?? null)
+  const selectArchitectureNode = useCallback((node: ArchitectureNode) => {
+    setSelected(node)
+    setMinimapPreviewId(null)
     setResult(null)
     setRunError(null)
   }, [])
+
+  const onNodeClick = useCallback((_: unknown, node: Node) => {
+    selectArchitectureNode(node.data as unknown as ArchitectureNode)
+  }, [selectArchitectureNode])
+
+  const onMiniMapNodeClick = useCallback((nodeId: string) => {
+    const node = snapshot?.nodes.find((candidate) => candidate.id === nodeId)
+    if (node) selectArchitectureNode(node)
+  }, [selectArchitectureNode, snapshot])
+
+  const minimapInteraction = useMemo<MiniMapInteraction>(() => ({
+    showPreview: setMinimapPreviewId,
+    selectNode: onMiniMapNodeClick,
+  }), [onMiniMapNodeClick])
 
   if (error) {
     return (
@@ -443,6 +532,15 @@ export function SystemGraph({ token }: { token: string }) {
   }
 
   const linked = selected ? Math.max(flow.onPath.size - 1, 0) : 0
+  const minimapPreview = snapshot?.nodes.find((node) => node.id === minimapPreviewId) ?? null
+  const minimapCommand = minimapPreview ? commandFor(minimapPreview.id) : null
+  const minimapState = minimapPreview
+    ? selected?.id === minimapPreview.id
+      ? 'wybrany'
+      : flow.onPath.has(minimapPreview.id)
+        ? 'na aktywnej sciezce'
+        : 'gotowy do wyboru'
+    : null
 
   return (
     <section className="panel panel--graph">
@@ -500,20 +598,42 @@ export function SystemGraph({ token }: { token: string }) {
             maxZoom={2.5}
           >
             <Background gap={24} size={1} />
-            <MiniMap
-              pannable
-              zoomable
-              onNodeClick={onNodeClick}
-              nodeStrokeWidth={2}
-              ariaLabel="Miniatura grafu: przeciagaj, przyblizaj albo kliknij wezel, aby zobaczyc szczegoly"
-              // Ten sam kolor co kropka rodzaju na karcie, wiec miniatura czyta sie
-              // tak samo jak plotno.
-              nodeColor={(node) =>
-                MINIMAP_COLOR[(node.data as unknown as ArchitectureNode).kind] ?? '#6b6b6b'
-              }
-            />
+            <MiniMapInteractionContext.Provider value={minimapInteraction}>
+              <MiniMap
+                pannable
+                zoomable
+                zoomStep={2}
+                onMouseLeave={() => setMinimapPreviewId(null)}
+                nodeComponent={InteractiveMiniMapNode}
+                nodeStrokeWidth={2}
+                ariaLabel="Nawigator grafu: przeciagaj widok, przyblizaj kolkiem, najedz po podglad albo kliknij po szczegoly"
+                // Ten sam kolor co kropka rodzaju na karcie, wiec miniatura czyta sie
+                // tak samo jak plotno.
+                nodeColor={(node) =>
+                  MINIMAP_COLOR[(node.data as unknown as ArchitectureNode).kind] ?? '#6b6b6b'
+                }
+              />
+            </MiniMapInteractionContext.Provider>
             <Controls showInteractive={false} />
           </ReactFlow>
+          {minimapPreview ? (
+            <aside className="minimap-preview" aria-label={`Podglad ${minimapPreview.name}`}>
+              <div className="minimap-preview__head">
+                <strong>{minimapPreview.name}</strong>
+                <span>{KIND_LABEL[minimapPreview.kind] ?? minimapPreview.kind}</span>
+              </div>
+              <p>{minimapPreview.role ?? 'Rola nieopisana w snapshotcie.'}</p>
+              <dl>
+                <dt>system</dt>
+                <dd>{minimapPreview.system ?? 'nie przypisano'}</dd>
+                <dt>stan</dt>
+                <dd>{minimapState}</dd>
+                <dt>funkcja</dt>
+                <dd>{minimapCommand?.what ?? 'brak komendy GET'}</dd>
+              </dl>
+              <small>Kliknij mini-wezel, aby przypiac pelne szczegoly.</small>
+            </aside>
+          ) : null}
         </div>
 
         {selected ? (
