@@ -40,6 +40,7 @@ GITHUB METADATA: jpytka666-jpg/polip-agi, branch docs/darkstar-headscale-hotspot
 import { useEffect, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { BaseEdge, EdgeLabelRenderer, getSmoothStepPath, type EdgeProps } from '@xyflow/react'
+import { MODE, odmien, travelSeconds, type TransportMode } from './transport'
 
 export type FlowEdgeData = {
   label: string
@@ -48,19 +49,12 @@ export type FlowEdgeData = {
   dimmed: boolean
   cars: number
   /** 'rail' = w jednym procesie, 'air' = przez siec, 'sea' = wyjscie na zewnatrz. */
-  mode: 'rail' | 'air' | 'sea'
+  mode: TransportMode
+  /** Czy caly ten rodzaj ruchu jest wlaczony. Osobno od `enabled`, ktore dotyczy jednej trasy. */
+  modeEnabled: boolean
   /** Zanurzenie: odleglosc wezla docelowego od korzenia grafu. Miara struktury, nie glebokosci sieci. */
   depth: number
   onToggle: (id: string) => void
-}
-
-/** Polska odmiana po liczbie: 1 wagon, 2 wagony, 5 wagonow. */
-function odmien(n: number, jeden: string, kilka: string, wiele: string) {
-  const ostatnia = n % 10
-  const dwie = n % 100
-  if (n === 1) return jeden
-  if (ostatnia >= 2 && ostatnia <= 4 && (dwie < 12 || dwie > 14)) return kilka
-  return wiele
 }
 
 const CAR_W = 15
@@ -223,12 +217,16 @@ export function FlowEdge({
   const air = d.mode === 'air'
   const sea = d.mode === 'sea'
 
+  // Kazdy rodzaj transportu dostaje wlasny pas: trasa jest przesunieta w pionie o stala
+  // z MODE[...].lane. Dzieki temu pociagi, samoloty i lodzie biegna rownolegle zamiast
+  // jedno po drugim - i mozna zgasic jeden rodzaj, nie ruszajac pozostalych.
+  const lane = MODE[d.mode].lane
   const [path, labelX, labelY] = getSmoothStepPath({
     sourceX,
-    sourceY,
+    sourceY: sourceY + lane,
     sourcePosition,
     targetX,
-    targetY,
+    targetY: targetY + lane,
     targetPosition,
     borderRadius: sea ? 30 : air ? 24 : 10,
     offset: 26,
@@ -249,7 +247,13 @@ export function FlowEdge({
         : '#2b8a3e'
   const rail = d.enabled ? live : '#6b0f1a'
   const cars = Math.max(1, Math.min(d.cars, 6))
-  const dur = d.lit ? '2.4s' : '4.4s'
+  // Czas przejazdu bierze sie z rodzaju trasy i dlugosci skladu, a nie z tego, czy
+  // trasa jest podswietlona. Podswietlenie tylko przyspiesza o jedna czwarta, zeby
+  // wybrana sciezka rzucala sie w oczy.
+  const seconds = travelSeconds(d.mode, cars) * (d.lit ? 0.75 : 1)
+  const dur = `${seconds.toFixed(2)}s`
+  // Ruch stoi, gdy zamknieta jest ta trasa albo caly jej rodzaj.
+  const moving = d.enabled && d.modeEnabled
   const faded = d.dimmed && !d.lit
 
   return (
@@ -293,7 +297,7 @@ export function FlowEdge({
         />
       ) : null}
 
-      {d.enabled ? (
+      {moving ? (
         <g className="train">
           {sea ? (
             /* Okret podwodny: kadlub, kiosk i peryskop. */
@@ -402,12 +406,16 @@ export function FlowEdge({
             <dd>{d.enabled ? 'otwarta — ruch idzie' : 'zamknieta — ruch stoi'}</dd>
             <dt>gdy otwarta</dt>
             <dd>
-              widac trase, a po niej jedzie {cars}{' '}
-              {sea
-                ? odmien(cars, 'lodz', 'lodzie', 'lodzi')
-                : air
-                  ? odmien(cars, 'samolot', 'samoloty', 'samolotow')
-                  : odmien(cars, 'wagon', 'wagony', 'wagonow')}
+              widac trase, a po niej jedzie {cars} {odmien(cars, MODE[d.mode].unit)}
+            </dd>
+            <dt>jak szybko</dt>
+            <dd>
+              {MODE[d.mode].speedWhy}; pelny przejazd trwa {dur}, dluzszy sklad jedzie wolniej
+            </dd>
+            <dt>wlasny pas</dt>
+            <dd>
+              {MODE[d.mode].title.toLowerCase()} jada osobnym pasem, wiec mozna zatrzymac je
+              wszystkie i zostawic reszte ruchu
             </dd>
             <dt>gdy zamknieta</dt>
             <dd>trasa robi sie czerwona i przerywana, nic po niej nie jedzie</dd>
@@ -423,8 +431,8 @@ export function FlowEdge({
               <>
                 <dt>jak gleboko</dt>
                 <dd>
-                  {d.depth} {odmien(d.depth, 'przystanek', 'przystanki', 'przystankow')} od
-                  glownego katalogu
+                  {d.depth} {odmien(d.depth, ['przystanek', 'przystanki', 'przystankow'])}{' '}
+                  od glownego katalogu
                 </dd>
               </>
             ) : null}

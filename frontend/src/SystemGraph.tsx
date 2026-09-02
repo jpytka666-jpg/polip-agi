@@ -43,6 +43,8 @@ import {
 import '@xyflow/react/dist/style.css'
 import { FlowEdge } from './FlowEdge'
 import { fetchSystemGraph, type ArchitectureNode, type ArchitectureSnapshot } from './api'
+import { execute, type Command } from './commands'
+import { MODE, MODES, type TransportMode } from './transport'
 
 const COLUMN: Record<string, number> = {
   repository: 0,
@@ -227,6 +229,10 @@ export function SystemGraph({ token }: { token: string }) {
   // Wylaczone nitki zyja TYLKO w widoku - API nie ma zadnej sciezki zapisu.
   const [muted, setMuted] = useState<Set<string>>(new Set())
 
+  // Zgaszone rodzaje ruchu. Osobno od `muted`: tam chowa sie pojedyncza trase,
+  // tu caly rodzaj naraz - wszystkie lodzie albo wszystkie samoloty.
+  const [hiddenModes, setHiddenModes] = useState<Set<TransportMode>>(new Set())
+
   const toggleEdge = useCallback((id: string) => {
     setMuted((prev) => {
       const next = new Set(prev)
@@ -235,6 +241,30 @@ export function SystemGraph({ token }: { token: string }) {
       return next
     })
   }, [])
+
+  const toggleMode = useCallback((mode: TransportMode) => {
+    setHiddenModes((prev) => {
+      const next = new Set(prev)
+      if (next.has(mode)) next.delete(mode)
+      else next.add(mode)
+      return next
+    })
+  }, [])
+
+  const selectNode = useCallback((nodeId: string | null) => {
+    if (nodeId === null) setSelected(null)
+  }, [])
+
+  // Kazda akcja diagramu wychodzi tedy - takze te, ktorych dzis wykonac nie wolno.
+  // Odrzucenie wraca z powodem i ladnie widac je w konsoli zamiast cichego nic.
+  const run = useCallback(
+    (cmd: Command) => {
+      const result = execute(cmd, { toggleEdge, toggleMode, selectNode })
+      if (!result.ok) console.warn(result.reason)
+      return result
+    },
+    [toggleEdge, toggleMode, selectNode],
+  )
 
   useEffect(() => {
     let cancelled = false
@@ -340,14 +370,15 @@ export function SystemGraph({ token }: { token: string }) {
           dimmed: activeId !== null,
           cars: Math.max(1, Math.min(degree.get(edge.to) ?? 1, 6)),
           mode,
+          modeEnabled: !hiddenModes.has(mode),
           depth: depthOf.get(edge.to) ?? depthOf.get(edge.from) ?? 0,
-          onToggle: toggleEdge,
+          onToggle: (edgeId: string) => run({ kind: 'toggle-edge', scope: 'view', edgeId }),
         },
       }
     })
 
     return { nodes, edges, onPath }
-  }, [snapshot, selected, muted, toggleEdge])
+  }, [snapshot, selected, muted, hiddenModes, run])
 
   const onNodeClick = useCallback((_: unknown, node: Node) => {
     setSelected((node.data as unknown as ArchitectureNode) ?? null)
@@ -379,6 +410,30 @@ export function SystemGraph({ token }: { token: string }) {
           </span>
         ) : null}
       </h2>
+
+      <div className="lane-bar" role="group" aria-label="Rodzaje ruchu">
+        {MODES.map((mode) => {
+          const on = !hiddenModes.has(mode)
+          const spec = MODE[mode]
+          return (
+            <button
+              key={mode}
+              type="button"
+              className={`lane-bar__btn lane-bar__btn--${mode}${on ? ' lane-bar__btn--on' : ''}`}
+              aria-pressed={on}
+              title={`${spec.meaning}; ${spec.speedWhy}`}
+              onClick={() => run({ kind: 'toggle-mode', scope: 'view', mode })}
+            >
+              <span className="lane-bar__glyph">{spec.glyph}</span>
+              <span className="lane-bar__name">{spec.title}</span>
+              <span className="lane-bar__state">{on ? 'jada' : 'stoja'}</span>
+            </button>
+          )
+        })}
+        <span className="lane-bar__hint">
+          Kazdy rodzaj jedzie wlasnym pasem, wiec mozna zatrzymac jeden i zostawic reszte.
+        </span>
+      </div>
 
       <div className={`graph-layout${selected ? ' graph-layout--split' : ''}`}>
         <div className="graph-canvas">
