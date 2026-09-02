@@ -1,0 +1,79 @@
+#!/bin/sh
+# darkstar-header-v1
+# po co: join-cbms
+# nie wolno: dotykac biezacego tailscaled do SaaS, przyjmowac klucza z pliku w repozytorium
+# Autor: Marcin Szul
+# Model: Claude
+# Czas: 2026-09-03T00:30:00+01:00
+# Po co: Dolacza CBMS do prywatnego mesh przez DRUGI, osobny demon tailscaled, nie ruszajac
+#        polaczenia do Tailscale SaaS, ktore jest jedyna zdalna droga na ten host.
+#
+# THIS IS VERY IMPORTANT!!!
+# ==========================================
+# MECHANICS: Rozmawia wylacznie przez gniazdo drugiego demona. Kazde wywolanie `tailscale`
+# ma jawne --socket, wiec nie ma jak trafic do demona SaaS nawet przez pomylke. Przed
+# dolaczeniem sprawdza trzy rzeczy i przerywa, jesli ktorakolwiek nie gra: czy drugi demon
+# zyje, czy Headscale odpowiada i czy demon SaaS nadal stoi.
+# SYSTEM PART: deploy/headscale - dolaczanie wezlow.
+# ARCHITECTURE FUNCTION: Jedyna sciezka dolaczenia CBMS. Nie ma tu `down`, `logout` ani
+# zadnej operacji na demonie SaaS - i nie wolno ich dolozyc.
+# DEPENDENCIES/LINKS: tailscaled-headscale.service, headscale pod http://192.168.2.1:8080.
+# TECH STACK: POSIX sh - bez zaleznosci, dziala na golym Ubuntu.
+# GIT COMMIT: PENDING
+# GITHUB METADATA: jpytka666-jpg/polip-agi, branch docs/darkstar-headscale-hotspot-plan
+# ==========================================
+#
+# Uzycie:
+#   sudo ./join-cbms <preauth-key>
+#
+# Klucz przychodzi WYLACZNIE argumentem. Nie jest czytany z repozytorium, nie jest tu
+# zapisany i nie wolno go tu wpisac.
+
+set -eu
+
+SOCKET="${DARKSTAR_TS_SOCKET:-/run/tailscale-headscale/tailscaled.sock}"
+LOGIN_SERVER="${TS_LOGIN_SERVER:-http://192.168.2.1:8080}"
+HOSTNAME_IN_MESH="${DARKSTAR_MESH_HOSTNAME:-darkstar-cbms}"
+
+fail() {
+    printf 'join-cbms: %s\n' "$1" >&2
+    exit 1
+}
+
+[ "$#" -eq 1 ] || fail "podaj dokladnie jeden argument: klucz preauth"
+AUTHKEY="$1"
+[ -n "$AUTHKEY" ] || fail "klucz jest pusty"
+
+# 1. Drugi demon musi juz dzialac. Ten skrypt go NIE uruchamia - uruchomienie uslugi jest
+#    swiadoma decyzja operatora, nie skutkiem ubocznym dolaczania wezla.
+[ -S "$SOCKET" ] || fail "brak gniazda $SOCKET - drugi demon nie dziala. Uruchom
+  systemctl start tailscaled-headscale.service"
+
+# 2. Headscale musi odpowiadac, zanim cokolwiek wyslemy.
+if command -v curl >/dev/null 2>&1; then
+    code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 8 "$LOGIN_SERVER/health" || echo 000)
+    [ "$code" = "200" ] || fail "Headscale nie odpowiada pod $LOGIN_SERVER (kod $code)"
+fi
+
+# 3. Demon do SaaS ma NADAL stac. Jesli go nie ma, cos juz poszlo nie tak i dolaczanie
+#    drugiego wezla tylko pogorszy sytuacje - zostaje wtedy sam kabel.
+if command -v tailscale >/dev/null 2>&1; then
+    if ! tailscale status >/dev/null 2>&1; then
+        fail "demon do SaaS nie odpowiada - przerywam, zeby nie zostac bez zdalnej drogi"
+    fi
+fi
+
+printf 'join-cbms: dolaczam %s do %s przez %s\n' "$HOSTNAME_IN_MESH" "$LOGIN_SERVER" "$SOCKET"
+
+# Jawne --socket przy KAZDYM wywolaniu. Bez niego polecenie trafiloby do demona SaaS.
+tailscale --socket="$SOCKET" up \
+    --login-server="$LOGIN_SERVER" \
+    --authkey="$AUTHKEY" \
+    --hostname="$HOSTNAME_IN_MESH" \
+    --accept-dns=false
+
+printf 'join-cbms: stan drugiego demona\n'
+tailscale --socket="$SOCKET" status || true
+
+printf 'join-cbms: stan demona SaaS - MUSI dalej zyc\n'
+tailscale status | head -3 || true

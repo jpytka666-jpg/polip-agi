@@ -1,0 +1,76 @@
+# darkstar-header-v1
+# po co: tailscaled-headscale.service
+# nie wolno: ruszac biezacego tailscaled do SaaS, dzielic z nim stanu, gniazda, portu ani tun
+# Autor: Marcin Szul
+# Model: Claude
+# Czas: 2026-09-03T00:30:00+01:00
+# Po co: Drugi, calkowicie osobny demon tailscaled, ktory gada z wlasnym Headscale,
+#        zeby dolaczenie CBMS do prywatnego mesh nie dotykalo dzialajacego polaczenia do SaaS.
+#
+# THIS IS VERY IMPORTANT!!!
+# ==========================================
+# MECHANICS: Wszystkie cztery zasoby, o ktore dwa demony tailscaled moglyby sie pobic, sa
+# tu rozdzielone JAWNIE: katalog stanu, gniazdo sterujace, urzadzenie tun i port UDP.
+# Pominiecie ktoregokolwiek konczy sie tym, ze nowy demon albo nie wstanie, albo przejmie
+# stan starego - a stary trzyma jedyne zdalne wejscie na ten host.
+# SYSTEM PART: deploy/systemd - prywatny mesh.
+# ARCHITECTURE FUNCTION: Rownolegly klient mesh. Istniejacy tailscaled do SaaS zostaje
+# nietkniety i pozostaje lina ratunkowa dopoki wlasny mesh nie obsluzy obu wezlow.
+# DEPENDENCIES/LINKS: headscale pod http://192.168.2.1:8080; skrypt deploy/headscale/join-cbms.
+# TECH STACK: systemd unit - zgodnie z reszta deploy/systemd.
+# GIT COMMIT: PENDING
+# GITHUB METADATA: jpytka666-jpg/polip-agi, branch docs/darkstar-headscale-hotspot-plan
+#
+# NIEZAINSTALOWANY. Ten plik lezy w repozytorium i nie zostal skopiowany do
+# /etc/systemd/system. W tej sesji nie wykonano ani `systemctl daemon-reload`, ani
+# `systemctl start`. Instrukcja instalacji jest w
+# docs/operations/evidence/2026-09-03-second-tailscaled-unit.md
+# ==========================================
+
+[Unit]
+Description=Darkstar second tailscaled - private Headscale mesh
+Documentation=https://github.com/juanfont/headscale
+# Celowo BEZ Requires/After na tailscaled.service: te dwa demony nie zaleza od siebie
+# i awaria jednego nie ma prawa pociagnac drugiego.
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=notify
+
+# Katalog stanu - wlasny. Stan biezacego demona lezy w /var/lib/tailscale i NIE WOLNO
+# go tu podac: wspoldzielenie stanu zerwaloby polaczenie do SaaS.
+StateDirectory=tailscale-headscale
+StateDirectoryMode=0700
+
+# Katalog gniazda - wlasny, tworzony i sprzatany przez systemd.
+RuntimeDirectory=tailscale-headscale
+RuntimeDirectoryMode=0755
+
+Environment=TS_LOGIN_SERVER=http://192.168.2.1:8080
+
+# Cztery rozdzielenia, kazde konieczne:
+#   --statedir  wlasny stan          (inaczej przejmie tozsamosc demona SaaS)
+#   --socket    wlasne gniazdo       (inaczej `tailscale` trafia do zlego demona)
+#   --tun       wlasne urzadzenie    (inaczej kolizja na tailscale0)
+#   --port      wlasny port UDP      (41641 zajmuje demon SaaS - patrz evidence)
+ExecStart=/usr/sbin/tailscaled \
+    --statedir=/var/lib/tailscale-headscale \
+    --socket=/run/tailscale-headscale/tailscaled.sock \
+    --tun=headscale0 \
+    --port=41642 \
+    --no-logs-no-support
+
+# Zatrzymanie NIE wywoluje `tailscale down` ani `logout` - demon ma zniknac, a wezel
+# pozostac zarejestrowany w Headscale.
+ExecStopPost=/bin/true
+
+Restart=on-failure
+RestartSec=10
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=tailscaled-headscale
+
+[Install]
+WantedBy=multi-user.target
