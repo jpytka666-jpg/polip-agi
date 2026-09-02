@@ -19,34 +19,18 @@ GITHUB METADATA: jpytka666-jpg/polip-agi, branch docs/darkstar-headscale-hotspot
 */
 
 :root {
-  color-scheme: dark;
-
-  /* Paleta w duchu edytora kodu: neutralne szarosci, jeden chlodny akcent.
-     Spokojniejsza od oliwki ze zlotem - kolor niesie znaczenie, nie dekoracje. */
-  --ground: #1b1b1c;
-  --ground-2: #202021;
-  --panel-solid: #252526;
-  --glass: rgba(255, 255, 255, 0.045);
-  --glass-strong: rgba(255, 255, 255, 0.08);
-  --line: #3c3c3d;
-
-  /* Zmierzone wzgledem panelu #252526 - wszystkie >= 7:1:
-     ink 12.3 | soft 9.2 | muted 7.4 | akcent 8.2 | ok 7.5 | warn 10.8 | bad 7.7 */
-  --ink: #e6e6e6;
-  --ink-soft: #c8c8c8;
+  /* Chrom jak w edytorze: ciemny, bez ozdob. */
+  --ground: #161616;
+  --panel: rgba(20, 20, 20, 0.72);
+  --panel-solid: #1a1a1a;
+  --line: #2e2e2e;
+  --gold-line: #c9a227;
+  --sheen: rgba(255, 255, 255, 0.18);
+  --ink: #f0f0f0;
   --muted: #b4b4b4;
-
   --accent: #7cc4ff;
-  --ok: #4ec9b0;
-  --warn: #dcdcaa;
-  --bad: #ff9e8a;
-
-  /* Chrom: cienka jasna linia zamiast zlota. */
-  --gold: #c8c8c8;
-  --gold-line: rgba(255, 255, 255, 0.16);
-  --value: #e6e6e6;
-  --hint: #b4b4b4;
-  --sheen: rgba(255, 255, 255, 0.09);
+  /* Plotno grafu - jasne, zeby kolorowe warstwy mialy na czym lezec. */
+  --canvas: #ececec;
 }
 
 * {
@@ -1142,4 +1126,287 @@ body {
 
 .search-row button[type='submit']:hover {
   border-color: #6a6a6a;
+}
+
+
+/* ================= SKORA AERO =================
+   Szklo: przezroczysta ciemna tafla, rozmycie tla, zlota krawedz i pasek
+   swiatla u gory. Rozmycie dziala tylko tam, gdzie jest co rozmywac, wiec
+   pod spodem lezy jednolity ciemny chrom. */
+
+.panel,
+.graph-details {
+  background: var(--panel);
+  backdrop-filter: blur(18px) saturate(1.2);
+  -webkit-backdrop-filter: blur(18px) saturate(1.2);
+  border: 1px solid var(--gold-line);
+  box-shadow: inset 0 1px 0 var(--sheen), 0 10px 30px rgba(0, 0, 0, 0.45);
+  border-radius: 12px;
+}
+
+.control-room,
+body {
+  background: var(--ground);
+}
+
+.control-room__header,
+.control-room__footer {
+  background: rgba(20, 20, 20, 0.72);
+  backdrop-filter: blur(18px) saturate(1.2);
+  -webkit-backdrop-filter: blur(18px) saturate(1.2);
+  border-bottom: 1px solid var(--line);
+  box-shadow: inset 0 1px 0 var(--sheen);
+}
+
+.graph-canvas,
+.react-flow {
+  background: var(--canvas);
+}
+
+/* ================= WEZEL 280 x 92 ================= */
+
+.gnode {
+  box-sizing: border-box;
+  width: 280px;
+  height: 92px;
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0 0.85rem 0 0.7rem;
+  border-radius: 10px;
+  background: #fff3d6;
+  color: #111111;
+  border: 1px solid #b99a4e;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.85), 0 4px 12px rgba(0, 0, 0, 0.28);
+  min-height: 0;
+}
+
+/* Kropka rodzaju: 8 px, przy lewej krawedzi. Kolor niesie rodzaj, ale nie sam - */
+/* pelna nazwa rodzaju stoi obok, w podtytule. */
+.gnode__icon {
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  font-size: 0;
+  line-height: 0;
+  background: #6b6b6b;
+  overflow: hidden;
+}
+
+.gnode--repository .gnode__icon {
+  background: #b8860b;
+}
+.gnode--directory .gnode__icon {
+  background: #8a6d3b;
+}
+.gnode--module .gnode__icon {
+  background: #2f7d32;
+}
+.gnode--file .gnode__icon {
+  background: #1e5aa8;
+}
+.gnode--dependency .gnode__icon {
+  background: #6b6b6b;
+}
+.gnode--runtime .gnode__icon {
+  background: #0b3d4a;
+}
+
+.gnode__text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.gnode__name {
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.2;
+  color: #111111;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gnode__kind,
+.gnode__role {
+  font-size: 12px;
+  line-height: 1.25;
+  color: #3d3527;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gnode__kind {
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 600;
+}
+
+.gnode--active {
+  border-color: #111111;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.85), 0 0 0 3px #c9a227,
+    0 6px 16px rgba(0, 0, 0, 0.35);
+}
+
+.gnode--dimmed {
+  opacity: 0.42;
+}
+
+/* ================= WARSTWY =================
+   Kolor niesie warstwe, wzor kreski powtarza te sama informacje, a ruch kreski
+   pokazuje kierunek. Trzy kanaly zamiast samego koloru. */
+
+.wire {
+  fill: none;
+  stroke-linecap: round;
+}
+
+@keyframes wire-run {
+  to {
+    stroke-dashoffset: -24;
+  }
+}
+
+/* Pociag: ciagly, z bieznikiem sunacym po szynie. */
+.wire--rail {
+  stroke-dasharray: 18 6;
+  animation: wire-run 1.2s linear infinite;
+}
+
+/* Samolot: kreskowany, szybszy. */
+.wire--air {
+  stroke-dasharray: 10 8;
+  animation: wire-run 0.8s linear infinite;
+}
+
+/* Lodz: dluga kreska, wolniejsza - droga poza system. */
+.wire--sea {
+  stroke-dasharray: 22 8;
+  animation: wire-run 2.4s linear infinite;
+}
+
+/* Nitka schowana przelacznikiem: stoi i jest przerywana. */
+.wire--off {
+  animation: none;
+  stroke-dasharray: 6 7;
+  opacity: 0.75;
+}
+
+.wire--lit {
+  stroke-width: 4;
+}
+
+.wire--dim {
+  opacity: 0.2;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wire {
+    animation: none;
+  }
+}
+
+/* ================= ZWROTNICA 28 x 28 ================= */
+
+.eswitch {
+  box-sizing: border-box;
+  position: absolute;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  display: block;
+  border-radius: 7px;
+  background: #6b6b6b;
+  border: 1px solid #3f3f3f;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35), 0 2px 6px rgba(0, 0, 0, 0.4);
+  pointer-events: all;
+  overflow: visible;
+}
+
+.eswitch--lit {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35), 0 0 0 2px #c9a227,
+    0 2px 8px rgba(0, 0, 0, 0.45);
+}
+
+/* Zamknieta: ciemna krew, zeby stan bylo widac bez najezdzania myszka. */
+.eswitch:not(.eswitch--on) {
+  background: #6b0f1a;
+  border-color: #3d070f;
+}
+
+.eswitch__lever {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.eswitch__base {
+  position: absolute;
+  left: 50%;
+  bottom: 3px;
+  width: 12px;
+  height: 4px;
+  margin-left: -6px;
+  border-radius: 2px;
+  background: #1e1e1e;
+}
+
+.eswitch__arm {
+  position: absolute;
+  left: 50%;
+  bottom: 6px;
+  width: 3px;
+  height: 11px;
+  margin-left: -1.5px;
+  border-radius: 2px;
+  background: #1e1e1e;
+  transform-origin: bottom center;
+  transform: rotate(30deg);
+  transition: transform 0.18s cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+
+.eswitch--on .eswitch__arm {
+  transform: rotate(-30deg);
+}
+
+.eswitch__disc {
+  position: absolute;
+  top: 2px;
+  left: 50%;
+  width: 9px;
+  height: 9px;
+  margin-left: -4.5px;
+  border-radius: 50%;
+  background: #ff9e8a;
+  border: 1.5px solid #2a0509;
+}
+
+.eswitch--on .eswitch__disc {
+  background: #7ee08a;
+  border-color: #123d1c;
+}
+
+.eswitch__lever:focus-visible {
+  outline: 2px solid #c9a227;
+  outline-offset: 2px;
+}
+
+/* Nazwa trasy zostaje dla czytnikow ekranu - na 28 px nie ma jej gdzie napisac,
+   a w oknie po najechaniu jest w calosci. */
+.eswitch__sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }

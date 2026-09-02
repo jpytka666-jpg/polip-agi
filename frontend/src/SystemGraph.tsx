@@ -90,12 +90,12 @@ const KIND_ICON: Record<string, string> = {
   runtime: '●',
 }
 
-const NODE_W = 340
-const NODE_H = 132
+const NODE_W = 280
+const NODE_H = 92
 // Wieksze korytarze: przewody prowadzone pod katem prostym potrzebuja miejsca
 // miedzy kolumnami, inaczej nakladaja sie na siebie.
-const GAP_Y = 58
-const GAP_X = 230
+const GAP_Y = 46
+const GAP_X = 200
 
 type NodeData = ArchitectureNode & { active: boolean; dimmed: boolean }
 

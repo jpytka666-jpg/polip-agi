@@ -40,7 +40,7 @@ GITHUB METADATA: jpytka666-jpg/polip-agi, branch docs/darkstar-headscale-hotspot
 import { useEffect, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { BaseEdge, EdgeLabelRenderer, getSmoothStepPath, type EdgeProps } from '@xyflow/react'
-import { MODE, odmien, type TransportMode } from './transport'
+import { MODE, odmien, travelSeconds, type TransportMode } from './transport'
 
 export type FlowEdgeData = {
   label: string
@@ -55,6 +55,13 @@ export type FlowEdgeData = {
   /** Zanurzenie: odleglosc wezla docelowego od korzenia grafu. Miara struktury, nie glebokosci sieci. */
   depth: number
   onToggle: (id: string) => void
+}
+
+const CAR_W = 15
+const CAR_GAP = 3
+
+function noteKey(edgeId: string, car: number) {
+  return `darkstar_car_note:${edgeId}:${car}`
 }
 
 /** Okno szczegolow - ten sam ksztalt co okno wezla: srodek ekranu, staly rozmiar.
@@ -120,6 +127,78 @@ function DetailWindow({
   )
 }
 
+function CargoWindow({
+  edgeId,
+  car,
+  label,
+  mode,
+  onClose,
+}: {
+  edgeId: string
+  car: number
+  label: string
+  mode: 'rail' | 'air' | 'sea'
+  onClose: () => void
+}) {
+  // Notatke czytamy raz, przy otwarciu okna. Okno dostaje `key` na numer wagonu,
+  // wiec przy przejsciu na inny wagon React montuje je od nowa i odczyt sie powtarza.
+  const [note, setNote] = useState(() => {
+    try {
+      return localStorage.getItem(noteKey(edgeId, car)) ?? ''
+    } catch {
+      return ''
+    }
+  })
+
+  const save = (value: string) => {
+    setNote(value)
+    try {
+      localStorage.setItem(noteKey(edgeId, car), value)
+    } catch {
+      /* prywatne okno albo zablokowane dane witryny - notatka zostaje tylko na ekranie */
+    }
+  }
+
+  const unit = mode === 'sea' ? 'Przedzial' : mode === 'air' ? 'Ladownia' : 'Wagon'
+
+  return (
+    <DetailWindow title={`${unit} ${car + 1} — ${label}`} onClose={onClose}>
+      <dl className="gpop__facts">
+        <dt>co laczy</dt>
+        <dd>{label}</dd>
+        <dt>czym sie jedzie</dt>
+        <dd>
+          {mode === 'sea'
+            ? 'lodzia podwodna — wyjscie na zewnatrz, poza nasz system'
+            : mode === 'air'
+              ? 'samolotem — laczy dwa osobne programy przez siec'
+              : 'pociagiem — obie strony siedza w tym samym programie'}
+        </dd>
+        <dt>ktory z kolei</dt>
+        <dd>{car + 1}</dd>
+        <dt>nazwa w kodzie</dt>
+        <dd>{edgeId}</dd>
+      </dl>
+
+      <label className="gpop__field">
+        <span>Twoja notatka</span>
+        <textarea
+          value={note}
+          onChange={(e) => save(e.target.value)}
+          placeholder="Wpisz wlasnymi slowami, co tu jedzie."
+          rows={5}
+        />
+      </label>
+
+      <p className="gpop__note">
+        Wagonow jest tyle, ile rzeczy podpina sie pod koniec tej trasy. To ksztalt systemu,
+        a NIE zmierzony ruch — nikt tu niczego nie wazyl. Notatka zostaje w tej przegladarce:
+        nie idzie na serwer ani do repozytorium.
+      </p>
+    </DetailWindow>
+  )
+}
+
 export function FlowEdge({
   id,
   sourceX,
@@ -131,6 +210,7 @@ export function FlowEdge({
   data,
 }: EdgeProps) {
   const d = data as unknown as FlowEdgeData
+  const [openCar, setOpenCar] = useState<number | null>(null)
   const [openSwitch, setOpenSwitch] = useState(false)
 
 
@@ -152,63 +232,98 @@ export function FlowEdge({
     offset: 26,
   })
 
-  // Zmierzone na jasnym plotnie #dcdcd8: zielen #2b8a3e 3.2:1, blekit #0e639c 4.7:1,
-  // glebia #0e5a7d 5.6:1, krew #6b0f1a 8.9:1. To elementy graficzne, prog 3:1 spelniony.
-  const live = sea
-    ? d.lit
-      ? '#0a3d62'
-      : '#0e5a7d'
-    : air
-      ? d.lit
-        ? '#0b4f7d'
-        : '#0e639c'
-      : d.lit
-        ? '#1f7a32'
-        : '#2b8a3e'
+  // Paleta warstw zadana przez operatora. Na plotnie #ececec kontrast wzgledem tla:
+  // pociag #2f7d32 4.6:1, samolot #1e5aa8 6.9:1, lodz #0b3d4a 10.7:1 - prog 3:1
+  // dla elementow graficznych spelniony z zapasem. Zamknieta nitka: krew #6b0f1a 11.9:1.
+  const live = sea ? '#0b3d4a' : air ? '#1e5aa8' : '#2f7d32'
   const rail = d.enabled ? live : '#6b0f1a'
-  // Ile rzeczy podpina sie pod koniec tej trasy. Miara ksztaltu grafu, nie ruchu.
   const cars = Math.max(1, Math.min(d.cars, 6))
-  const faded = d.dimmed && !d.lit
+  // Czas przejazdu bierze sie z rodzaju trasy i dlugosci skladu, a nie z tego, czy
+  // trasa jest podswietlona. Podswietlenie tylko przyspiesza o jedna czwarta, zeby
+  // wybrana sciezka rzucala sie w oczy.
+  const seconds = travelSeconds(d.mode, cars) * (d.lit ? 0.75 : 1)
+  const dur = `${seconds.toFixed(2)}s`
+  // Ruch stoi, gdy zamknieta jest ta trasa albo caly jej rodzaj.
+  const moving = d.enabled && d.modeEnabled
 
   return (
     <>
-      {/* TOR: podklady pod szynami. TRASA LOTNICZA: bez podkladow, sam korytarz. */}
-      {d.mode === 'rail' ? (
-        <BaseEdge
-          id={`${id}-ties`}
-          path={path}
-          style={{
-            stroke: d.enabled ? '#8a7355' : '#5a4038',
-            strokeWidth: 14,
-            strokeDasharray: '3 9',
-            opacity: faded ? 0.2 : 0.85,
-          }}
-        />
-      ) : null}
-
+      {/* Jedna linia na warstwe. Pociag ciagly z bieznikiem, samolot kreskowany,
+          lodz gruba i wolna - wzor jest druga informacja obok koloru, wiec warstwe
+          rozpoznaje sie takze bez rozrozniania barw. */}
       <BaseEdge
         id={id}
         path={path}
-        style={{
-          stroke: rail,
-          strokeWidth: sea ? 10 : air ? 4 : 8,
-          strokeLinecap: 'round',
-          opacity: faded ? 0.22 : 1,
-          // Korytarz powietrzny jest kreskowany zawsze; tor tylko gdy zamkniety.
-          strokeDasharray: air ? '14 10' : sea ? '26 6' : d.enabled ? undefined : '12 9',
-        }}
+        className={`wire wire--${d.mode}${d.enabled ? '' : ' wire--off'}${
+          d.lit ? ' wire--lit' : ''
+        }${d.dimmed && !d.lit ? ' wire--dim' : ''}`}
+        style={{ stroke: rail, strokeWidth: 3 }}
       />
 
-      {d.mode === 'rail' ? (
-        <BaseEdge
-          id={`${id}-shine`}
-          path={path}
-          style={{
-            stroke: d.enabled ? 'rgba(255,255,255,0.5)' : 'rgba(255,255,255,0.25)',
-            strokeWidth: 2,
-            opacity: faded ? 0.15 : 0.7,
-          }}
-        />
+      {moving ? (
+        <g className="train">
+          {sea ? (
+            /* Okret podwodny: kadlub, kiosk i peryskop. */
+            <g className="train__loco">
+              <ellipse cx={0} cy={0} rx={13} ry={6} fill="#123b52" stroke="#8ecbff" strokeWidth="1.6" />
+              <rect x={-3} y={-10} width={6} height={5} rx={1.5} fill="#123b52" stroke="#8ecbff" strokeWidth="1.2" />
+              <line x1={0} y1={-10} x2={0} y2={-15} stroke="#8ecbff" strokeWidth="1.6" />
+              <circle cx={5} cy={0} r={2} fill="#8ecbff" />
+              <animateMotion dur={dur} repeatCount="indefinite" rotate="auto" path={path} />
+            </g>
+          ) : air ? (
+            /* Samolot: kadlub ze skrzydlami, obraca sie zgodnie z kursem. */
+            <g className="train__loco">
+              <path
+                d="M 12 0 L -2 5 L -6 5 L -3 0 L -6 -5 L -2 -5 Z"
+                fill="#e8f4ff"
+                stroke="#0b4f7d"
+                strokeWidth="1.6"
+              />
+              <path d="M 1 0 L -7 -11 L -3 -11 L 5 0 Z" fill="#cfe6fb" stroke="#0b4f7d" strokeWidth="1.2" />
+              <path d="M 1 0 L -7 11 L -3 11 L 5 0 Z" fill="#cfe6fb" stroke="#0b4f7d" strokeWidth="1.2" />
+              <animateMotion dur={dur} repeatCount="indefinite" rotate="auto" path={path} />
+            </g>
+          ) : (
+            <g className="train__loco">
+              <rect x={-11} y={-8} width={22} height={16} rx={4} fill="#ff8c1a" stroke="#7a3b00" strokeWidth="2" />
+              <path d="M 2 -4 L 9 0 L 2 4 Z" fill="#111111" />
+              <animateMotion dur={dur} repeatCount="indefinite" rotate="auto" path={path} />
+            </g>
+          )}
+
+          {Array.from({ length: cars }).map((_, i) => (
+            <g
+              key={i}
+              className="train__car"
+              onClick={(e) => {
+                e.stopPropagation()
+                setOpenCar(i)
+              }}
+            >
+              <rect
+                x={-CAR_W / 2}
+                y={sea ? -4.5 : air ? -5 : -6.5}
+                width={CAR_W}
+                height={sea ? 9 : air ? 10 : 13}
+                rx={sea ? 4.5 : 3}
+                fill={sea ? '#8ecbff' : air ? '#cfe6fb' : '#ffb45c'}
+                stroke={sea ? '#0a3d62' : air ? '#0b4f7d' : '#7a3b00'}
+                strokeWidth="1.6"
+              />
+              <text x={0} y={sea ? 2.6 : air ? 2.8 : 3.4} textAnchor="middle" fontSize="8" fontWeight="700" fill="#111111">
+                {i + 1}
+              </text>
+              <animateMotion
+                dur={dur}
+                begin={`${-((i + 1) * (CAR_W + CAR_GAP)) / 60}s`}
+                repeatCount="indefinite"
+                rotate="auto"
+                path={path}
+              />
+            </g>
+          ))}
+        </g>
       ) : null}
 
       <EdgeLabelRenderer>
@@ -235,11 +350,7 @@ export function FlowEdge({
             <span className="eswitch__arm" />
             <span className="eswitch__base" />
           </button>
-          <span className="eswitch__label">
-            {sea ? '⌁' : air ? '✈' : '▤'} {d.label}
-          </span>
-          {d.enabled ? <span className="eswitch__cars">{cars}</span> : null}
-          {sea ? <span className="eswitch__depth">-{d.depth}</span> : null}
+          <span className="eswitch__sr">{d.label}</span>
         </div>
       </EdgeLabelRenderer>
 
@@ -252,19 +363,23 @@ export function FlowEdge({
           <dl className="gpop__facts">
             <dt>teraz</dt>
             <dd>{d.enabled ? 'otwarta — ruch idzie' : 'zamknieta — ruch stoi'}</dd>
-            <dt>gdy widoczna</dt>
-            <dd>linia jest narysowana pelnym kolorem</dd>
-            <dt>gdy ukryta</dt>
-            <dd>linia robi sie czerwona i przerywana - znika z rysunku, nie z maszyny</dd>
-            <dt>ile sie podpina</dt>
+            <dt>co robi</dt>
+            <dd>chowa i pokazuje wylacznie te jedna nitke na rysunku</dd>
+            <dt>gdy otwarta</dt>
             <dd>
-              {cars} {odmien(cars, MODE[d.mode].unit)} po stronie celu
+              widac trase, a po niej jedzie {cars} {odmien(cars, MODE[d.mode].unit)}
             </dd>
-            <dt>wlasna warstwa</dt>
+            <dt>jak szybko</dt>
             <dd>
-              {MODE[d.mode].title.toLowerCase()} maja osobna warstwe, wiec mozna ukryc je
-              wszystkie i zostawic reszte
+              {MODE[d.mode].speedWhy}; pelny przejazd trwa {dur}, dluzszy sklad jedzie wolniej
             </dd>
+            <dt>wlasny pas</dt>
+            <dd>
+              {MODE[d.mode].title.toLowerCase()} jada osobnym pasem, wiec mozna zatrzymac je
+              wszystkie i zostawic reszte ruchu
+            </dd>
+            <dt>gdy zamknieta</dt>
+            <dd>trasa robi sie czerwona i przerywana, nic po niej nie jedzie</dd>
             <dt>czym sie jedzie</dt>
             <dd>
               {sea
@@ -286,13 +401,24 @@ export function FlowEdge({
             <dd>{id}</dd>
           </dl>
           <p className="gpop__note">
-            To filtr widoku. Chowa linie na rysunku i nic wiecej - zadne polaczenie na
-            maszynie sie nie zmienia. Zeby cos naprawde odczytac, kliknij wezel i uzyj
-            przycisku Wykonaj w panelu po prawej.
+            Ten przelacznik chowa te jedna nitke i nic wiecej - zadne polaczenie na maszynie
+            sie nie zmienia. Czerwona trasa znaczy „schowana na rysunku", a nie
+            „cos padlo". Zeby naprawde cos odczytac, kliknij wezel i uzyj przycisku
+            Wykonaj w szufladzie po prawej.
           </p>
         </DetailWindow>
       ) : null}
 
+      {openCar !== null ? (
+        <CargoWindow
+          key={openCar}
+          edgeId={id}
+          car={openCar}
+          label={d.label}
+          mode={d.mode}
+          onClose={() => setOpenCar(null)}
+        />
+      ) : null}
     </>
   )
 }
