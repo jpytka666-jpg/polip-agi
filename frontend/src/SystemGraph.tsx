@@ -5,7 +5,8 @@ AUTHOR: M. SZUL
 AI MODEL: Claude Opus 5
 TIMESTAMP: 2026-09-02 08:45:00
 REASON FOR CREATION: Graf systemu w stylu kanwy n8n - czytelne wezly i zywa sciezka po kliknieciu.
-MECHANICS: Wezel 260x88 z ikona rodzaju, tytulem 16 px i podtytulem 12 px. Klikniecie wybiera
+MECHANICS: Wezel 280x96 na jasnej karcie (pomarancz-biel) z czarnym tekstem 18/14 px - najwyzszy
+kontrast na oliwkowej kanwie; reszta plotna zostaje oliwkowa. Klikniecie wybiera
 wezel: wszystkie krawedzie wchodzace i wychodzace dostaja 3 px w kolorze akcentu, a pozostale
 spadaja do 20% krycia - widac cala zywa sciezke, nie pojedyncze polaczenie. Uklad liczony
 lokalnie: kolumny wedlug rodzaju, a kolejnosc w kolumnie ustalana metoda barycentryczna, wiec
@@ -68,8 +69,8 @@ const KIND_ICON: Record<string, string> = {
   runtime: '●',
 }
 
-const NODE_W = 260
-const NODE_H = 88
+const NODE_W = 280
+const NODE_H = 96
 const GAP_Y = 80
 const GAP_X = 120
 
@@ -269,8 +270,8 @@ export function SystemGraph({ token }: { token: string }) {
             onNodeClick={onNodeClick}
             onPaneClick={() => setSelected(null)}
             fitView
-            // Dopasowanie do calosci potrafilo zejsc do 0.33 i wtedy wezel 260x88
-            // rysowal sie jako 86x29 - nieczytelnie. Podloga 0.68 trzyma tekst
+            // Dopasowanie do calosci potrafilo zejsc do 0.33 i wtedy wezel 280x96
+            // rysowal sie nieczytelnie. Podloga 0.68 trzyma tekst
             // w rozmiarze, a operator doscrolluje reszte.
             fitViewOptions={{ padding: 0.12, minZoom: 0.68, maxZoom: 1 }}
             minZoom={0.3}
