@@ -109,3 +109,55 @@ npm run test:pin                      5 passed, 0 failed
 
 `tailscaled` dziala, oba wezly widoczne. Sieci domowej, `nft`, dysku E i pociagow w
 Sterowni nie dotknieto. Nasluch Darkstara nadal wylacznie na petli zwrotnej.
+
+---
+
+# Serwer sterujacy zyje — uzytkownik i klucz, 2026-09-02
+
+Bramka zdrowia przeszla (`health: 200`), wiec wykonano dwa kroki zapisu **w samym
+Headscale**. Poza jego wlasna baza nic nie zostalo zmienione.
+
+```
+uzytkownicy przed : null
+headscale users create darkstar  -> "User created"
+uzytkownicy po    : [{ "id": 1, "name": "darkstar" }]
+preauthkey        : utworzony, wielokrotnego uzytku, waznosc 24h
+```
+
+Sam klucz **nie jest tutaj zapisany i nie moze byc**. Zostal pokazany operatorowi raz,
+w oknie rozmowy. Jesli przepadnie, wlasciwa droga to wydac nowy, nie szukac starego.
+
+## Tailscale — nietkniety, zmierzone po fakcie
+
+```
+100.71.8.70     darkstar-cbms     linux    idle; offers exit node
+100.96.213.103  desktop-udi6m9f   windows  active; direct 192.168.2.50:41641
+ControlURL: https://controlplane.tailscale.com
+```
+
+Zaden wezel nie zostal wypiety, `tailscale down` ani `logout` nie padly. SaaS zostaje
+droga ratunkowa dopoki dwa wezly nie odpowiedza na nowym serwerze.
+
+## Czego brakuje do dolaczenia drugiego wezla — decyzja operatora
+
+```
+LISTEN  127.0.0.1:8080
+```
+
+Headscale slucha **wylacznie na petli zwrotnej**. To byl swiadomy wybor: siec hosta bez
+ani jednej nowej reguly. Konsekwencja jest jednak twarda i nie da sie jej obejsc od
+strony klienta — **Windows pod `192.168.2.50` nie ma jak sie polaczyc**. Zaden klucz tego
+nie zmieni; to kwestia adresu nasluchu, nie autoryzacji.
+
+Dolaczenie dwoch wezlow wymaga rozszerzenia nasluchu na `192.168.2.1` — adres bramy
+prywatnej, jeden z dwoch dopuszczonych przez `README` tego katalogu i przez zapore
+`darkstar_host_guard`. To nadal **nie jest** `0.0.0.0` i nie dotyka `wlp2s0`.
+
+Decyzja nalezy do operatora i dlatego nasluch NIE zostal rozszerzony samowolnie.
+
+## Dolaczenie CBMS do wlasnego mesh — czemu nie zrobiono
+
+Drugi profil albo osobny stan `tailscaled` wymaga uprawnien roota (wlasna jednostka
+systemd i wlasne urzadzenie `tun`). Przelaczenie profilu w istniejacym demonie
+odpielo by biezace polaczenie do SaaS, czyli zlamalo warunek "SaaS zostaje".
+Zapisano wiec komende dolaczenia i czekano na zgode, zgodnie z poleceniem.
