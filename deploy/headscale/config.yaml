@@ -57,8 +57,19 @@ log:
   level: info
   format: json
 
+# Klucz protokolu Noise. Headscale 0.29 odmawia startu bez tej sciezki - zmierzone,
+# nie zgadniete: "headscale now requires a new noise.private_key_path field".
+# Klucz powstaje sam przy pierwszym starcie i zyje w wolumenie, nigdy w repozytorium.
+noise:
+  private_key_path: /var/lib/headscale/noise_private.key
+
 # DNS dla węzłów — bez dostępu do publicznych serwerów
 dns:
+  # Bez tego Headscale odmawia startu: "dns.nameservers.global must be set when
+  # dns.override_local_dns is true". Wybor jest swiadomy - NIE przejmujemy DNS-u
+  # klientom. Przejecie zmienialoby rozwiazywanie nazw na maszynach w domu, czyli
+  # dokladnie ta klase zmiany, ktorej ten host ma nie robic.
+  override_local_dns: false
   base_domains:
     - darkstar.local
 
