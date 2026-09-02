@@ -28,13 +28,13 @@ services:
     container_name: darkstar-headscale
     restart: unless-stopped
 
-    ports:
-      # HTTP API + Web UI — bind TYLKO na loopback i brama prywatna
-      - "127.0.0.1:8080:8080/tcp"
-      - "192.168.2.1:8080:8080/tcp"
-      # gRPC API — bind TYLKO na loopback i brama prywatna
-      - "127.0.0.1:50443:50443/tcp"
-      - "192.168.2.1:50443:50443/tcp"
+    # Siec hosta zamiast mostka z publikowaniem portow. Powod jest twardy: ten host jest
+    # brama domowa. Wlasna siec dockerowa dokladalaby nowy mostek i reguly przekierowania
+    # do zywej maszyny routujacej. network_mode: host nie dodaje ANI JEDNEJ reguly -
+    # nasluch ustala wylacznie listen_addr w config.yaml, ustawiony na 127.0.0.1.
+    # 0.0.0.0 jest tu zakazane podwojnie: przy sieci hosta wystawiloby usluge takze na
+    # wlp2s0, czyli do sieci nadrzednej Vodafone.
+    network_mode: host
 
     volumes:
       # Konfiguracja — zamapowana z hosta
@@ -51,9 +51,6 @@ services:
       LOG_LEVEL: "info"
       # Konfiguracja jest obsługiwana przez plik config.yaml
 
-    networks:
-      - darkstar
-
     # Health check
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1:8080/health"]
@@ -62,22 +59,10 @@ services:
       retries: 3
       start_period: 40s
 
+# Zwykle wolumeny dockerowe zamiast montazu katalogow hosta. Dwa powody, oba twarde:
+# zalozenie /var/lib/darkstar i /run/darkstar wymaga roota, a /run to tmpfs - katalog
+# gniazd znikalby przy kazdym restarcie maszyny i baza wstawalaby w niepelnym stanie.
+# Docker zaklada te wolumeny sam, bez podnoszenia uprawnien, i przezywaja restart.
 volumes:
   headscale_data:
-    driver: local
-    driver_opts:
-      type: none
-      o: bind
-      device: ${HEADSCALE_DATA_DIR:-/var/lib/darkstar/headscale}
-
   headscale_run:
-    driver: local
-    driver_opts:
-      type: none
-      o: bind
-      device: ${HEADSCALE_RUN_DIR:-/run/darkstar/headscale}
-
-networks:
-  darkstar:
-    name: darkstar
-    external: true
