@@ -24,6 +24,11 @@ services:
       # Worktree czytany przez GET /v1/git/overview. Sciezka jest KONTENEROWA i stala;
       # co jest pod nia podstawione, decyduje montaz nizej.
       DARKSTAR_GIT_WORKTREE: /srv/repo
+      # Headscale przyjmuje JEDEN adres nasluchu. Odkad slucha na bramie prywatnej,
+      # zeby inne wezly mialy jak sie polaczyc, petla zwrotna juz nie odpowiada - wiec
+      # Darkstar pyta go dokladnie tam. Przy sieci hosta to ten sam komputer, ruch nie
+      # opuszcza maszyny. To NIE jest adres publiczny i nie dotyka wlp2s0.
+      DARKSTAR_HEADSCALE_URL: ${DARKSTAR_HEADSCALE_URL:-http://192.168.2.1:8080}
     # Bez mapowania portow: przy network_mode host wiazanie robi sam serwer (DARKSTAR_HOST).
     network_mode: host
     # Tylko gniazdo DBus i tylko do odczytu: nmcli w kontenerze pyta NetworkManagera

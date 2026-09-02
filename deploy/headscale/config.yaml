@@ -27,10 +27,12 @@
 # ==========================================
 
 # Adres serwera Headscale — reachable z prywatnej sieci Darkstar
-server_url: http://127.0.0.1:8080
-# Nasluch WYLACZNIE na petli zwrotnej. Compose stoi w sieci hosta, wiec ten adres jest
-# adresem HOSTA, nie kontenera - 0.0.0.0 wystawiloby usluge takze na wlp2s0.
-listen_addr: 127.0.0.1:8080
+server_url: http://192.168.2.1:8080
+# Nasluch na bramie prywatnej 192.168.2.1 - bez tego zaden inny wezel nie ma jak sie
+# polaczyc. Compose stoi w sieci hosta, wiec to jest adres HOSTA. To NADAL nie jest
+# 0.0.0.0: wlp2s0 i siec nadrzedna Vodafone pozostaja nietkniete. Petla zwrotna przestaje
+# odpowiadac - headscale przyjmuje jeden adres nasluchu - wiec Darkstar pyta go pod 192.168.2.1.
+listen_addr: 192.168.2.1:8080
 
 # Katalog danych — przechowuje bazę danych, klucze, meta
 database:
