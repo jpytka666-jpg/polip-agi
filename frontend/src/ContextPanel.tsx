@@ -40,6 +40,9 @@ export function ContextPanel({ token }: { token: string }) {
   const [health, setHealth] = useState<ContextHealth | null>(null)
   const [listing, setListing] = useState<ContextListing | null>(null)
   const [query, setQuery] = useState('session')
+  // To, co operator wlasnie wpisuje. Do `query` trafia dopiero po Enterze,
+  // wiec kazde nacisniecie klawisza nie odpytuje serwera.
+  const [draft, setDraft] = useState('session')
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -61,8 +64,11 @@ export function ContextPanel({ token }: { token: string }) {
         .then((next) => {
           if (!cancelled) setListing(next)
         })
-        .catch(() => {
-          if (!cancelled) setListing(null)
+        .catch((err: Error) => {
+          if (!cancelled) {
+            setListing(null)
+            setError(err.message)
+          }
         })
     }
 
@@ -100,15 +106,23 @@ export function ContextPanel({ token }: { token: string }) {
         <dd>{listing ? (LEG_LABEL[listing.served_by] ?? listing.served_by) : '—'}</dd>
       </dl>
 
-      <label className="search-row">
-        <span>Szukaj</span>
+      <form
+        className="search-row"
+        onSubmit={(event) => {
+          event.preventDefault()
+          setQuery(draft.trim())
+        }}
+      >
+        <label htmlFor="context-q">Szukaj</label>
         <input
+          id="context-q"
           type="search"
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder="np. session"
+          value={draft}
+          onChange={(event) => setDraft(event.target.value)}
+          placeholder="wpisz i nacisnij Enter"
         />
-      </label>
+        <button type="submit">Szukaj</button>
+      </form>
 
       <ul className="collections">
         {listing?.collections.length ? (

@@ -124,3 +124,48 @@ export function searchContext(
   const params = new URLSearchParams({ q: query, limit: String(limit) })
   return getJson<ContextListing>(`/v1/context/search?${params.toString()}`, token)
 }
+
+/** Wynik recznego wywolania z panelu operatora. Blad NIE jest chowany pod sukces. */
+export interface ReadCommandResult {
+  ok: boolean
+  status: number
+  /** Ile trwalo, w milisekundach. */
+  ms: number
+  /** Odpowiedz serwera. JSON, jesli sie sparsowal; inaczej surowy tekst. */
+  body: unknown
+  /** Ostrzezenie, gdy przyszlo cos innego niz JSON - np. strona HTML zamiast API. */
+  warning: string | null
+}
+
+/**
+ * Wykonuje pojedyncza komende ODCZYTU z panelu operatora.
+ *
+ * Zawsze GET. Zwraca prawdziwy kod odpowiedzi - 401 i 503 wracaja jako `ok: false`
+ * razem z trescia, ktora przyslal serwer. Nic tu nie udaje sukcesu.
+ */
+export async function runReadCommand(path: string, token: string): Promise<ReadCommandResult> {
+  const started = performance.now()
+  const response = await fetch(path, {
+    method: 'GET',
+    headers: token ? { authorization: `Bearer ${token}` } : {},
+  })
+  const text = await response.text()
+  let body: unknown = text
+  let warning: string | null = null
+  try {
+    body = JSON.parse(text)
+  } catch {
+    // Kod 200 z trescia, ktora nie jest JSON-em, to najczesciej strona HTML
+    // podstawiona przez posrednika - nie odpowiedz API. Sukces sie tu nie udaje.
+    warning = text.trimStart().startsWith('<')
+      ? 'To nie odpowiedz API, tylko strona HTML - zapytanie nie doszlo do serwera Darkstar.'
+      : 'Odpowiedz nie jest JSON-em.'
+  }
+  return {
+    ok: response.ok && warning === null,
+    status: response.status,
+    ms: Math.round(performance.now() - started),
+    body,
+    warning,
+  }
+}

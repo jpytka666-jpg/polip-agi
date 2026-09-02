@@ -42,8 +42,15 @@ import {
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { FlowEdge } from './FlowEdge'
-import { fetchSystemGraph, type ArchitectureNode, type ArchitectureSnapshot } from './api'
+import {
+  fetchSystemGraph,
+  runReadCommand,
+  type ArchitectureNode,
+  type ArchitectureSnapshot,
+  type ReadCommandResult,
+} from './api'
 import { execute, type Command } from './commands'
+import { commandFor } from './nodeCommands'
 import { MODE, MODES, type TransportMode } from './transport'
 
 const COLUMN: Record<string, number> = {
@@ -233,6 +240,12 @@ export function SystemGraph({ token }: { token: string }) {
   // tu caly rodzaj naraz - wszystkie lodzie albo wszystkie samoloty.
   const [hiddenModes, setHiddenModes] = useState<Set<TransportMode>>(new Set())
 
+  // Wynik ostatniego recznego wywolania z panelu. Trzymany osobno dla kazdego wezla,
+  // zeby przejscie na inny wezel nie pokazywalo cudzej odpowiedzi.
+  const [result, setResult] = useState<{ nodeId: string; data: ReadCommandResult } | null>(null)
+  const [running, setRunning] = useState(false)
+  const [runError, setRunError] = useState<string | null>(null)
+
   const toggleEdge = useCallback((id: string) => {
     setMuted((prev) => {
       const next = new Set(prev)
@@ -264,6 +277,25 @@ export function SystemGraph({ token }: { token: string }) {
       return result
     },
     [toggleEdge, toggleMode, selectNode],
+  )
+
+  const runNodeCommand = useCallback(
+    async (node: ArchitectureNode) => {
+      const cmd = commandFor(node.id)
+      if (!cmd) return
+      setRunning(true)
+      setRunError(null)
+      try {
+        const data = await runReadCommand(cmd.path, token)
+        setResult({ nodeId: node.id, data })
+      } catch (err) {
+        setResult(null)
+        setRunError(err instanceof Error ? err.message : 'Nie udalo sie polaczyc z serwerem.')
+      } finally {
+        setRunning(false)
+      }
+    },
+    [token],
   )
 
   useEffect(() => {
@@ -382,6 +414,8 @@ export function SystemGraph({ token }: { token: string }) {
 
   const onNodeClick = useCallback((_: unknown, node: Node) => {
     setSelected((node.data as unknown as ArchitectureNode) ?? null)
+    setResult(null)
+    setRunError(null)
   }, [])
 
   if (error) {
@@ -426,12 +460,12 @@ export function SystemGraph({ token }: { token: string }) {
             >
               <span className="lane-bar__glyph">{spec.glyph}</span>
               <span className="lane-bar__name">{spec.title}</span>
-              <span className="lane-bar__state">{on ? 'jada' : 'stoja'}</span>
+              <span className="lane-bar__state">{on ? 'widac' : 'ukryte'}</span>
             </button>
           )
         })}
         <span className="lane-bar__hint">
-          Kazdy rodzaj jedzie wlasnym pasem, wiec mozna zatrzymac jeden i zostawic reszte.
+          Filtry widoku. Chowaja linie na rysunku - niczego nie wylaczaja na maszynie.
         </span>
       </div>
 
@@ -460,26 +494,79 @@ export function SystemGraph({ token }: { token: string }) {
         </div>
 
         {selected ? (
-          <aside className="graph-details">
-            <h3>{selected.name}</h3>
-            <dl className="facts">
-              <dt>id</dt>
-              <dd>{selected.id}</dd>
-              <dt>rodzaj</dt>
-              <dd>{KIND_LABEL[selected.kind] ?? selected.kind}</dd>
-              <dt>rola</dt>
-              <dd>{selected.role ?? '—'}</dd>
-              <dt>system</dt>
-              <dd>{selected.system ?? '—'}</dd>
-              <dt>jezyk</dt>
-              <dd>{selected.language ?? '—'}</dd>
-              <dt>sasiedzi</dt>
-              <dd>{linked}</dd>
-            </dl>
-            <button type="button" className="graph-details__close" onClick={() => setSelected(null)}>
-              Zamknij
-            </button>
-          </aside>
+          (() => {
+            const cmd = commandFor(selected.id)
+            const shown = result?.nodeId === selected.id ? result.data : null
+            return (
+              <aside className="graph-details">
+                <h3>{selected.name}</h3>
+                <dl className="facts">
+                  <dt>rodzaj</dt>
+                  <dd>{KIND_LABEL[selected.kind] ?? selected.kind}</dd>
+                  <dt>rola</dt>
+                  <dd>{selected.role ?? '—'}</dd>
+                  <dt>capability</dt>
+                  <dd className="facts__gap">niewystawione po HTTP (brak GET /v1/modules)</dd>
+                  <dt>system</dt>
+                  <dd>{selected.system ?? '—'}</dd>
+                  <dt>jezyk</dt>
+                  <dd>{selected.language ?? '—'}</dd>
+                  <dt>sasiedzi</dt>
+                  <dd>{linked}</dd>
+                  <dt>nazwa w kodzie</dt>
+                  <dd>{selected.id}</dd>
+                </dl>
+
+                {cmd ? (
+                  <div className="exec">
+                    <div className="exec__head">
+                      <code className="exec__path">GET {cmd.path}</code>
+                      <button
+                        type="button"
+                        className="exec__run"
+                        disabled={running}
+                        onClick={() => void runNodeCommand(selected)}
+                      >
+                        {running ? 'Czekam…' : 'Wykonaj'}
+                      </button>
+                    </div>
+                    <p className="exec__what">{cmd.what}</p>
+
+                    {runError ? <p className="exec__error">{runError}</p> : null}
+
+                    {shown ? (
+                      <>
+                        <p
+                          className={`exec__status${shown.ok ? ' exec__status--ok' : ' exec__status--bad'}`}
+                        >
+                          {shown.ok ? 'Odpowiedzial' : 'Blad'} {shown.status} · {shown.ms} ms
+                        </p>
+                        {shown.warning ? <p className="exec__error">{shown.warning}</p> : null}
+                        <pre className="exec__json">
+                          {typeof shown.body === 'string'
+                            ? shown.body
+                            : JSON.stringify(shown.body, null, 2)}
+                        </pre>
+                      </>
+                    ) : null}
+                  </div>
+                ) : (
+                  <p className="exec__none">
+                    BRAK KOMENDY — serwer nie wystawia dla tego elementu zadnego wywolania
+                    odczytu.
+                  </p>
+                )}
+
+                <button
+                  type="button"
+                  className="graph-details__close"
+                  onClick={() => setSelected(null)}
+                >
+                  Zamknij
+                </button>
+              </aside>
+            )
+          })()
         ) : null}
       </div>
     </section>

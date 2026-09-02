@@ -152,7 +152,10 @@ body {
 
 .control-room__body {
   display: grid;
-  grid-template-columns: minmax(17rem, 20rem) 1fr;
+  /* minmax(0, 1fr), nie samo 1fr: domyslne minimum kolumny to szerokosc jej
+     zawartosci, a kanwa React Flow jest szeroka - przez to panel po prawej
+     wyjezdzal poza ekran i byl ucinany. */
+  grid-template-columns: minmax(17rem, 20rem) minmax(0, 1fr);
   gap: 1.1rem;
   padding: 0.9rem 1.1rem;
   flex: 1;
@@ -375,19 +378,20 @@ body {
 .graph-layout {
   display: grid;
   /* Bez wyboru graf zajmuje calosc; panel szczegolow dochodzi dopiero po kliknieciu. */
-  grid-template-columns: 1fr;
+  grid-template-columns: minmax(0, 1fr);
   gap: 0.9rem;
   flex: 1;
   min-height: 0;
 }
 
 .graph-layout--split {
-  grid-template-columns: 1fr minmax(15rem, 18rem);
+  /* Panel operatora pokazuje surowy JSON, wiec potrzebuje wiecej miejsca niz sama metryka. */
+  grid-template-columns: minmax(0, 1fr) minmax(19rem, 25rem);
 }
 
 @media (max-width: 1200px) {
   .graph-layout {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
@@ -1010,4 +1014,132 @@ body {
 .lane-bar__hint {
   color: var(--muted);
   font-size: 12px;
+}
+
+/* ---- Pulpit operatora ----
+   Panel po prawej. Albo jest przycisk Wykonaj i prawdziwa odpowiedz serwera,
+   albo stoi napis BRAK KOMENDY. Nic posrodku. */
+
+.facts__gap {
+  color: #b4b4b4;
+  font-style: italic;
+}
+
+.exec {
+  margin-top: 0.9rem;
+  padding: 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #1c1c1d;
+}
+
+.exec__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+}
+
+.exec__path {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  color: #d4d4d4;
+  background: #101011;
+  padding: 3px 8px;
+  border-radius: 6px;
+  overflow-x: auto;
+}
+
+.exec__run {
+  flex: 0 0 auto;
+  padding: 0.4rem 1rem;
+  border-radius: 8px;
+  border: 1px solid #2f7d3a;
+  background: #1c5c28;
+  color: #ffffff;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.exec__run:hover:not(:disabled) {
+  background: #24732f;
+}
+
+.exec__run:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.exec__run:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.exec__what {
+  margin: 0.5rem 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.exec__status {
+  margin: 0.7rem 0 0.35rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+/* Zmierzone na tle #1c1c1d: zielen #7ee08a 11.4:1, czerwien #ff9e8a 8.9:1. */
+.exec__status--ok {
+  color: #7ee08a;
+}
+
+.exec__status--bad {
+  color: #ff9e8a;
+}
+
+.exec__error {
+  margin: 0.6rem 0 0;
+  color: #ff9e8a;
+  font-size: 13px;
+}
+
+.exec__json {
+  margin: 0;
+  max-height: 320px;
+  overflow: auto;
+  padding: 0.6rem;
+  border-radius: 8px;
+  background: #101011;
+  color: #d4d4d4;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  line-height: 1.45;
+  white-space: pre;
+}
+
+/* Brak komendy to informacja, nie awaria - stad szarosc, nie czerwien. */
+.exec__none {
+  margin-top: 0.9rem;
+  padding: 0.7rem 0.8rem;
+  border: 1px dashed #5a5a5a;
+  border-radius: 10px;
+  background: #1c1c1d;
+  color: #b4b4b4;
+  font-size: 13px;
+}
+
+.search-row button[type='submit'] {
+  padding: 0.35rem 0.8rem;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: #2c2c2e;
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.search-row button[type='submit']:hover {
+  border-color: #6a6a6a;
 }

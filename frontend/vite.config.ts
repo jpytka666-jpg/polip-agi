@@ -44,6 +44,16 @@ export default defineConfig({
         target: apiTarget,
         changeOrigin: false,
       },
+      // Bez tych dwoch /health i /ready trafialyby do dev servera Vite i wracalyby
+      // jako strona HTML ze statusem 200 - czyli falszywy sukces w panelu operatora.
+      '/health': {
+        target: apiTarget,
+        changeOrigin: false,
+      },
+      '/ready': {
+        target: apiTarget,
+        changeOrigin: false,
+      },
     },
   },
 })
