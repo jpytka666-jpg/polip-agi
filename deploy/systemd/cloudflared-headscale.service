@@ -45,10 +45,12 @@ Type=simple
 User=owner
 Group=owner
 
-# Zrodlo tunelu. Petla zwrotna jest docelowa, ale ZMIERZONE 2026-09-03: Headscale slucha
-# dzis wylacznie na 192.168.2.1:8080, a petla zwrotna zwraca 000. Przed wlaczeniem tej
-# uslugi trzeba albo zmienic listen_addr, albo podstawic tu adres, ktory odpowiada.
-Environment=DARKSTAR_TUNNEL_ORIGIN=http://127.0.0.1:8080
+# Zrodlo tunelu: adres, pod ktorym Headscale NAPRAWDE odpowiada (zmierzone 2026-09-03,
+# kod 200). Ruch nie opuszcza maszyny - to jej wlasny adres na enp1s0.
+# UWAGA: petla zwrotna 127.0.0.1:8080 byla by naturalniejsza, ale dzis zwraca 000 -
+# Headscale przyjmuje JEDEN adres nasluchu i uzywa go dla sieci domowej. Przejscie na
+# petle wymaga zmiany listen_addr i odcieloby wezly w domu. To wybor, nie usterka.
+Environment=DARKSTAR_TUNNEL_ORIGIN=http://192.168.2.1:8080
 
 ExecStart=/usr/local/bin/cloudflared tunnel --url ${DARKSTAR_TUNNEL_ORIGIN} --no-autoupdate
 

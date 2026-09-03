@@ -45,16 +45,18 @@
 
 set -eu
 
-# Zrodlo tunelu. Domyslna jest petla zwrotna, bo tak ma byc docelowo: tunel i Headscale
-# stoja na tej samej maszynie i nie ma powodu, zeby ich rozmowa wychodzila na interfejs
-# sieci domowej.
+# Zrodlo tunelu: adres, pod ktorym Headscale NAPRAWDE odpowiada. Zmierzone 2026-09-03,
+# kod 200. Ruch i tak nie opuszcza maszyny - tunel i Headscale stoja na tym samym hoscie,
+# a 192.168.2.1 jest jego wlasnym adresem na enp1s0.
 #
-# UWAGA, ZMIERZONA 2026-09-03: dzis Headscale slucha WYLACZNIE na 192.168.2.1:8080 -
-# petla zwrotna zwraca 000, bo Headscale przyjmuje jeden adres nasluchu. Skrypt tego NIE
-# obchodzi po cichu: sprawdza i mowi wprost, ktory adres odpowiada. Ciche podstawienie
-# innego adresu ukryloby rozjazd miedzy konfiguracja a rzeczywistoscia.
-ORIGIN="${DARKSTAR_TUNNEL_ORIGIN:-http://127.0.0.1:8080}"
-ALT_ORIGIN="${DARKSTAR_TUNNEL_ORIGIN_ALT:-http://192.168.2.1:8080}"
+# UWAGA: docelowo naturalniejsza byla by petla zwrotna, bo rozmowa dwoch procesow na tej
+# samej maszynie nie musi dotykac interfejsu sieci domowej. Dzis to NIE dziala: Headscale
+# przyjmuje JEDEN adres nasluchu i uzywa go dla sieci domowej, wiec 127.0.0.1:8080 zwraca
+# 000. Przejscie na petle wymagaloby zmiany `listen_addr`, a wtedy wezly w domu straciłyby
+# dostep do Headscale. To jest wybor, nie usterka - i dlatego petla jest tu UWAGA, nie
+# wartoscia domyslna.
+ORIGIN="${DARKSTAR_TUNNEL_ORIGIN:-http://192.168.2.1:8080}"
+ALT_ORIGIN="${DARKSTAR_TUNNEL_ORIGIN_ALT:-http://127.0.0.1:8080}"
 LOG="${DARKSTAR_TUNNEL_LOG:-/tmp/darkstar-world-tunnel.log}"
 
 fail() { printf 'world-tunnel: %s\n' "$1" >&2; exit 1; }
@@ -69,14 +71,15 @@ check() {
     fi
     main=$(probe "$ORIGIN")
     alt=$(probe "$ALT_ORIGIN")
-    printf 'zrodlo %s : %s\n' "$ORIGIN" "$main"
-    printf 'zapasowe %s : %s\n' "$ALT_ORIGIN" "$alt"
+    printf 'zrodlo   %s : %s\n' "$ORIGIN" "$main"
+    printf 'petla    %s : %s' "$ALT_ORIGIN" "$alt"
+    [ "$alt" = "200" ] && printf '\n' || printf '   (UWAGA - patrz naglowek, to normalne)\n'
     if [ "$main" != "200" ] && [ "$alt" = "200" ]; then
-        printf '  ROZJAZD: domyslne zrodlo milczy, a odpowiada %s\n' "$ALT_ORIGIN"
-        printf '  Headscale przyjmuje JEDEN adres nasluchu. Wybierz jedno:\n'
+        printf '  ROZJAZD: skonfigurowane zrodlo milczy, a odpowiada %s\n' "$ALT_ORIGIN"
+        printf '  Headscale przyjmuje JEDEN adres nasluchu. Wybierz swiadomie:\n'
         printf '    a) DARKSTAR_TUNNEL_ORIGIN=%s przed uruchomieniem, albo\n' "$ALT_ORIGIN"
-        printf '    b) zmien listen_addr w config.yaml na petle zwrotna - ale wtedy\n'
-        printf '       Headscale przestanie byc osiagalny z sieci domowej.\n'
+        printf '    b) zmien listen_addr w config.yaml - ale sprawdz, czy wezly\n'
+        printf '       w sieci domowej nadal beda mialy dostep.\n'
     fi
     printf 'server_url w config: %s\n' "$(grep -E '^server_url:' "$(dirname "$0")/config.yaml" 2>/dev/null || echo '?')"
 }

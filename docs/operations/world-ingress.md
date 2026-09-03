@@ -121,17 +121,23 @@ telefon lub komputer był dołączony do własnej sieci. Z domu można też uży
 Uwaga: to zwykły proces, nie usługa. **Nie przeżyje restartu komputera** — po restarcie
 trzeba go uruchomić ponownie.
 
-## Rozjazd, który trzeba znać przed włączeniem tunelu
+## Skąd tunel bierze dane
 
-Docelowo tunel ma brać dane z pętli zwrotnej — tunel i Headscale stoją na tej samej
-maszynie i nie ma powodu, żeby ich rozmowa wychodziła na sieć domową.
+Z `192.168.2.1:8080` — adresu, pod którym Headscale **naprawdę odpowiada** (zmierzone,
+kod 200). Mimo że wygląda „sieciowo", ruch **nie opuszcza maszyny**: to jej własny adres
+na karcie do sieci domowej, a tunel stoi na tej samej maszynie.
 
-**Ale dzisiaj Headscale słucha wyłącznie na `192.168.2.1:8080`**, a pętla zwrotna zwraca
-zero. Zmierzone. Headscale przyjmuje **jeden** adres nasłuchu, więc trzeba wybrać:
+### Uwaga o pętli zwrotnej
 
-- albo podać tunelowi adres, który odpowiada (`DARKSTAR_TUNNEL_ORIGIN`),
-- albo przestawić `listen_addr` na pętlę — ale wtedy Headscale przestanie być osiągalny
-  z sieci domowej i węzły w domu stracą do niego dostęp.
+Naturalniejsze byłoby `127.0.0.1:8080` — dwa procesy na jednym komputerze nie muszą
+rozmawiać przez kartę sieciową. **Dziś to jednak nie działa: pętla zwraca zero.**
 
-Skrypt `world-tunnel` **sprawdza to sam i mówi wprost**. Nie podstawia drugiego adresu po
-cichu — bo wystawiłby wtedy do świata coś, o czym nie wiesz.
+Powód nie jest usterką. Headscale przyjmuje **jeden** adres nasłuchu i używa go dla sieci
+domowej. Przestawienie go na pętlę odcięłoby węzły w domu od serwera. To wybór między
+dwiema rzeczami, nie błąd do naprawienia — i dlatego pętla jest tu **uwagą**, a nie
+ustawieniem domyślnym.
+
+`world-tunnel check` sprawdza oba adresy i wypisuje, który odpowiada. Gdyby kiedyś
+skonfigurowany adres zamilkł, a odpowiadał ten drugi — **skrypt odmówi startu zamiast po
+cichu podstawić zamiennik**. Ciche podstawienie znaczyłoby wystawienie do świata adresu,
+o którym nie wiesz.
