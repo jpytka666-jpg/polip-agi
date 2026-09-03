@@ -1,0 +1,62 @@
+# darkstar-header-v1
+# po co: cloudflared-headscale.service
+# nie wolno: otwierac portow na routerze, wiazac na 0.0.0.0, gasic SaaS ani mesh
+# Autor: Marcin Szul
+# Model: Claude
+# Czas: 2026-09-03T07:00:00+01:00
+# Po co: Trzyma wychodzacy tunel Cloudflare do Headscale, zeby klient spoza domu mial
+#        jak dojsc, bez otwierania czegokolwiek na routerze Vodafone.
+#
+# THIS IS VERY IMPORTANT!!!
+# ==========================================
+# MECHANICS: Tunel jest WYCHODZACY - cloudflared laczy sie z Cloudflare od strony CBMS.
+# Nic nie nasluchuje na wlp2s0 i na routerze nie trzeba przekierowac ani jednego portu.
+# Zrodlem jest 192.168.2.1:8080, pod ktorym Headscale juz slucha, wiec `listen_addr`
+# nie wymaga zmiany.
+# SYSTEM PART: deploy/systemd - wyjscie prywatnego mesh na swiat.
+# ARCHITECTURE FUNCTION: Trzecia sciezka dostepu, obok kabla i prywatnego mesh. Nie
+# zastepuje zadnej z nich. Celowo BEZ zaleznosci od tailscaled ani od drugiego demona -
+# awaria tunelu nie ma prawa ruszyc sieci domowej.
+# DEPENDENCIES/LINKS: cloudflared (NIE zainstalowany), headscale pod 192.168.2.1:8080,
+# deploy/headscale/world-tunnel.
+# TECH STACK: systemd unit - zgodnie z reszta deploy/systemd.
+# GIT COMMIT: PENDING
+# GITHUB METADATA: jpytka666-jpg/polip-agi, branch docs/darkstar-headscale-hotspot-plan
+#
+# NIEZAINSTALOWANA I NIEURUCHOMIONA. cloudflared nie jest obecny na maszynie; ta
+# jednostka jest przygotowaniem, nie wdrozeniem.
+#
+# OGRANICZENIE, KTOREGO NIE UKRYWAM: tunel dorazny (bez konta i bez domeny, czyli bez
+# zakupow) dostaje adres LOSOWY, ktory zmienia sie przy KAZDYM restarcie tej uslugi.
+# `server_url` w config.yaml musi wtedy zostac zaktualizowany, a juz dolaczone wezly
+# trzymaja stary adres. Dlatego `Restart=` jest tu celowo `no` - cichy restart w nocy
+# zmienilby adres i po cichu odcial klienta spoza domu. Patrz
+# docs/operations/swiat-bez-zakupow.md
+# ==========================================
+
+[Unit]
+Description=Darkstar outbound Cloudflare tunnel for Headscale
+Documentation=https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=owner
+Group=owner
+
+Environment=DARKSTAR_TUNNEL_ORIGIN=http://192.168.2.1:8080
+
+ExecStart=/usr/local/bin/cloudflared tunnel --url http://192.168.2.1:8080 --no-autoupdate
+
+# CELOWO bez restartu. Kazdy restart tunelu doraznego zmienia adres https, a wtedy
+# server_url przestaje sie zgadzac i klient spoza domu przestaje wchodzic - po cichu.
+# Ponowne postawienie ma byc swiadoma decyzja operatora, po ktorej aktualizuje server_url.
+Restart=no
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=cloudflared-headscale
+
+[Install]
+WantedBy=multi-user.target

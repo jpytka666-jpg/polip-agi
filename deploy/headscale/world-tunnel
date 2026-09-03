@@ -1,0 +1,89 @@
+#!/bin/sh
+# darkstar-header-v1
+# po co: world-tunnel
+# nie wolno: wiazac na 0.0.0.0, gasic SaaS, przepisywac config.yaml bez zgody operatora
+# Autor: Marcin Szul
+# Model: Claude
+# Czas: 2026-09-03T07:00:00+01:00
+# Po co: Wystawia Headscale do swiata przez wychodzacy tunel Cloudflare, zeby telefon mogl
+#        dolaczyc spoza domu - bez otwierania jakiegokolwiek portu na routerze.
+#
+# THIS IS VERY IMPORTANT!!!
+# ==========================================
+# MECHANICS: Tunel jest WYCHODZACY. cloudflared laczy sie z Cloudflare od strony CBMS i
+# dostaje adres https, pod ktorym swiat puka do Cloudflare, a nie do domu. Na routerze
+# Vodafone nie trzeba otwierac ani jednego portu i nic nie nasluchuje na wlp2s0.
+# Zrodlem dla tunelu jest 192.168.2.1:8080 - adres, pod ktorym Headscale juz slucha i
+# ktory jest osiagalny z samego hosta (zmierzone: 200). Dlatego `listen_addr` NIE wymaga
+# zmiany i nie jest tu ruszany.
+# SYSTEM PART: deploy/headscale - wyjscie prywatnego mesh na swiat.
+# ARCHITECTURE FUNCTION: Jedyna droga na zewnatrz. Nie zastepuje mesh ani SaaS - dokłada
+# trzecia sciezke, z ktorej korzysta wylacznie klient spoza domu.
+# DEPENDENCIES/LINKS: cloudflared (NIE zainstalowany - patrz docs), Headscale pod
+# 192.168.2.1:8080, deploy/systemd/cloudflared-headscale.service.
+# TECH STACK: POSIX sh, swiadomie zamiast Rusta - domyslnego jezyka tego projektu.
+#   (1) MUSI: uruchomic cudzy proces, przeczytac jego wyjscie i wyluskac adres, dzialac
+#       na golym Ubuntu bez etapu budowania, spojnie z reszta deploy/ ktora jest w sh.
+#   (2) DLACZEGO NIE RUST: caly zakres to uruchomienie jednego programu i przeczytanie
+#       jego logu. Rust wymagalby kompilacji i dostarczenia binarki, po czym i tak
+#       wolalby cloudflared jako podproces - ta sama praca, wiecej krokow. Zaufany
+#       control plane ZOSTAJE w Ruscie; to jest narzedzie operatora.
+#   (3) TRACIMY: kontrole typow i pokrycie przez cargo test. Rekompensata: skrypt nie ma
+#       logiki poza sprawdzeniem warunkow i uruchomieniem, a kazdy warunek przerywa prace
+#       zamiast brnac dalej.
+# GIT COMMIT: PENDING
+# GITHUB METADATA: jpytka666-jpg/polip-agi, branch docs/darkstar-headscale-hotspot-plan
+#
+# NIC NIE URUCHAMIA SAM. Ten plik zostal dodany jako przygotowanie; cloudflared nie jest
+# zainstalowany, tunel nie zostal postawiony, `config.yaml` nie zostal zmieniony.
+# ==========================================
+#
+# Uzycie:
+#   ./world-tunnel check     - sprawdza warunki, niczego nie uruchamia
+#   ./world-tunnel run       - stawia tunel na pierwszym planie i wypisuje adres https
+#   ./world-tunnel url       - wypisuje adres z logu dzialajacego tunelu
+
+set -eu
+
+ORIGIN="${DARKSTAR_TUNNEL_ORIGIN:-http://192.168.2.1:8080}"
+LOG="${DARKSTAR_TUNNEL_LOG:-/tmp/darkstar-world-tunnel.log}"
+
+fail() { printf 'world-tunnel: %s\n' "$1" >&2; exit 1; }
+
+check() {
+    if command -v cloudflared >/dev/null 2>&1; then
+        printf 'cloudflared : %s\n' "$(cloudflared --version 2>&1 | head -1)"
+    else
+        printf 'cloudflared : BRAK - patrz docs/operations/swiat-bez-zakupow.md\n'
+    fi
+    code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "$ORIGIN/health" || echo 000)
+    printf 'zrodlo %s : %s\n' "$ORIGIN" "$code"
+    [ "$code" = "200" ] || printf '  UWAGA: zrodlo nie odpowiada - tunel nie mialby czego wystawic\n'
+    printf 'server_url w config: %s\n' "$(grep -E '^server_url:' ../headscale/config.yaml 2>/dev/null || echo '?')"
+}
+
+run() {
+    command -v cloudflared >/dev/null 2>&1 || fail 'cloudflared nie jest zainstalowany'
+    code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "$ORIGIN/health" || echo 000)
+    [ "$code" = "200" ] || fail "zrodlo $ORIGIN nie odpowiada (kod $code) - nie stawiam tunelu"
+
+    printf 'world-tunnel: tunel wychodzacy do %s\n' "$ORIGIN"
+    printf 'world-tunnel: adres pojawi sie w logu %s\n' "$LOG"
+    # Tunel doraznY: bez konta i bez domeny, czyli bez zadnych zakupow. Cena jest inna -
+    # adres jest LOSOWY i zmienia sie przy kazdym starcie. Patrz docs.
+    cloudflared tunnel --url "$ORIGIN" --no-autoupdate 2>&1 | tee "$LOG"
+}
+
+url() {
+    [ -f "$LOG" ] || fail "brak logu $LOG - tunel nie byl uruchamiany"
+    found=$(grep -oE 'https://[a-z0-9-]+\.trycloudflare\.com' "$LOG" | tail -1 || true)
+    [ -n "$found" ] || fail 'w logu nie ma jeszcze adresu'
+    printf '%s\n' "$found"
+}
+
+case "${1:-check}" in
+    check) check ;;
+    run)   run ;;
+    url)   url ;;
+    *)     fail "nieznane polecenie: $1 (check|run|url)" ;;
+esac
