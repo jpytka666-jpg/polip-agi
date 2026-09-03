@@ -1,5 +1,5 @@
 <!-- darkstar-header-v1 -->
-<!-- po co: swiat-bez-zakupow.md -->
+<!-- po co: world-ingress.md -->
 <!-- nie wolno: otwierac portow na routerze, wiazac na 0.0.0.0, gasic SaaS -->
 <!--
 Autor: Marcin Szul
@@ -91,3 +91,47 @@ zostają nietknięte. Tunel jest **czwartą** ścieżką, wyłącznie dla klient
 jego awaria nie rusza niczego w domu.
 
 Telefon **nie został dołączony** i nie zostanie, dopóki nie powiesz.
+
+---
+
+## Dom kontra świat — cztery drogi, każda do czego innego
+
+| Droga | Skąd działa | Do czego służy | Stan |
+|---|---|---|---|
+| Kabel `192.168.2.1` | tylko z domu | ostatnia deska ratunku, zawsze działa | żywa |
+| Prywatny mesh `100.64.0.2` | z domu i z każdego dołączonego urządzenia | codzienna praca, Sterownia, SSH | żywa |
+| Tailscale SaaS `100.71.8.70` | zewsząd | zapas, dopóki własne nie okrzepnie | żywa, **nie gasić** |
+| Tunel Cloudflare | z całego świata | żeby telefon spoza domu miał dokąd dołączyć | **nie postawiony** |
+
+Trzy pierwsze działają. Czwarta jest przygotowana i nic z niej nie jest uruchomione.
+
+## Sterownia — jak się do niej dostać
+
+Sterownia nie jest wystawiona nigdzie. Otwiera się ją tunelem, na czas pracy:
+
+```
+ssh -N -L 18080:127.0.0.1:18080 owner@100.64.0.2
+```
+
+Potem w przeglądarce `http://127.0.0.1:18080/`.
+
+Adres `100.64.0.2` to CBMS **w prywatnym mesh** — nie w chmurze. Ta komenda wymaga, żeby
+telefon lub komputer był dołączony do własnej sieci. Z domu można też użyć `192.168.2.1`.
+
+Uwaga: to zwykły proces, nie usługa. **Nie przeżyje restartu komputera** — po restarcie
+trzeba go uruchomić ponownie.
+
+## Rozjazd, który trzeba znać przed włączeniem tunelu
+
+Docelowo tunel ma brać dane z pętli zwrotnej — tunel i Headscale stoją na tej samej
+maszynie i nie ma powodu, żeby ich rozmowa wychodziła na sieć domową.
+
+**Ale dzisiaj Headscale słucha wyłącznie na `192.168.2.1:8080`**, a pętla zwrotna zwraca
+zero. Zmierzone. Headscale przyjmuje **jeden** adres nasłuchu, więc trzeba wybrać:
+
+- albo podać tunelowi adres, który odpowiada (`DARKSTAR_TUNNEL_ORIGIN`),
+- albo przestawić `listen_addr` na pętlę — ale wtedy Headscale przestanie być osiągalny
+  z sieci domowej i węzły w domu stracą do niego dostęp.
+
+Skrypt `world-tunnel` **sprawdza to sam i mówi wprost**. Nie podstawia drugiego adresu po
+cichu — bo wystawiłby wtedy do świata coś, o czym nie wiesz.

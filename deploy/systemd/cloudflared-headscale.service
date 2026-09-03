@@ -31,7 +31,7 @@
 # `server_url` w config.yaml musi wtedy zostac zaktualizowany, a juz dolaczone wezly
 # trzymaja stary adres. Dlatego `Restart=` jest tu celowo `no` - cichy restart w nocy
 # zmienilby adres i po cichu odcial klienta spoza domu. Patrz
-# docs/operations/swiat-bez-zakupow.md
+# docs/operations/world-ingress.md
 # ==========================================
 
 [Unit]
@@ -45,9 +45,12 @@ Type=simple
 User=owner
 Group=owner
 
-Environment=DARKSTAR_TUNNEL_ORIGIN=http://192.168.2.1:8080
+# Zrodlo tunelu. Petla zwrotna jest docelowa, ale ZMIERZONE 2026-09-03: Headscale slucha
+# dzis wylacznie na 192.168.2.1:8080, a petla zwrotna zwraca 000. Przed wlaczeniem tej
+# uslugi trzeba albo zmienic listen_addr, albo podstawic tu adres, ktory odpowiada.
+Environment=DARKSTAR_TUNNEL_ORIGIN=http://127.0.0.1:8080
 
-ExecStart=/usr/local/bin/cloudflared tunnel --url http://192.168.2.1:8080 --no-autoupdate
+ExecStart=/usr/local/bin/cloudflared tunnel --url ${DARKSTAR_TUNNEL_ORIGIN} --no-autoupdate
 
 # CELOWO bez restartu. Kazdy restart tunelu doraznego zmienia adres https, a wtedy
 # server_url przestaje sie zgadzac i klient spoza domu przestaje wchodzic - po cichu.

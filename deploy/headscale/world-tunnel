@@ -45,27 +45,54 @@
 
 set -eu
 
-ORIGIN="${DARKSTAR_TUNNEL_ORIGIN:-http://192.168.2.1:8080}"
+# Zrodlo tunelu. Domyslna jest petla zwrotna, bo tak ma byc docelowo: tunel i Headscale
+# stoja na tej samej maszynie i nie ma powodu, zeby ich rozmowa wychodzila na interfejs
+# sieci domowej.
+#
+# UWAGA, ZMIERZONA 2026-09-03: dzis Headscale slucha WYLACZNIE na 192.168.2.1:8080 -
+# petla zwrotna zwraca 000, bo Headscale przyjmuje jeden adres nasluchu. Skrypt tego NIE
+# obchodzi po cichu: sprawdza i mowi wprost, ktory adres odpowiada. Ciche podstawienie
+# innego adresu ukryloby rozjazd miedzy konfiguracja a rzeczywistoscia.
+ORIGIN="${DARKSTAR_TUNNEL_ORIGIN:-http://127.0.0.1:8080}"
+ALT_ORIGIN="${DARKSTAR_TUNNEL_ORIGIN_ALT:-http://192.168.2.1:8080}"
 LOG="${DARKSTAR_TUNNEL_LOG:-/tmp/darkstar-world-tunnel.log}"
 
 fail() { printf 'world-tunnel: %s\n' "$1" >&2; exit 1; }
+
+probe() { curl -s -o /dev/null -w '%{http_code}' --max-time 5 "$1/health" 2>/dev/null || echo 000; }
 
 check() {
     if command -v cloudflared >/dev/null 2>&1; then
         printf 'cloudflared : %s\n' "$(cloudflared --version 2>&1 | head -1)"
     else
-        printf 'cloudflared : BRAK - patrz docs/operations/swiat-bez-zakupow.md\n'
+        printf 'cloudflared : BRAK - patrz docs/operations/world-ingress.md\n'
     fi
-    code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "$ORIGIN/health" || echo 000)
-    printf 'zrodlo %s : %s\n' "$ORIGIN" "$code"
-    [ "$code" = "200" ] || printf '  UWAGA: zrodlo nie odpowiada - tunel nie mialby czego wystawic\n'
-    printf 'server_url w config: %s\n' "$(grep -E '^server_url:' ../headscale/config.yaml 2>/dev/null || echo '?')"
+    main=$(probe "$ORIGIN")
+    alt=$(probe "$ALT_ORIGIN")
+    printf 'zrodlo %s : %s\n' "$ORIGIN" "$main"
+    printf 'zapasowe %s : %s\n' "$ALT_ORIGIN" "$alt"
+    if [ "$main" != "200" ] && [ "$alt" = "200" ]; then
+        printf '  ROZJAZD: domyslne zrodlo milczy, a odpowiada %s\n' "$ALT_ORIGIN"
+        printf '  Headscale przyjmuje JEDEN adres nasluchu. Wybierz jedno:\n'
+        printf '    a) DARKSTAR_TUNNEL_ORIGIN=%s przed uruchomieniem, albo\n' "$ALT_ORIGIN"
+        printf '    b) zmien listen_addr w config.yaml na petle zwrotna - ale wtedy\n'
+        printf '       Headscale przestanie byc osiagalny z sieci domowej.\n'
+    fi
+    printf 'server_url w config: %s\n' "$(grep -E '^server_url:' "$(dirname "$0")/config.yaml" 2>/dev/null || echo '?')"
 }
 
 run() {
     command -v cloudflared >/dev/null 2>&1 || fail 'cloudflared nie jest zainstalowany'
-    code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "$ORIGIN/health" || echo 000)
-    [ "$code" = "200" ] || fail "zrodlo $ORIGIN nie odpowiada (kod $code) - nie stawiam tunelu"
+    code=$(probe "$ORIGIN")
+    if [ "$code" != "200" ]; then
+        alt=$(probe "$ALT_ORIGIN")
+        if [ "$alt" = "200" ]; then
+            fail "zrodlo $ORIGIN milczy (kod $code), a odpowiada $ALT_ORIGIN.
+  NIE podstawiam go po cichu - wystawilbym adres, o ktorym nie wiesz.
+  Uruchom ponownie z: DARKSTAR_TUNNEL_ORIGIN=$ALT_ORIGIN"
+        fi
+        fail "zrodlo $ORIGIN nie odpowiada (kod $code) - nie stawiam tunelu"
+    fi
 
     printf 'world-tunnel: tunel wychodzacy do %s\n' "$ORIGIN"
     printf 'world-tunnel: adres pojawi sie w logu %s\n' "$LOG"
