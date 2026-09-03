@@ -94,3 +94,70 @@ tylko, gdzie je zalozyc i z jakimi prawami.
 Dysk E — ani jednego zapisu. Chroma na Windows nie ruszona. Siec domowa, `nft`, pociagi
 w Sterowni, Tailscale SaaS na CBMS. Drugi demon `tailscaled` nie zostal uruchomiony.
 `0.0.0.0` nie uzyte nigdzie jako adres nasluchu.
+
+---
+
+# Prawdziwa blokada: zapora Windows, nie CBMS — 2026-09-03
+
+Obie drogi z poprzedniej sekcji zakladaly, ze CBMS moze siegnac do Windowsa. **Nie moze.**
+
+```
+CBMS -> 192.168.2.50   ping        : NIE
+CBMS -> 192.168.2.50:445  (SMB)    : cisza
+CBMS -> 192.168.2.50:8000 (Chroma) : cisza
+cifs-utils na CBMS                 : BRAK
+```
+
+Przyczyna jest po stronie Windows i nie ma nic wspolnego z `nft` na CBMS:
+
+```
+karta z adresem 192.168.2.50 : "WiFi 2"
+profil sieciowy tej karty    : Public
+zapora Windows               : wlaczona na wszystkich trzech profilach
+reguly "File and Printer Sharing" przychodzace, wlaczone : BRAK (zero)
+```
+
+Na profilu **Public** zapora Windows odrzuca ruch przychodzacy. Dlatego milczy ping,
+milczy 445 i milczy 8000 — mimo ze udzialy istnieja, a Chroma dziala.
+
+Odblokowanie wymagaloby zmiany profilu karty na Private i wlaczenia regul udostepniania.
+To jest zmiana zapory na maszynie operatora i **nie zostala wykonana**.
+
+## Droga, ktora nie wymaga ruszania zadnej zapory
+
+Ruch **wychodzacy** z Windowsa nie jest blokowany. SSH z Windowsa na CBMS dziala i jest
+uzywane przez cala te sesje. Wystarczy odwrocic kierunek: zamiast CBMS ciagnac dane,
+to Windows je wypycha.
+
+```
+sklad chroma : E -> data/chroma
+rozmiar      : 371 plikow, 172.8 MB   (28.2 MB to sam chroma.sqlite3)
+narzedzia    : scp, ssh, robocopy - wszystkie obecne na Windows
+```
+
+172 MB przenosi sie w minute. To jest **cala** pamiec, nie probka.
+
+Powstal `deploy/context/push-chroma-to-cbms.ps1`. Proba na sucho, wykonana:
+
+```
+push-chroma: zrodlo ma 371 plikow, 172.8 MB
+What if: Performing the operation "wyslij 172.8 MB" on target "owner@192.168.2.1"
+```
+
+Skrypt czyta zrodlo i **nie zapisuje na nim ani jednego bajtu** - katalog roboczy powstaje
+w TEMP. Kopiowanie idzie dwuetapowo, bo sklad Chromy to zywa baza SQLite: najpierw
+robocopy do TEMP, dopiero stamtad scp. Kopiowanie bazy wprost w trakcie zapisu dalo by
+plik rozdarty w polowie transakcji.
+
+Podmiana na CBMS nastepuje **dopiero po udanym transferze**; przerwany scp zostawia
+poprzednia kopie nietknieta. Zadna sciezka nie jest wpisana w kod - wszystkie przychodza
+ze srodowiska.
+
+## Czego NIE zrobiono i dlaczego remote_e_ok nadal falszywe
+
+`remote_e_ok` pozostaje `false` i **nie zostalo podkolorowane**. Kopia jeszcze nie
+istnieje, a nawet gdy powstanie, musi ja ktos serwowac - Chroma nie odpowiada z katalogu,
+tylko z procesu. Drugi proces Chromy na CBMS, na osobnym porcie petli zwrotnej, jest
+nastepnym krokiem i wymaga decyzji operatora.
+
+Do tego czasu druga noga jest uczciwie martwa i tak sie raportuje.
