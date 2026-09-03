@@ -59,7 +59,7 @@ impl ContextState {
         let local_url = std::env::var("DARKSTAR_CONTEXT_LOCAL")
             .unwrap_or_else(|_| "http://127.0.0.1:8000".to_string());
         let remote_url = std::env::var("DARKSTAR_CONTEXT_REMOTE")
-            .unwrap_or_else(|_| "http://100.71.8.70:8000".to_string());
+            .unwrap_or_else(|_| "http://192.168.2.50:8000".to_string());
         // Noga lokalna jest pierwsza: gdy dane sa na miejscu, nie ma powodu isc przez siec.
         Self {
             api_token,

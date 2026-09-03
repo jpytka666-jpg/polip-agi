@@ -1,0 +1,59 @@
+# darkstar-header-v1
+# po co: share.fstab.example
+# nie wolno: montowac do zapisu, wpisywac hasla do repozytorium, ruszac dysku E z CBMS
+# Autor: Marcin Szul
+# Model: Claude
+# Czas: 2026-09-03T01:05:00+01:00
+# Po co: Wzor wpisu fstab montujacego udzial Windows z dyskiem E WYLACZNIE do odczytu,
+#        jako drugie, niezalezne zrodlo pamieci dla Darkstara.
+#
+# THIS IS VERY IMPORTANT!!!
+# ==========================================
+# MECHANICS: Montaz CIFS z opcja `ro`. Zadna sciezka zapisu nie istnieje, wiec nawet blad
+# po stronie CBMS nie ma jak dotknac zawartosci dysku E. Wlascicielem plikow w systemie
+# plikow jest `owner`, zeby kontener i skrypty czytaly bez podnoszenia uprawnien.
+# SYSTEM PART: deploy/context - druga noga pamieci.
+# ARCHITECTURE FUNCTION: Zrodlo dla lokalnej KOPII na CBMS, a nie bezposrednie zrodlo
+# zapytan. Chroma nie umie serwowac bazy z montazu tylko-do-odczytu; kopia jest po to,
+# zeby druga noga zyla takze wtedy, gdy Windows jest wylaczony.
+# DEPENDENCIES/LINKS: udzial `server wiedzy` na Windows 192.168.2.50 (JUZ ISTNIEJE,
+# zmierzone 2026-09-03), skrypt deploy/context/refresh-local-copy.
+# TECH STACK: fstab + cifs-utils. Wybrane zamiast jednostki .mount, bo nazwa jednostki
+# wymagalaby ucieczek systemd, a to najczestsze zrodlo cichych literowek.
+# GIT COMMIT: PENDING
+# GITHUB METADATA: jpytka666-jpg/polip-agi, branch docs/darkstar-headscale-hotspot-plan
+#
+# NIEZAINSTALOWANY. Ten plik nie zostal dopisany do /etc/fstab i nic nie zostalo
+# zamontowane. Montowanie wymaga roota.
+# ==========================================
+#
+# Przygotowanie (operator, wymaga roota):
+#
+#   sudo apt-get install -y cifs-utils
+#   sudo mkdir -p /mnt/darkstar-share
+#   sudo install -m 0600 /dev/null /etc/darkstar/share.credentials
+#   sudo nano /etc/darkstar/share.credentials      # tresc nizej, NIGDY w repozytorium
+#
+# Zawartosc /etc/darkstar/share.credentials - dwie linie, tryb 0600:
+#
+#   username=<konto Windows>
+#   password=<haslo tego konta>
+#
+# Nastepnie dopisac PONIZSZA linie do /etc/fstab i zamontowac:
+#
+#   sudo mount /mnt/darkstar-share
+#
+# Sprawdzenie, ze montaz jest naprawde tylko do odczytu:
+#
+#   findmnt -no OPTIONS /mnt/darkstar-share      # ma zawierac "ro"
+#   touch /mnt/darkstar-share/proba              # MA sie nie udac
+
+//192.168.2.50/server\040wiedzy  /mnt/darkstar-share  cifs  ro,nofail,_netdev,credentials=/etc/darkstar/share.credentials,uid=1000,gid=1000,file_mode=0444,dir_mode=0555,vers=3.0  0  0
+
+# Uwagi do opcji, kazda jest tam z powodu:
+#   ro          montaz tylko do odczytu - dysk E ma byc nietykalny z CBMS
+#   nofail      wylaczony Windows NIE moze zablokowac startu bramy domowej
+#   _netdev     montaz dopiero po podniesieniu sieci
+#   uid/gid     1000 = owner, zeby czytac bez sudo
+#   file_mode   0444 i dir_mode 0555 - brak bitu zapisu takze w widoku systemu plikow
+#   \040        spacja w nazwie udzialu "server wiedzy" - fstab wymaga tej ucieczki

@@ -1,0 +1,98 @@
+#!/bin/sh
+# darkstar-header-v1
+# po co: refresh-local-copy
+# nie wolno: pisac na dysk E, kasowac lokalnej kopii przed potwierdzeniem nowej, uzywac --delete
+# Autor: Marcin Szul
+# Model: Claude
+# Czas: 2026-09-03T01:05:00+01:00
+# Po co: Odswieza lokalna kopie pamieci na CBMS z zamontowanego udzialu Windows, tak zeby
+#        druga noga zyla takze wtedy, gdy Windows jest wylaczony.
+#
+# THIS IS VERY IMPORTANT!!!
+# ==========================================
+# MECHANICS: Kopiuje do katalogu OBOK biezacej kopii, a dopiero po udanym kopiowaniu
+# podmienia dowiazanie. Dzieki temu przerwane kopiowanie nigdy nie zostawia polowicznej
+# kopii jako obowiazujacej - poprzednia zostaje nietknieta do samego konca.
+# SYSTEM PART: deploy/context - druga noga pamieci.
+# ARCHITECTURE FUNCTION: Jedyna droga aktualizacji lokalnej kopii. Zrodlo jest montowane
+# `ro`, wiec ten skrypt nie ma fizycznej mozliwosci zapisu na dysk E - i celowo nie ma
+# tez zadnej opcji kasujacej po stronie zrodla.
+# DEPENDENCIES/LINKS: montaz z deploy/context/share.fstab.example.
+# TECH STACK: POSIX sh + rsync albo cp - bez zaleznosci ponad to, co jest na Ubuntu.
+# GIT COMMIT: PENDING
+# GITHUB METADATA: jpytka666-jpg/polip-agi, branch docs/darkstar-headscale-hotspot-plan
+# ==========================================
+#
+# Uzycie:
+#   ./refresh-local-copy [podkatalog-zrodla]
+#
+# Domyslnie kopiuje caly zamontowany udzial. Podanie podkatalogu zaweza zakres.
+
+set -eu
+
+SOURCE_ROOT="${DARKSTAR_SHARE_MOUNT:-/mnt/darkstar-share}"
+TARGET_ROOT="${DARKSTAR_LOCAL_COPY:-$HOME/darkstar-context-copy}"
+SUBDIR="${1:-}"
+
+SOURCE="$SOURCE_ROOT${SUBDIR:+/$SUBDIR}"
+CURRENT="$TARGET_ROOT/current"
+INCOMING="$TARGET_ROOT/incoming.$$"
+
+fail() {
+    printf 'refresh-local-copy: %s\n' "$1" >&2
+    exit 1
+}
+
+cleanup() {
+    [ -d "$INCOMING" ] && rm -rf "$INCOMING"
+    return 0
+}
+trap cleanup EXIT HUP INT TERM
+
+# 1. Zrodlo musi byc zamontowane. Kopiowanie z pustego punktu montazu dalo by pusta kopie,
+#    ktora po podmianie wygladalaby jak "druga noga dziala" - i bylaby klamstwem.
+[ -d "$SOURCE" ] || fail "brak $SOURCE - udzial nie jest zamontowany"
+if command -v findmnt >/dev/null 2>&1; then
+    findmnt -no TARGET "$SOURCE_ROOT" >/dev/null 2>&1 \
+        || fail "$SOURCE_ROOT nie jest punktem montazu - przerywam"
+fi
+
+# 2. Montaz MUSI byc tylko do odczytu. Gdyby ktos kiedys przestawil go na zapis, ten
+#    skrypt ma sie zatrzymac, a nie ufac, ze nic nie popsuje.
+if command -v findmnt >/dev/null 2>&1; then
+    case ",$(findmnt -no OPTIONS "$SOURCE_ROOT" 2>/dev/null)," in
+        *,ro,*) : ;;
+        *) fail "$SOURCE_ROOT nie jest zamontowany jako ro - przerywam" ;;
+    esac
+fi
+
+# 3. Zrodlo nie moze byc puste - wylaczony Windows objawia sie pustym katalogiem.
+if [ -z "$(ls -A "$SOURCE" 2>/dev/null)" ]; then
+    fail "$SOURCE jest puste - Windows wylaczony? Zostawiam poprzednia kopie nietknieta"
+fi
+
+mkdir -p "$TARGET_ROOT"
+mkdir -p "$INCOMING"
+
+printf 'refresh-local-copy: kopiuje %s -> %s\n' "$SOURCE" "$INCOMING"
+
+# Bez --delete i bez zadnej operacji na zrodle. Kierunek jest jednostronny.
+if command -v rsync >/dev/null 2>&1; then
+    rsync -a --no-perms --no-owner --no-group "$SOURCE"/ "$INCOMING"/
+else
+    cp -a "$SOURCE"/. "$INCOMING"/
+fi
+
+[ -n "$(ls -A "$INCOMING" 2>/dev/null)" ] || fail "kopia wyszla pusta - nie podmieniam"
+
+# Podmiana dopiero teraz. Poprzednia kopia zyla do tej sekundy.
+PREVIOUS="$TARGET_ROOT/previous.$(date +%Y%m%d-%H%M%S)"
+if [ -d "$CURRENT" ]; then
+    mv "$CURRENT" "$PREVIOUS"
+fi
+mv "$INCOMING" "$CURRENT"
+
+printf 'refresh-local-copy: gotowe\n'
+printf '  biezaca kopia : %s\n' "$CURRENT"
+[ -d "$PREVIOUS" ] && printf '  poprzednia    : %s (skasuj recznie, gdy potwierdzisz nowa)\n' "$PREVIOUS"
+du -sh "$CURRENT" 2>/dev/null || true
