@@ -86,6 +86,17 @@ impl ContextLeg {
         }
     }
 
+    /// Podmienia wersje API, ktora ta noga ma mowic.
+    ///
+    /// Wersja NIE wynika z tego, ktora to noga - wynika z tego, co odpowiada pod danym
+    /// adresem. `remote_e` domyslnie mowi V1, bo tak mowila Chroma na dysku E. Gdy pod ta
+    /// noge podstawi sie nowszy serwer, V1 zwraca `410 Gone` i noga raportuje sie jako
+    /// martwa mimo ze zyje - zmierzone dokladnie tak na Chromie 8001.
+    pub fn with_api(mut self, api_version: ChromaApi) -> Self {
+        self.api_version = api_version;
+        self
+    }
+
     pub fn heartbeat_url(&self) -> String {
         match self.api_version {
             ChromaApi::V1 => format!("{}/api/v1/heartbeat", self.base_url),

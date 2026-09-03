@@ -37,7 +37,9 @@ use axum::{
     response::IntoResponse,
     routing::get,
 };
-use darkstar_core::context_client::{ContextClient, ContextError, ContextLeg, ContextTransport};
+use darkstar_core::context_client::{
+    ChromaApi, ContextClient, ContextError, ContextLeg, ContextTransport,
+};
 use serde::Deserialize;
 
 #[derive(Clone)]
@@ -60,12 +62,21 @@ impl ContextState {
             .unwrap_or_else(|_| "http://127.0.0.1:8000".to_string());
         let remote_url = std::env::var("DARKSTAR_CONTEXT_REMOTE")
             .unwrap_or_else(|_| "http://127.0.0.1:8001".to_string());
+        // Wersja API nogi zapasowej MUSI odpowiadac temu, co naprawde stoi pod jej adresem.
+        // `remote_e` domyslnie mowi V1, bo tak mowila Chroma na dysku E. Odkad ta noga
+        // wskazuje na wlasny, nowszy serwer nad kopia z E, V1 zwraca 410 Gone i noga
+        // raportowala sie jako martwa mimo ze odpowiadala - zmierzone na 8001.
+        // Domyslnie V2; V1 zostaje osiagalne, gdyby noga wrocila na stary serwer.
+        let remote_api = match std::env::var("DARKSTAR_CONTEXT_REMOTE_API").as_deref() {
+            Ok("v1") | Ok("V1") => ChromaApi::V1,
+            _ => ChromaApi::V2,
+        };
         // Noga lokalna jest pierwsza: gdy dane sa na miejscu, nie ma powodu isc przez siec.
         Self {
             api_token,
             transport,
             preferred: ContextLeg::local_cbms(&local_url),
-            fallback: ContextLeg::remote_e(&remote_url),
+            fallback: ContextLeg::remote_e(&remote_url).with_api(remote_api),
         }
     }
 }
