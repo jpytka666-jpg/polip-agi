@@ -195,3 +195,66 @@ Przy zmianie drogi trzeba czytac proces trzymajacy port.
 nie stan demona. `nft`, `apt`, `cloudflared` i tunel do swiata bez zmian.
 
 Uwaga: ten tunel to zwykly proces, nie usluga. **Nie przezyje restartu komputera.**
+
+---
+
+# Tunel Sterowni trwaly — wpiety w istniejacego nadzorce, 2026-09-03
+
+## Osiem linii
+
+```
+1 plik w repo        : deploy/windows/Start-ControlRoomTunnel.ps1
+2 launcher na E      : E:\server wiedzy\runtime\control_room_tunnel_run.cmd
+3 krok w JSON        : "Control Room tunnel (mesh)", pozycja 6 z 6 - OSTATNIA
+4 JSON po zmianie    : poprawny, 6 krokow, pozostale piec nietkniete
+5 Test-Path launchera: True  (tak samo sprawdza to Start-Cmd)
+6 suchy start        : port najpierw WOLNY, po starcie zajety
+7 kto trzyma 18080   : ssh ... owner@100.64.0.2   -> MESH: TAK
+8 health / ile ssh   : 200 / dokladnie 1 proces
+```
+
+## Nie powstal drugi orkiestrator
+
+Istniejacy nadzorca to `AIONS Conductor` w Harmonogramie -> `AUTOSTART AIONS SERVER FULL.bat`
+-> `AIONS SERVER FULL.ps1`. Kroki czyta z `E:\server wiedzy\runtime\aions_boot_steps.json`
+i **sam opisuje droge rozszerzania**:
+
+> "To add a new service: (1) create a launcher script, (2) add a step object (...),
+> (3) restart conductor. No code changes required."
+
+Zrobiono dokladnie to. Kodu nadzorcy **nie tknieto**.
+
+## Trzy rzeczy wyniesione z lektury, ktore zmienily wykonanie
+
+**1. Krok musi byc OSTATNI.** Nadzorca leci krokami po kolei i przy nieudanym robi
+`exit 2` - przerywa caly start. Tunel wstawiony wyzej blokowalby ChromaDB, VectorStore,
+MCP i Llame. Na koncu jego awaria opoznia najwyzej samo zakonczenie.
+
+**2. Launcher musi byc PLIKIEM.** `Start-Cmd` robi `Test-Path $Path` i odpala przez
+`cmd.exe /d /s /c`. Wskazanie w kroku wprost na `.ps1` albo na linie z argumentami by nie
+zadzialalo. Stad `.cmd` obok `chroma_server_run.cmd` i reszty - konwencja tego katalogu.
+
+**3. Sam kod 200 NIE wystarcza.** Nadzorca sprawdza `type: http`, wiec zobaczy 200 z
+dowolnego tunelu na 18080 - takze z tunelu przez SaaS. Dlatego to LAUNCHER pilnuje drogi:
+czyta proces trzymajacy gniazdo i konczy sie bledem, jesli to nie mesh. Ta sama pomylka
+sprawila wczesniej, ze nieudane przelozenie Sterowni wygladalo na udane.
+
+## Co robi launcher
+
+```
+1. ubija WYLACZNIE ssh z przekierowaniem portu 18080  (nie `Get-Process ssh | Stop-Process`,
+   bo to zrywa takze sesje roboczne operatora i agentow)
+2. czeka, az mesh 100.64.0.2 odpowie - do 60 s, konfigurowalne
+3. stawia dokladnie jeden tunel
+4. czyta WLASCICIELA gniazda i sprawdza, czy to mesh
+5. sprawdza health 200
+6. konczy sie 0 albo 1 - nadzorca dostaje uczciwa odpowiedz
+```
+
+Gdy mesh nie odpowiada, launcher **nie siega po 100.71.8.70**. Cicha zamiana drogi jest
+gorsza niz brak tunelu: dawalaby 200 i falszywe poczucie, ze Sterownia idzie po wlasnej sieci.
+
+## Czego nie ruszono
+
+Kodu nadzorcy, pozostalych pieciu krokow, demona SaaS na CBMS, `nft`, `cloudflared`.
+Nie powstalo zadne nowe zadanie w Harmonogramie.
