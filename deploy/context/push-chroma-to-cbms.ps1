@@ -68,8 +68,13 @@ if ([string]::IsNullOrWhiteSpace($Target)) {
 }
 if ([string]::IsNullOrWhiteSpace($RemoteDir)) {
     # Sciezka wzgledna wobec katalogu domowego konta na CBMS - nie jest wpisana na sztywno.
-    $RemoteDir = '~/darkstar-context-copy'
+    $RemoteDir = 'darkstar-context-copy'
 }
+
+# Tylda w cudzyslowie NIE jest rozwijana przez zdalna powloke - zmierzone: powstal katalog
+# o doslownej nazwie "~". Sciezka wzgledna daje ten sam efekt bez pulapki, bo sesja SSH
+# startuje w katalogu domowym konta.
+if ($RemoteDir.StartsWith('~/')) { $RemoteDir = $RemoteDir.Substring(2) }
 
 if (-not (Test-Path -LiteralPath $Source)) { Fail "brak zrodla: $Source" }
 

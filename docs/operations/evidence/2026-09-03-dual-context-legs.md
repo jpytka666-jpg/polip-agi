@@ -161,3 +161,70 @@ tylko z procesu. Drugi proces Chromy na CBMS, na osobnym porcie petli zwrotnej, 
 nastepnym krokiem i wymaga decyzji operatora.
 
 Do tego czasu druga noga jest uczciwie martwa i tak sie raportuje.
+
+---
+
+# Kopia wykonana — 2026-09-03
+
+Sklad Chromy z dysku E lezy na CBMS. Przeniesiony przez SSH z Windowsa, bez dotykania
+jakiejkolwiek zapory i bez montazu SMB.
+
+## Osiem linii pomiaru
+
+```
+1 bajty kopii        : 181 201 696 B  (174M)
+2 pliki kopii        : 371            <- zrodlo mialo 371, komplet
+3 sama baza          : 29 556 736 B
+4 local heartbeat    : 200
+5 health JSON        : {"local_cbms_ok":true,"remote_e_ok":false}
+6 udp 41642 w /etc   : 0              <- kierunek 2 nadal czeka
+7 nietkniete         : tailscaled active; drugi demon niezainstalowany
+8 smieci po kopii    : incoming brak, previous 0
+```
+
+Czas przesylu: **16,5 sekundy**. Cel: `owner@192.168.2.1:chroma-e-copy/current`.
+
+Naglowek pliku bazy odczytany po stronie CBMS:
+
+```
+S Q L i t e   f o r m a t   3 \0
+```
+
+Czyli plik jest poprawna baza SQLite, a nie urwanym transferem. `sqlite3` nie jest na
+CBMS zainstalowane, wiec pelnego `integrity_check` nie wykonano - i nie jest to tu
+udawane.
+
+## Bledy, ktore wyszly w praniu
+
+Pierwsze uruchomienie **nie powiodlo sie** i dobrze, ze skrypt sie na tym zatrzymal
+zamiast brnac dalej:
+
+```
+scp: remote mkdir "chroma-e-copy/incoming/": No such file or directory
+push-chroma: scp nie powiodl sie - biezaca kopia zostaje nietknieta
+```
+
+Przyczyna byla w skrypcie: sciezka `~/chroma-e-copy` byla przekazywana w apostrofach, a
+**tylda w apostrofach nie jest rozwijana przez zdalna powloke**. Powstal katalog o
+doslownej nazwie `~` w katalogu domowym. Zostal usuniety, a skrypt poprawiony: sciezka
+zaczynajaca sie od `~/` jest teraz zamieniana na wzgledna, bo sesja SSH i tak startuje
+w katalogu domowym.
+
+## Co to zmienia, a czego nie
+
+Dane z dysku E sa **fizycznie na Ubuntu**. Znaczy to, ze druga noga moze w przyszlosci
+zyc bez wlaczonego Windowsa - to byl caly sens tej operacji.
+
+Czego to **nie** zmienia: `remote_e_ok` nadal `false` i tak zostaje. Chroma odpowiada
+z procesu, nie z katalogu. Dopoki nikt nie serwuje tej kopii, druga noga jest martwa i
+health mowi to wprost. Podkolorowanie tej flagi bylo by klamstwem dokladnie w tym
+miejscu, w ktorym operator potrzebuje prawdy.
+
+Nastepny krok, wymagajacy decyzji: drugi proces Chromy na CBMS nad `chroma-e-copy/current`,
+na osobnym porcie petli zwrotnej, i przestawienie `DARKSTAR_CONTEXT_REMOTE` na ten port.
+
+## Nietkniete
+
+Dysk E - ani jednego zapisu; skrypt czyta zrodlo, a katalog roboczy zaklada w TEMP.
+Profil sieciowy karty Windows, zapora Windows, `nft` na CBMS, Tailscale SaaS, drugi
+demon `tailscaled`, pociagi w Sterowni. Udzialu SMB nie uzyto w ogole.
