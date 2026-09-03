@@ -5,6 +5,7 @@ AUTHOR: M. SZUL
 AI MODEL: GPT-5 Codex
 TIMESTAMP: 2026-08-29 11:19:11 Europe/London
 REASON FOR CREATION: Utworzenie jednego kanonicznego harmonogramu rozwoju Darkstar od checkpointu fd8099e przez Ghost Gate, Headscale/Headplane, Warlock/Kali i przyszłą infrastrukturę AIONS.
+REVISION: 2026-09-03 17:49 Europe/London — sekcja stanu przepisana na pomiar żywego hosta (Claude Opus 5).
 ==========================================
 -->
 
@@ -13,7 +14,8 @@ REASON FOR CREATION: Utworzenie jednego kanonicznego harmonogramu rozwoju Darkst
 ## Źródło prawdy
 
 - Repozytorium: jpytka666-jpg/polip-agi
-- Gałąź rozwojowa: feat/darkstar-module-control
+- Gałąź rozwojowa (kanon od 2026-09-03): docs/darkstar-headscale-hotspot-plan
+- Stary handoff: feat/darkstar-module-control — punkt przekazania, nie źródło prawdy dnia
 - Punkt przekazania: fd8099e4e3c3399ae69a885fa2ed32ab0c57d2df
 - Szczegółowa specyfikacja: docs/superpowers/specs/2026-08-29-darkstar-native-gateway-private-mesh-design.md
 - Szczegółowy plan: docs/superpowers/plans/2026-08-29-darkstar-native-gateway-headscale-headplane-plan.md
@@ -26,7 +28,40 @@ REASON FOR CREATION: Utworzenie jednego kanonicznego harmonogramu rozwoju Darkst
 - PLANNED — zaplanowane po spełnieniu wcześniejszych bramek.
 - BLOCKED — wymaga sprzętu, decyzji lub zewnętrznego warunku.
 
-## Stan na 2026-08-29
+## Stan na 2026-09-03 — ZMIERZONE
+
+To jest prawda dnia. Każdy wiersz pochodzi z komendy uruchomionej 2026-09-03 na żywej
+maszynie, nie z dokumentu. Tabela z 2026-08-29 została przesunięta niżej, do sekcji
+historycznej, i nie jest już źródłem prawdy.
+
+| Obszar | Stan | Dowód zmierzony 2026-09-03 |
+|---|---|---|
+| Headscale | DONE | Kontener `darkstar-headscale`, obraz `headscale/headscale:v0.29.3`. `http://192.168.2.1:8080/` → HTTP 200. `headscale nodes list` → 2 węzły, 0 wygasłych. |
+| Prywatny mesh + SSH | DONE | 100.64.0.1 (Windows) i 100.64.0.2 (CBMS) oba online, połączenie **direct** przez `192.168.2.1:41642`, `tailscale ping` 2–3 ms. `ssh owner@100.64.0.2 'echo MESH_SSH'` → `MESH_SSH`, rc=0. |
+| Chroma 8000 + 8001 | DONE | `127.0.0.1:8000/api/v2/heartbeat` → 200, `127.0.0.1:8001/api/v2/heartbeat` → 200. `systemctl is-active tailscaled tailscaled-headscale darkstar-chroma-e-copy` → `active active active`. |
+| Kontekst AIONS | DONE | `/v1/context/health` → `{"local_cbms_ok":true,"remote_e_ok":true}`. |
+| Host-guard | PARTIAL | Zachowanie na żywo potwierdzone: `headscale0` przepuszcza wyłącznie tcp/22, a HTTP po mesh (`100.64.0.2:8080/8000/8001`) jest **dropowane** — timeout, nie odmowa. To dowód działania, nie dowód konfiguracji: reguł `nft` ani unitu firewalla nie oglądano, bo operator wprost zabronił dotykania `nft` w tej sesji. |
+| Control Room — dostęp i trwałość | DONE (2026-09-03) | Tunel SSH po prywatnym mesh; właściciel gniazda 18080 to `ssh.exe` z `owner@100.64.0.2`; `/health` → 200 `{"service":"darkstar","api_version":"darkstar.core/v1","status":"ok"}`. Krok 6 w `aions_boot_steps.json` (`enabled=true`) woła `control_room_tunnel_run.cmd` → `Start-ControlRoomTunnel.ps1`; krok weryfikuje **właściciela gniazda**, nie sam kod 200, i jest celowo ostatni w rozruchu. |
+| Control Room UI | PARTIAL | Bez zmian od 29.08. Starter Vite + React Flow istnieje; produkcyjny ekran nie jest skończony. Osadzony widok w Rust pozostaje fallbackiem. |
+| Provider execute | NEXT | `DryRunProvider` jest jedyną implementacją `ModuleProvider`; `module_control_http.rs` nadal deklaruje „This v1 boundary does not execute infrastructure”. Żądania są autoryzowane, ale **nic nie wykonują**. To najbliższy etap wykonawczy. |
+| cloudflared / wyjście na świat | PLANNED | Skrypt `deploy/headscale/world-tunnel` istnieje, `ORIGIN=http://192.168.2.1:8080`. Ale `cloudflared` **nie jest zainstalowany na CBMS**: `command -v` puste, unit `inactive`, brak procesu. Binarka istnieje wyłącznie po stronie Windows — po przeciwnej stronie względem źródła. |
+| Warlock Bridge | PLANNED | Bez zmian. Wymaga migracji typów i przyszłego hosta. |
+
+Poza tabelą, zmierzone i istotne:
+
+- Komercyjny login server nadal działa obok własnego: `100.71.8.70`, `idle; offers exit node`.
+  Węzeł Windows po tamtej stronie jest offline od 17 h. Odłączenie pozostaje w M8.
+- Headplane nie jest uruchomiony — `docker ps` nie pokazuje takiego kontenera.
+- Host: `up 2 days, 11 hours`, `boot_id dbe6ad68-eff2-4954-baa4-66c7077d1c8c`. W tej sesji
+  **nie było restartu Ubuntu**, więc żaden wiersz DONE po stronie Ubuntu nie jest dowodem
+  na przetrwanie reboota. Reguła 2 z sekcji „Reguły aktualizacji roadmapy” pozostaje dla
+  nich niespełniona.
+
+## Historia — stan na 2026-08-29 (nieaktualny)
+
+Poniższa tabela jest zachowana jako zapis tego, co wiedziano 2026-08-29. **Nie jest
+źródłem prawdy.** Tam, gdzie różni się od tabeli wyżej, obowiązuje tabela wyżej.
+
 
 | Obszar | Stan | Dowód / brakujący dowód |
 |---|---|---|
@@ -200,7 +235,13 @@ Brama wyjścia:
 
 ### M6 — Prywatny Headscale
 
-Stan: PLANNED
+Stan: DONE (control server), PARTIAL (bramka wyjścia)
+
+Dowód 2026-09-03: własny control server działa w kontenerze `headscale/headscale:v0.29.3`;
+Windows i CBMS są zarejestrowane we własnym login server i widzą się bezpośrednio.
+Brakujący dowód: backup/restore drill nie został wykonany, a komercyjny login server
+nadal jest uruchomiony obok — więc bramka "komercyjny login server nie uczestniczy"
+nie jest jeszcze zamknięta.
 
 Zakres:
 
