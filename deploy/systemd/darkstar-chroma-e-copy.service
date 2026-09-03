@@ -55,6 +55,19 @@ Environment=DARKSTAR_CHROMA_PORT=8001
 Environment=DARKSTAR_CHROMA_DIR=/home/owner/chroma-e-copy/current
 Environment=DARKSTAR_CHROMA_LOG_DIR=/home/owner/darkstar/logs
 
+# UWAGA NA NAZWY. Skrypt darkstar-chroma-run czyta WYLACZNIE nazwy z przedrostkiem
+# DARKSTAR_CHROMA_ i dopiero z nich robi swoje zmienne wewnetrzne:
+#     DATA_DIR=${DARKSTAR_CHROMA_DIR:-/var/lib/darkstar/chroma}
+#     HOST=${DARKSTAR_CHROMA_HOST:-127.0.0.1}
+#     PORT=${DARKSTAR_CHROMA_PORT:-8000}
+# Ustawienie samych DATA_DIR, HOST i PORT nie zadzialaloby: skrypt nadpisuje je wlasnym
+# przypisaniem, wiec PORT wrocilby do 8000 - czyli DRUGA Chroma probowalaby wstac na
+# porcie PIERWSZEJ, ktora zyje i obsluguje pamiec. Ponizsze trzy linie sa aliasami na
+# przyszlosc, gdyby skrypt kiedys czytal gole nazwy; dzisiaj skutek maja te powyzej.
+Environment=DATA_DIR=/home/owner/chroma-e-copy/current
+Environment=HOST=127.0.0.1
+Environment=PORT=8001
+
 # Kopia z dysku E jest tu ZAPISYWALNA i to jest zmiana wzgledem pierwszej wersji.
 # Powod: sklad Chromy to baza SQLite, ktora przy samym odczycie zaklada obok siebie
 # dziennik. Ochrona `ReadOnlyPaths` chronila tu wlasciwa rzecz w niewlasciwym miejscu -
