@@ -93,3 +93,56 @@ raz, na wyrazne polecenie, i drugi raz bez polecenia nie bedzie.
 Biezacy `tailscaled` do SaaS dziala i nie zostal dotkniety. Zaden `tailscale up`, `down`
 ani `logout` nie padl na CBMS. Drugi demon nie zostal uruchomiony. Klucza preauth nie ma
 w repozytorium.
+
+---
+
+# Regula UDP 41642 dopisana — w PLIKU, nie w /etc
+
+Przeszkoda opisana wyzej zostala domknieta po stronie repozytorium. Regula lezy w
+wersjonowanym `host-guard.nft` i **nie zostala zastosowana**.
+
+## Osiem linii stanu
+
+```
+1 regula udp 41642 w repo   : linia 83, jest
+2 regula udp 41642 w /etc   : 0 wpisow           <- NIE zastosowana
+3 regula tcp 8080 w /etc    : 1 wpis             <- ta byla zastosowana wczesniej
+4 nft -f w tej sesji        : nie wykonany
+5 drugi demon tailscaled    : jednostka niezainstalowana, nieaktywna
+6 demon SaaS                : active, nietkniety
+7 port demona SaaS          : 41641, poza zakresem tej reguly
+8 klucz preauth w repo      : brak, sprawdzone przed zapisem
+```
+
+## Trzy reguly downstream — komplet
+
+```
+tcp dport 22    accept   "downstream SSH management after Task 5"
+tcp dport 8080  accept   "downstream Headscale control server, Task 13"
+udp dport 41642 accept   "downstream Headscale WireGuard transport"
+```
+
+Wszystkie trzy maja ten sam zakres: wylacznie interfejs downstream i wylacznie zrodla
+z `@darkstar_downstream_ipv4`, czyli `192.168.2.0/24`. Sieci nadrzednej Vodafone zadna
+z nich nie dotyczy.
+
+Port `41641` nalezy do demona do SaaS i **nie pojawia sie w zadnej nowej regule**. Nowy
+demon dostal `41642` wlasnie po to, zeby te dwa ruchy nie mialy jak sie zejsc.
+
+## Po co ta regula
+
+Bez niej wezly prywatnego mesh nie polaczylyby sie bezposrednio i spadlyby na publiczny
+przekaznik DERP — dzialaloby to tylko przy dostepie do internetu, czyli **gorzej niz
+obecny SaaS**. Z nia lacza sie po kablu, nie wychodzac na zewnatrz.
+
+## Jedna linia dla operatora
+
+Wymaga roota; `sudo` wpisuje operator.
+
+```
+ssh owner@192.168.2.1 'sudo install -m 0644 ~/polip-agi/deploy/firewall/host-guard.nft /etc/darkstar/host-guard.nft && sudo ~/polip-agi/deploy/firewall/darkstar-firewall-apply && grep -c "dport 41642" /etc/darkstar/host-guard.nft'
+```
+
+Kopiuje plik, przeladowuje **wylacznie** tabele `inet darkstar_host_guard` ich wlasnym
+skryptem (kasuje ta jedna tabele, waliduje `nft -c`, dopiero potem laduje) i pokazuje,
+czy regula doszla. Ma wrocic `loaded inet darkstar_host_guard` oraz `1`.

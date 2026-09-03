@@ -67,6 +67,20 @@ table inet darkstar_host_guard {
         # Vodafone (@upstream_ifaces) nadal nie przechodzi nic poza transportem WireGuard
         # i klientem DHCP - ta regula tego nie zmienia.
         iifname @downstream_ifaces ip saddr @darkstar_downstream_ipv4 tcp dport 8080 accept comment "downstream Headscale control server, Task 13"
+
+        # NIEZASTOSOWANA - tak samo jak regula 8080 powyzej w chwili jej dopisania.
+        # Transport WireGuard DRUGIEGO demona tailscaled, tego ktory gada z wlasnym
+        # Headscale. Port 41641 nalezy do demona do SaaS i zostaje nietkniety; nowy
+        # demon dostal 41642 wlasnie po to, zeby te dwa ruchy nie mialy jak sie zejsc.
+        #
+        # Bez tej reguly wezly prywatnego mesh nie polacza sie bezposrednio i spadna na
+        # publiczny przekaznik DERP - czyli dzialalyby tylko przy internecie, gorzej niz
+        # obecny SaaS. Z nia lacza sie po kablu, bez wychodzenia na zewnatrz.
+        #
+        # Zakres jak u sasiadow: wylacznie interfejs downstream i wylacznie zrodla
+        # z @darkstar_downstream_ipv4, czyli 192.168.2.0/24. Sieci nadrzednej Vodafone
+        # ta regula nie dotyczy.
+        iifname @downstream_ifaces ip saddr @darkstar_downstream_ipv4 udp dport 41642 accept comment "downstream Headscale WireGuard transport"
     }
 
     chain forward {
