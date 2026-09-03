@@ -130,3 +130,71 @@ wylaczenie go zerwaloby takze podglad Sterowni, nie tylko SSH.
 Prywatny mesh **dziala i przenosi ruch**, ale **nie jest jeszcze droga zarzadzania**.
 Do tego brakuje jednej linii w zaporze - dopisania `headscale0` do zaufanych interfejsow.
 Nie zostala dopisana; zakres tej rundy byl pomiarowy i dokumentacyjny.
+
+---
+
+# Poprawka SSH po mesh — regula w PLIKU, niezastosowana
+
+## Co dodano
+
+```
+iifname "headscale0" tcp dport 22 accept comment "SSH over private Headscale mesh"
+```
+
+Jedna linia, wstawiona obok istniejacej reguly SSH z sieci prywatnej.
+
+## Dlaczego NIE dopisano headscale0 do management_ifaces
+
+Byla to druga z dwoch mozliwosci i zostala odrzucona swiadomie. Istniejaca regula brzmi:
+
+```
+iifname @management_ifaces accept comment "temporary Tailscale management"
+```
+
+To jest `accept` **bez zadnego ograniczenia portu** - wszystko, co przyjdzie z interfejsu
+w tym zbiorze, wchodzi. Dopisanie tam `headscale0` naprawiloby SSH, ale przy okazji
+otworzyloby cala maszyne dla kazdego portu z nowej sciezki, jako **skutek uboczny**
+naprawy jednej rzeczy.
+
+Nowa regula daje dokladnie to, o co chodzi - zdalne zarzadzanie - i nic ponad to.
+Rozszerzenie zakresu, gdyby kiedys bylo potrzebne, ma byc osobna i widoczna decyzja.
+
+## Stan regul wejsciowych po zmianie
+
+```
+44 loopback
+45 established,related
+48 ICMPv4
+49 ICMPv6
+51 @management_ifaces accept                    <- stary Tailscale, bez limitu portu
+52 @upstream_ifaces udp 41641                    <- transport SaaS
+54 @upstream_ifaces DHCP v4
+55 @upstream_ifaces DHCP v6
+57 @downstream_ifaces + 192.168.2.0/24  tcp 22
+72 headscale0 tcp 22                             <- NOWA, tylko SSH
+84 @downstream_ifaces + 192.168.2.0/24  tcp 8080
+98 @downstream_ifaces + 192.168.2.0/24  udp 41642
+```
+
+Nowa regula nie dotyka `wlp2s0` ani sieci nadrzednej Vodafone. `0.0.0.0` nie wystepuje.
+
+## Czego NIE zrobiono
+
+`nft -f` nie padl, `darkstar-firewall.service` nie zostal przeladowany. Regula lezy w
+wersjonowanym pliku i do czasu swiadomego przeladowania przez operatora **SSH po mesh
+nadal bedzie odbijac**. Tak ma byc - stan `/etc` i stan repozytorium sa tu celowo
+rozdzielone.
+
+Linia dla operatora:
+
+```
+ssh owner@192.168.2.1 'sudo cp ~/polip-agi/deploy/firewall/host-guard.nft /etc/darkstar/host-guard.nft && sudo ~/polip-agi/deploy/firewall/darkstar-firewall-apply && grep -c headscale0 /etc/darkstar/host-guard.nft'
+```
+
+Ma zwrocic `loaded inet darkstar_host_guard` oraz `1`. Potem, z Windows:
+
+```
+Test-NetConnection 100.64.0.2 -Port 22       # ma dac TcpTestSucceeded True
+```
+
+SaaS zostaje `active` przez caly czas tej operacji.

@@ -56,6 +56,21 @@ table inet darkstar_host_guard {
 
         iifname @downstream_ifaces ip saddr @darkstar_downstream_ipv4 tcp dport 22 accept comment "downstream SSH management after Task 5"
 
+        # NIEZASTOSOWANA do czasu przeladowania przez operatora.
+        #
+        # Prywatny mesh niesie ruch w obie strony - zmierzone, ping przechodzi z Windows
+        # na 100.64.0.2 i z CBMS na 100.64.0.1 - ale SSH po tym samym adresie odbijalo sie
+        # od polityki `drop`. Przyczyna: `management_ifaces` zawiera wylacznie `tailscale0`,
+        # a wlasny mesh przychodzi na `headscale0`. Przechodzil sam ICMP, dopuszczony
+        # osobna, ogolna regula wyzej.
+        #
+        # SWIADOMIE NIE dopisano `headscale0` do `management_ifaces`. Tamta regula to
+        # `iifname @management_ifaces accept` - czyli WSZYSTKO z tego interfejsu, kazdy
+        # port. Dla nowej sciezki wystarczy jedno: zdalne zarzadzanie. Ta regula daje
+        # dokladnie tyle i nic wiecej; rozszerzenie zakresu ma byc pozniej osobna,
+        # widoczna decyzja, a nie skutkiem ubocznym naprawy SSH.
+        iifname "headscale0" tcp dport 22 accept comment "SSH over private Headscale mesh"
+
         # NIEZASTOSOWANA. Regula lezy w pliku i czeka na swiadome przeladowanie zapory
         # przez operatora - w tej sesji nie wykonano ani `nft -f`, ani restartu
         # darkstar-firewall.service. Dopoki tego nie ma, port 8080 jest z sieci prywatnej
