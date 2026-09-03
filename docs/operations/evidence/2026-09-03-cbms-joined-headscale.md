@@ -210,3 +210,60 @@ regula w /etc/darkstar/host-guard.nft           : 0   -> NIEZASTOSOWANA
 
 `nft -f` nie padl i `darkstar-firewall.service` nie byl przeladowany. Do czasu swiadomego
 przeladowania przez operatora SSH po adresie mesh nadal odbija sie od polityki `drop`.
+
+---
+
+# SSH po prywatnym mesh DZIALA — 2026-09-03
+
+Operator przeladowal zapore wlasnym skryptem. Regula `headscale0 tcp dport 22` jest w
+`/etc` i zyje.
+
+## Dowod mocniejszy niz uscisk TCP
+
+`Test-NetConnection` potwierdza tylko, ze port odpowiada. Wykonano wiec **pelne logowanie**
+i odczytano, ktora droga sesja faktycznie przyszla:
+
+```
+$ ssh owner@100.64.0.2 'echo MESH_SSH_OK; hostname; echo $SSH_CONNECTION'
+MESH_SSH_OK
+CBMS
+wszedlem przez: 100.64.0.1 -> 100.64.0.2
+```
+
+`SSH_CONNECTION` podaje adresy widziane przez samego `sshd`. Oba naleza do puli prywatnego
+mesh `100.64.0.0/10`. Sesja **nie** poszla ani po kablu `192.168.2.0/24`, ani przez
+Tailscale SaaS - to jest ruch po wlasnej sieci, potwierdzony przez druga strone
+polaczenia, a nie zalozony.
+
+## Osiem linii
+
+```
+1 SSH 100.64.0.1 -> 100.64.0.2 : MESH_SSH_OK, hostname CBMS
+2 droga sesji wg sshd          : 100.64.0.1 -> 100.64.0.2   (pula prywatnego mesh)
+3 regula headscale0 w /etc     : 3 wystapienia (byla 0)
+4 SaaS tailscaled.service      : active   <- ZOSTAJE
+5 mesh tailscaled-headscale    : active
+6 wezly w headscale            : 2 online
+7 pamiec                       : {"local_cbms_ok":true,"remote_e_ok":true}
+8 zakres nowej reguly          : wylacznie tcp 22 na headscale0
+```
+
+## O nasluchu sshd na 0.0.0.0:22
+
+`sshd` nasluchuje na wszystkich adresach i samo w sobie wyglada to szeroko, ale nie jest
+ekspozycja. Zapora ma polityke wejscia `drop`, a przepuszcza wylacznie nazwane sciezki:
+petle zwrotna, `tailscale0`, SSH z `192.168.2.0/24`, SSH z `headscale0` oraz dwa porty
+uslug. Z sieci nadrzednej Vodafone przechodzi tylko transport WireGuard i klient DHCP -
+SSH z `wlp2s0` **nie wchodzi**. Nasluch jest szeroki, dostep jest waski.
+
+## Co to znaczy
+
+Prywatny mesh przestal byc demonstracja i stal sie **droga zarzadzania**. Od tej chwili
+CBMS jest osiagalny trzema niezaleznymi drogami: kabel `192.168.2.1`, wlasny mesh
+`100.64.0.2` i Tailscale SaaS `100.71.8.70`.
+
+## Czego NIE zrobiono
+
+`tailscale down` ani `logout` nie padly i SaaS zostaje `active`. Tunel Sterowni na `18080`
+nadal idzie przez SaaS, wiec jego wylaczenie zabraloby takze ten podglad - to osobna
+decyzja, nie skutek uboczny dzisiejszej pracy.
