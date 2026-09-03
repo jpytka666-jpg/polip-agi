@@ -86,3 +86,47 @@ wylacznie dokumentacyjny, a zapory nie rusza sie bez wyraznego polecenia.
 `tailscale down`, `tailscale logout`, `tailscaled.service`, `nft -f`, dysk E, pociagi
 w Sterowni. Klucza preauth nie ma w repozytorium. Pamiec dziala na obu nogach przez caly
 czas trwania tej operacji.
+
+---
+
+# Pomiar domkniety: mesh niesie ruch w OBIE strony — 2026-09-03
+
+Poprzednia sekcja mierzyla wylacznie kierunek Windows -> CBMS. Brakowal kierunek odwrotny,
+a bez niego nie dalo sie odroznic "mesh dziala" od "jedna strona cos widzi".
+
+## Osiem linii
+
+```
+1 wezly              : 2 online - 100.64.0.1, 100.64.0.2
+2 100.64.0.2:22      : TcpTestSucceeded False   <- SSH po mesh ODRZUCONE
+3 ping 100.64.0.2    : True   (Windows -> CBMS)
+4 ping 100.64.0.1    : OK     (CBMS -> Windows)   <- brakujacy kierunek, dziala
+5 SaaS               : tailscaled.service active; mesh tailscaled-headscale active
+6 pamiec 8000/8001   : 200/200, {"local_cbms_ok":true,"remote_e_ok":true}
+7 udp 41642 w /etc   : 1
+8 siec               : ping 192.168.2.1 OK, ping 8.8.8.8 OK, Sterownia :18080 -> 200
+```
+
+## Co ten brakujacy kierunek rozstrzyga
+
+`ping` przechodzi **z obu stron**. Znaczy to, ze prywatny mesh naprawde przenosi pakiety
+miedzy wezlami - to nie jest sama rejestracja w bazie serwera sterujacego, tylko dzialajaca
+sciezka sieciowa. Klucze zostaly wymienione, tunel stoi, trasy sa.
+
+Jednoczesnie SSH po tym samym adresie nadal odbija. To domyka diagnoze i wyklucza wszystkie
+inne podejrzenia: nie jest to problem tras, kluczy ani serwera sterujacego. Zostaje
+dokladnie jedna przyczyna - `management_ifaces` w `host-guard.nft` zawiera tylko
+`tailscale0`, a ruch przychodzi na `headscale0`. Przechodzi ICMP, dopuszczony osobna,
+ogolna regula; TCP nie.
+
+## Sterownia dziala przez STARA droge
+
+`http://127.0.0.1:18080/health` odpowiada `200`. Ten tunel idzie przez `tailscaled.service`,
+czyli przez SaaS - nie przez prywatny mesh. To kolejny powod, dla ktorego SaaS zostaje:
+wylaczenie go zerwaloby takze podglad Sterowni, nie tylko SSH.
+
+## Stan koncowy
+
+Prywatny mesh **dziala i przenosi ruch**, ale **nie jest jeszcze droga zarzadzania**.
+Do tego brakuje jednej linii w zaporze - dopisania `headscale0` do zaufanych interfejsow.
+Nie zostala dopisana; zakres tej rundy byl pomiarowy i dokumentacyjny.
