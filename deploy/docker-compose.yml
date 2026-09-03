@@ -17,10 +17,12 @@ services:
       # Bez tokenu kazda sciezka poza /health i /ready odpowiada 401 - fail-closed.
       # Wartosc zyje w deploy/.env (tryb 0600, ignorowany przez git), nigdy w repozytorium.
       DARKSTAR_API_TOKEN: ${DARKSTAR_API_TOKEN:?ustaw DARKSTAR_API_TOKEN w deploy/.env}
-      # Przy sieci maszyny 127.0.0.1 kontenera JEST petla zwrotna hosta, wiec Chroma
+      # Noga DRUGA: osobny proces Chromy na 8001 nad kopia skladu z dysku E. Inny proces,
+      # inny katalog danych - wiec padniecie jednej nogi nie zabiera drugiej. Przy sieci
+      # hosta 127.0.0.1 kontenera JEST petla zwrotna maszyny, wiec Chroma
       # zostaje tam, gdzie byla - bez nowego adresu nasluchu i bez zmiany zapory.
       DARKSTAR_CONTEXT_LOCAL: ${DARKSTAR_CONTEXT_LOCAL:-http://127.0.0.1:8000}
-      DARKSTAR_CONTEXT_REMOTE: ${DARKSTAR_CONTEXT_REMOTE:-http://192.168.2.50:8000}
+      DARKSTAR_CONTEXT_REMOTE: ${DARKSTAR_CONTEXT_REMOTE:-http://127.0.0.1:8001}
       # Worktree czytany przez GET /v1/git/overview. Sciezka jest KONTENEROWA i stala;
       # co jest pod nia podstawione, decyduje montaz nizej.
       DARKSTAR_GIT_WORKTREE: /srv/repo
