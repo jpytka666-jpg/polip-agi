@@ -65,7 +65,10 @@ fail() { printf 'world-tunnel: %s\n' "$1" >&2; exit 1; }
 # i tak wypisuje juz `000` z `-w`, wiec doklejenie drugiego dawalo `000000` - liczbe,
 # ktora nie jest zadnym kodem i podwaza zaufanie do calego pomiaru.
 probe() {
-    code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "$1/health" 2>/dev/null)
+    # `|| true` jest KONIECZNE: przy `set -e` nieudany curl przerwalby caly skrypt,
+    # a `check` ma wlasnie zmierzyc adres, ktory moze nie odpowiadac. Nie wolno go
+    # zastapic przez `|| echo 000` - curl wypisuje juz `000` sam i wyszloby `000000`.
+    code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "$1/health" 2>/dev/null || true)
     [ -n "$code" ] || code=000
     printf '%s' "$code"
 }
