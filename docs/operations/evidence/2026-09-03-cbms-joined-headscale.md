@@ -198,3 +198,15 @@ Test-NetConnection 100.64.0.2 -Port 22       # ma dac TcpTestSucceeded True
 ```
 
 SaaS zostaje `active` przez caly czas tej operacji.
+
+---
+
+# Stan reguly SSH po mesh — dwie linie
+
+```
+regula w PLIKU (deploy/firewall/host-guard.nft) : JEST
+regula w /etc/darkstar/host-guard.nft           : 0   -> NIEZASTOSOWANA
+```
+
+`nft -f` nie padl i `darkstar-firewall.service` nie byl przeladowany. Do czasu swiadomego
+przeladowania przez operatora SSH po adresie mesh nadal odbija sie od polityki `drop`.
