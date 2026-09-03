@@ -287,6 +287,30 @@ mod tests {
         assert_eq!(listed.collections.len(), 2);
     }
 
+    /// Kolejnosc jak w SERWERZE, czyli odwrotna do `client()` powyzej: noga lokalna jest
+    /// pierwsza, a udzial z E jest zapasem. Pozostale testy sprawdzaly wylacznie uklad
+    /// odwrotny, wiec ten kierunek przelaczenia - ten, ktory faktycznie dziala w
+    /// produkcji - nie byl pokryty niczym.
+    #[test]
+    fn falls_back_to_the_share_when_the_local_leg_is_silent() {
+        let c = ContextClient::new(
+            // local_ok = false: noga lokalna milczy. remote_ok = true: udzial odpowiada.
+            FakeTransport::new(true, false),
+            ContextLeg::local_cbms("http://127.0.0.1:9000"),
+            ContextLeg::remote_e("http://127.0.0.1:8001"),
+        );
+
+        let listed = c.list().unwrap();
+        assert_eq!(listed.served_by, ContextLegKind::RemoteE);
+        assert_eq!(listed.collections.len(), 2);
+
+        // Zdrowie ma pokazac to samo rozroznienie, a nie jedno zbiorcze "dziala".
+        let health = c.health();
+        assert!(!health.local_cbms_ok, "noga lokalna milczy");
+        assert!(health.remote_e_ok, "udzial odpowiada");
+        assert!(health.any_ok());
+    }
+
     #[test]
     fn fails_closed_when_both_legs_are_silent() {
         let c = client(false, false);

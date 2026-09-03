@@ -228,3 +228,86 @@ na osobnym porcie petli zwrotnej, i przestawienie `DARKSTAR_CONTEXT_REMOTE` na t
 Dysk E - ani jednego zapisu; skrypt czyta zrodlo, a katalog roboczy zaklada w TEMP.
 Profil sieciowy karty Windows, zapora Windows, `nft` na CBMS, Tailscale SaaS, drugi
 demon `tailscaled`, pociagi w Sterowni. Udzialu SMB nie uzyto w ogole.
+
+---
+
+# Druga Chroma na 8001 — pliki gotowe, proces NIE uruchomiony
+
+## Osiem linii stanu
+
+```
+1 pliki                : darkstar-chroma-e-copy.service + darkstar-context.env.example
+2 bind                 : 127.0.0.1:8001  (DARKSTAR_CHROMA_HOST/PORT w jednostce)
+3 volume ro            : ReadOnlyPaths=%h/chroma-e-copy  - odpowiednik montazu :ro
+4 remote_e_ok          : nadal false     <- nic nie uruchomiono, flaga nie podkolorowana
+5 port 8001            : WOLNY (zmierzone)
+6 test czerwony->zielony: falls_back_to_the_share_when_the_local_leg_is_silent  PASSED
+7 jednostka zainstalowana: NIE (brak daemon-reload, brak start)
+8 obraz Dockera        : NIEPOTRZEBNY - Chroma na CBMS to proces natywny, nie kontener
+```
+
+## Dlaczego nie compose ani obraz
+
+Zmierzone, nie zalozone: noga pierwsza to **proces natywny**, nie kontener.
+
+```
+LISTEN 127.0.0.1:8000  users:(("chroma",pid=61356))
+docker images | grep chroma : brak
+docker ps -a   | grep chroma : brak
+```
+
+Uruchamia ja istniejacy `deploy/context/darkstar-chroma-run`, sterowany w calosci
+srodowiskiem: `VENV`, `DATA_DIR`, `LOG_DIR`, `HOST`, `PORT`. Druga noga rozni sie od niej
+**dwiema wartosciami**: portem 8001 i katalogiem danych wskazujacym na kopie z E.
+
+Dodawanie obrazu Dockera i pliku compose oznaczaloby drugi, rownolegly sposob uruchamiania
+tej samej uslugi. Jednostka systemd wolajaca istniejacy skrypt nie dokłada niczego nowego.
+
+## Test — luka, ktora naprawde istniala
+
+Rdzen mial testy przelaczania nog, ale **wszystkie w kolejnosci odwrotnej niz produkcja**:
+w `client()` noga preferowana to `RemoteE`, a w serwerze pierwsza jest `LocalCbms`. Kierunek
+"lokalna milczy, odpowiada udzial" - czyli dokladnie ten, ktory ma ratowac sytuacje - nie
+byl pokryty niczym.
+
+```
+falls_back_to_the_share_when_the_local_leg_is_silent ... ok
+  served_by      == RemoteE
+  local_cbms_ok  == false
+  remote_e_ok    == true
+  any_ok()       == true
+```
+
+## Ostrzezenie, ktorego nie ukrywam
+
+`ReadOnlyPaths` odpowiada montazowi `:ro` i jest tam swiadomie - kopia z E ma byc
+nietykalna. Ale sklad Chromy to baza SQLite, a SQLite przy odczycie zwykle chce zapisac
+dziennik obok pliku. Jesli Chroma odmowi startu z bledem o prawach zapisu, wlasciwa
+poprawka jest taka:
+
+```
+# NIE zdejmowac ochrony z danych. Zamiast tego dac osobny katalog zapisywalny:
+ReadWritePaths=%h/darkstar/chroma-e-journal
+Environment=SQLITE_TMPDIR=%h/darkstar/chroma-e-journal
+```
+
+Nie zostalo to zastosowane, bo bez uruchomienia procesu nie wiadomo, czy jest potrzebne,
+a zgadywanie zapisalo by w repozytorium poprawke na chorobe, ktorej moze nie byc.
+
+## Instalacja - do wykonania przez operatora, wymaga roota
+
+```
+sudo install -m 0644 ~/polip-agi/deploy/systemd/darkstar-chroma-e-copy.service \
+    /etc/systemd/system/darkstar-chroma-e-copy.service
+sudo systemctl daemon-reload
+sudo systemctl start darkstar-chroma-e-copy.service
+curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8001/api/v2/heartbeat
+```
+
+Dopiero gdy ostatnia linia zwroci `200`, ma sens przeniesienie
+`DARKSTAR_CONTEXT_REMOTE=http://127.0.0.1:8001` z pliku wzorcowego do `deploy/.env`
+i przeladowanie Darkstara. Wczesniej `remote_e_ok` bedzie `false` - i tak ma byc.
+
+## Nietkniete
+
+Chroma na 8000, Tailscale, `nft`, SMB, dysk E. Nic nie uruchomiono, `docker up` nie padl.

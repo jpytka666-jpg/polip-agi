@@ -1,0 +1,68 @@
+# darkstar-header-v1
+# po co: darkstar-chroma-e-copy.service
+# nie wolno: ruszac Chromy na 8000, wiazac na 0.0.0.0, pisac do kopii z dysku E
+# Autor: Marcin Szul
+# Model: Claude
+# Czas: 2026-09-03T04:05:00+01:00
+# Po co: Druga Chroma na 127.0.0.1:8001, serwujaca kopie skladu z dysku E, zeby druga noga
+#        pamieci byla osobnym procesem nad osobnymi danymi, a nie ta sama baza co pierwsza.
+#
+# THIS IS VERY IMPORTANT!!!
+# ==========================================
+# MECHANICS: NIE powstaje tu nowy sposob uruchamiania Chromy. Jednostka wola istniejacy
+# skrypt deploy/context/darkstar-chroma-run, ktory juz jest w pelni sterowany srodowiskiem
+# (VENV, DATA_DIR, LOG_DIR, HOST, PORT). Rozni sie wylacznie dwiema wartosciami: portem
+# 8001 zamiast 8000 i katalogiem danych wskazujacym na kopie z E. Zadnego obrazu Dockera
+# ani pliku compose nie trzeba - biezaca Chroma na 8000 tez jest procesem natywnym.
+# SYSTEM PART: deploy/systemd - druga noga pamieci.
+# ARCHITECTURE FUNCTION: Drugie, niezalezne zrodlo odpowiedzi. Pierwsza noga zostaje
+# nietknieta na 8000; ta jednostka nie ma zadnej sciezki, ktora moglaby ja zatrzymac.
+# DEPENDENCIES/LINKS: deploy/context/darkstar-chroma-run, kopia z
+# deploy/context/push-chroma-to-cbms.ps1.
+# TECH STACK: systemd unit - zgodnie z reszta deploy/systemd.
+# GIT COMMIT: PENDING
+# GITHUB METADATA: jpytka666-jpg/polip-agi, branch docs/darkstar-headscale-hotspot-plan
+#
+# NIEZAINSTALOWANA I NIEURUCHOMIONA. Plik lezy w repozytorium; w tej sesji nie wykonano
+# ani `daemon-reload`, ani `start`. Instrukcja w evidence.
+#
+# UWAGA, KTOREJ NIE UKRYWAM: sklad Chromy to baza SQLite, a SQLite przy zwyklym odczycie
+# zwykle chce zapisac dziennik obok pliku. `ReadOnlyPaths` ponizej odpowiada montazowi
+# `:ro` i jest tam swiadomie - kopia z E ma byc nietykalna. Jesli Chroma odmowi startu z
+# bledem o prawach zapisu, wlasciwa poprawka jest OPISANA W EVIDENCE i polega na wydzieleniu
+# katalogu zapisywalnego na dziennik, a NIE na zdjeciu ochrony z danych.
+# ==========================================
+
+[Unit]
+Description=Darkstar second Chroma - E copy leg on 8001
+# Celowo BEZ Requires na pierwszej Chromie: nogi maja byc niezalezne. Awaria jednej nie
+# ma prawa zatrzymac drugiej - to jest caly sens dwoch nog.
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=owner
+Group=owner
+
+# Wylacznie petla zwrotna. 0.0.0.0 wystawiloby pamiec na wlp2s0, czyli do sieci nadrzednej.
+Environment=DARKSTAR_CHROMA_HOST=127.0.0.1
+Environment=DARKSTAR_CHROMA_PORT=8001
+Environment=DARKSTAR_CHROMA_DIR=%h/chroma-e-copy/current
+Environment=DARKSTAR_CHROMA_LOG_DIR=%h/darkstar/logs
+
+# Odpowiednik montazu `:ro` dla procesu natywnego - wymuszony przez jadro, nie przez
+# grzecznosc programu. Kopia z dysku E jest tu nietykalna.
+ReadOnlyPaths=%h/chroma-e-copy
+
+ExecStart=%h/polip-agi/deploy/context/darkstar-chroma-run
+
+Restart=on-failure
+RestartSec=15
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=darkstar-chroma-e-copy
+
+[Install]
+WantedBy=multi-user.target
