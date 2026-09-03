@@ -141,3 +141,57 @@ ustawieniem domyślnym.
 skonfigurowany adres zamilkł, a odpowiadał ten drugi — **skrypt odmówi startu zamiast po
 cichu podstawić zamiennik**. Ciche podstawienie znaczyłoby wystawienie do świata adresu,
 o którym nie wiesz.
+
+---
+
+# Sterownia przeniesiona na prywatny mesh — 2026-09-03
+
+## Osiem linii
+
+```
+1 port 18080 trzyma   : ssh -N -L ... owner@100.64.0.2   <- MESH, odczytany wlasciciel
+2 health              : 200
+3 strona Sterowni     : 200
+4 procesow ssh        : 1  (dokladnie jeden tunel)
+5 po 20 sekundach     : nadal MESH, health 200, SaaS NIE wrocil
+6 tailscaled SaaS     : nietkniety, nie zatrzymywany
+7 ubite petle         : 2 (wskrzeszacze tunelu do 100.71.8.70)
+8 tunel do SaaS       : zaden nie dziala
+```
+
+## Co naprawde blokowalo te zmiane
+
+Nie sam tunel. Przez cala noc w tle chodzily **dwie petle** uruchomione we wczesniejszych
+sesjach Claude:
+
+```
+while true; do ssh ... -L 127.0.0.1:18080:127.0.0.1:18080 owner@100.71.8.70; sleep 5; done
+```
+
+Co piec sekund odtwarzaly tunel przez SaaS. Kazde przelozenie Sterowni na mesh bylo po
+kilku sekundach po cichu cofane - port wracal do starej drogi, a pomiar `200` wygladal
+poprawnie, bo odpowiadala Sterownia, tylko inna droga.
+
+Dlatego pierwsze przelozenie zostalo zaraportowane jako udane, a nie bylo. Wykrylo to
+dopiero odczytanie **wlasciciela gniazda**, a nie samego kodu odpowiedzi.
+
+Wniosek na przyszlosc: `200` na porcie mowi, ze cos odpowiada - nie mowi, **ktoredy**.
+Przy zmianie drogi trzeba czytac proces trzymajacy port.
+
+## Kolejnosc, ktora zadzialala
+
+```
+1. ubic PETLE (nie tylko ssh) - inaczej wskrzesza tunel w 5 sekund
+2. ubic pozostale procesy ssh
+3. sprawdzic, ze port 18080 jest WOLNY
+4. postawic jeden tunel na owner@100.64.0.2
+5. odczytac wlasciciela portu - czy to na pewno mesh
+6. odczekac i sprawdzic ponownie, czy nic nie wrocilo
+```
+
+## Nietkniete
+
+`tailscaled.service` (SaaS) dziala i nie byl zatrzymywany - zmienila sie droga Sterowni,
+nie stan demona. `nft`, `apt`, `cloudflared` i tunel do swiata bez zmian.
+
+Uwaga: ten tunel to zwykly proces, nie usluga. **Nie przezyje restartu komputera.**
