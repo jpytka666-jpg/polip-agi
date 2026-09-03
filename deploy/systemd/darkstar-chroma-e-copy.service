@@ -23,14 +23,13 @@
 # GIT COMMIT: PENDING
 # GITHUB METADATA: jpytka666-jpg/polip-agi, branch docs/darkstar-headscale-hotspot-plan
 #
-# NIEZAINSTALOWANA I NIEURUCHOMIONA. Plik lezy w repozytorium; w tej sesji nie wykonano
-# ani `daemon-reload`, ani `start`. Instrukcja w evidence.
+# Jednostke zainstalowal i uruchamia OPERATOR. Ta sesja nie wykonuje ani `daemon-reload`,
+# ani `start` - po tej poprawce restart jednostki nalezy do operatora.
 #
-# UWAGA, KTOREJ NIE UKRYWAM: sklad Chromy to baza SQLite, a SQLite przy zwyklym odczycie
-# zwykle chce zapisac dziennik obok pliku. `ReadOnlyPaths` ponizej odpowiada montazowi
-# `:ro` i jest tam swiadomie - kopia z E ma byc nietykalna. Jesli Chroma odmowi startu z
-# bledem o prawach zapisu, wlasciwa poprawka jest OPISANA W EVIDENCE i polega na wydzieleniu
-# katalogu zapisywalnego na dziennik, a NIE na zdjeciu ochrony z danych.
+# HISTORIA POPRAWKI: pierwsza wersja uzywala specyfikatora %h i wpadla w petle restartow,
+# bo w jednostce systemowej %h to /root, a nie katalog domowy uzytkownika z `User=`.
+# Sciezki sa teraz jawne. Ochrona zapisu zdjeta z katalogu danych - powody przy
+# ReadWritePaths nizej.
 # ==========================================
 
 [Unit]
@@ -48,14 +47,22 @@ Group=owner
 # Wylacznie petla zwrotna. 0.0.0.0 wystawiloby pamiec na wlp2s0, czyli do sieci nadrzednej.
 Environment=DARKSTAR_CHROMA_HOST=127.0.0.1
 Environment=DARKSTAR_CHROMA_PORT=8001
-Environment=DARKSTAR_CHROMA_DIR=%h/chroma-e-copy/current
-Environment=DARKSTAR_CHROMA_LOG_DIR=%h/darkstar/logs
 
-# Odpowiednik montazu `:ro` dla procesu natywnego - wymuszony przez jadro, nie przez
-# grzecznosc programu. Kopia z dysku E jest tu nietykalna.
-ReadOnlyPaths=%h/chroma-e-copy
+# SCIEZKI JAWNE, BEZ %h. Poprzednia wersja uzywala %h i wpadala w petle restartow, bo
+# w jednostce SYSTEMOWEJ %h rozwija sie do /root - niezaleznie od `User=owner` powyzej.
+# Specyfikator jest rozwijany zanim uzytkownik zostanie podstawiony, wiec usluga szukala
+# kopii pod /root/chroma-e-copy, ktorego nie ma i miec nie moze.
+Environment=DARKSTAR_CHROMA_DIR=/home/owner/chroma-e-copy/current
+Environment=DARKSTAR_CHROMA_LOG_DIR=/home/owner/darkstar/logs
 
-ExecStart=%h/polip-agi/deploy/context/darkstar-chroma-run
+# Kopia z dysku E jest tu ZAPISYWALNA i to jest zmiana wzgledem pierwszej wersji.
+# Powod: sklad Chromy to baza SQLite, ktora przy samym odczycie zaklada obok siebie
+# dziennik. Ochrona `ReadOnlyPaths` chronila tu wlasciwa rzecz w niewlasciwym miejscu -
+# dysk E jest bezpieczny dlatego, ze to jest KOPIA na innej maszynie, a nie dlatego, ze
+# jadro zabrania zapisu. Katalog mozna w kazdej chwili odtworzyc skryptem push.
+ReadWritePaths=/home/owner/chroma-e-copy /home/owner/darkstar/logs
+
+ExecStart=/home/owner/polip-agi/deploy/context/darkstar-chroma-run
 
 Restart=on-failure
 RestartSec=15
