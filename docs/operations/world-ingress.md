@@ -258,3 +258,46 @@ gorsza niz brak tunelu: dawalaby 200 i falszywe poczucie, ze Sterownia idzie po 
 
 Kodu nadzorcy, pozostalych pieciu krokow, demona SaaS na CBMS, `nft`, `cloudflared`.
 Nie powstalo zadne nowe zadanie w Harmonogramie.
+
+---
+
+# Gdzie dokladnie siadl krok — lancuch AIONS Conductor
+
+Zadnego nowego zadania w Harmonogramie nie powstalo. Krok wisi na istniejacym lancuchu,
+cztery ogniwa w dol:
+
+```
+OGNIWO 1  Harmonogram: "AIONS Conductor"  (Ready, logon trigger)
+             -> cmd.exe /c "...\AUTOSTART AIONS SERVER FULL.bat"
+
+OGNIWO 2  .bat:  set "SUPERVISOR=...\AIONS SERVER FULL.ps1"
+                 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%SUPERVISOR%"
+
+OGNIWO 3  nadzorca: Join-Path $Root 'runtime\aions_boot_steps.json'
+
+OGNIWO 4  krok w JSON:
+             name     : Control Room tunnel (mesh)
+             pozycja  : 6 z 6            <- ostatnia, celowo
+             type     : http   port 18080   health /health
+             launcher : E:\server wiedzy\runtime\control_room_tunnel_run.cmd
+                          -> deploy/windows/Start-ControlRoomTunnel.ps1  (repo, D:)
+```
+
+Kontrola: zadan w Harmonogramie pasujacych do `Control|tunnel|Sterown` -> **0**.
+
+## Linia dla operatora po restarcie
+
+Restartu **nie wykonano** - to decyzja operatora. Po nastepnym zalogowaniu Conductor
+przejdzie krokami sam. Sprawdzenie, ktore mowi cala prawde jednym wywolaniem:
+
+```
+$c = Get-NetTCPConnection -LocalPort 18080 -State Listen -ErrorAction SilentlyContinue
+$o = $c.OwningProcess
+(Get-CimInstance Win32_Process -Filter "ProcessId=$o").CommandLine
+Invoke-WebRequest http://127.0.0.1:18080/health -UseBasicParsing | Select-Object StatusCode
+Select-String 'E:\server wiedzy\runtime\state\aions_server_full.log' -Pattern 'Control Room' | Select-Object -Last 3
+```
+
+Linia z procesem MA zawierac `owner@100.64.0.2`. Samo `StatusCode 200` nie wystarcza -
+mowi, ze cos odpowiada, nie ktoredy. Ostatnia komenda pokazuje, co nadzorca zapisal
+o tym kroku przy starcie.
