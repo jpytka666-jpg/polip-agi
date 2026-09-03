@@ -61,7 +61,14 @@ LOG="${DARKSTAR_TUNNEL_LOG:-/tmp/darkstar-world-tunnel.log}"
 
 fail() { printf 'world-tunnel: %s\n' "$1" >&2; exit 1; }
 
-probe() { curl -s -o /dev/null -w '%{http_code}' --max-time 5 "$1/health" 2>/dev/null || echo 000; }
+# Zwraca sam kod odpowiedzi. `|| echo 000` bylo bledem: przy nieudanym polaczeniu curl
+# i tak wypisuje juz `000` z `-w`, wiec doklejenie drugiego dawalo `000000` - liczbe,
+# ktora nie jest zadnym kodem i podwaza zaufanie do calego pomiaru.
+probe() {
+    code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "$1/health" 2>/dev/null)
+    [ -n "$code" ] || code=000
+    printf '%s' "$code"
+}
 
 check() {
     if command -v cloudflared >/dev/null 2>&1; then
