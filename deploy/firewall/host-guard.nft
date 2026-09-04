@@ -83,6 +83,14 @@ table inet darkstar_host_guard {
         # i klientem DHCP - ta regula tego nie zmienia.
         iifname @downstream_ifaces ip saddr @darkstar_downstream_ipv4 tcp dport 8080 accept comment "downstream Headscale control server, Task 13"
 
+        # Zmierzone 2026-09-04: curl Windows->192.168.2.1:18080/world/ = 000 (drop), curl
+        # CBMS->192.168.2.1:18080/world/ = 200 (loopback, wiec nie widzi tej reguly).
+        # Ten sam zasieg co u sasiada 8080 wyzej: wylacznie interfejs downstream i wylacznie
+        # zrodla z @darkstar_downstream_ipv4, czyli 192.168.2.0/24. Port 18080 to Darkstar
+        # host port (deploy/docker-compose.yml, DARKSTAR_HOST_PORT), pod ktorym zyje /world/ -
+        # bez tej reguly telefon i Windows w sieci prywatnej nie doczytaja strony wejsciowej.
+        iifname @downstream_ifaces ip saddr @darkstar_downstream_ipv4 tcp dport 18080 accept comment "downstream Darkstar world landing"
+
         # NIEZASTOSOWANA - tak samo jak regula 8080 powyzej w chwili jej dopisania.
         # Transport WireGuard DRUGIEGO demona tailscaled, tego ktory gada z wlasnym
         # Headscale. Port 41641 nalezy do demona do SaaS i zostaje nietkniety; nowy
