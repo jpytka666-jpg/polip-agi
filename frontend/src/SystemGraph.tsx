@@ -46,6 +46,7 @@ import {
   fetchSystemGraph,
   headplaneAccessNote,
   headplanePanelView,
+  headplaneTunnelLink,
   runReadCommand,
   type ArchitectureNode,
   type ArchitectureSnapshot,
@@ -466,6 +467,7 @@ export function SystemGraph({ token }: { token: string }) {
 
   const linked = selected ? Math.max(flow.onPath.size - 1, 0) : 0
   const headplane = headplanePanelView(worldStatus?.services.headplane)
+  const headplaneTunnel = headplaneTunnelLink(headplane.state)
 
   return (
     <section className="panel panel--graph">
@@ -493,9 +495,24 @@ export function SystemGraph({ token }: { token: string }) {
         <span className="runtime-status__note">
           {worldStatusError ? 'sonda niedostepna' : 'sonda TCP · tylko odczyt'}
         </span>
-        {/* NIGDY href - petla zwrotna jest docelowym stanem, nie tymczasowym; zaden
-            link nie moze prowadzic na 192.168.2.1:3000, bo takiego naslucha nie ma. */}
+        {/* NIGDY href do 192.168.2.1:3000 - petla zwrotna jest docelowym stanem, nie
+            tymczasowym; takiego naslucha nie ma i nie bedzie. Jedyny mozliwy link to
+            tunel SSH Windows->CBMS, i tylko gdy usluga jest zmierzona jako up. */}
         <span className="runtime-status__access">{headplaneAccessNote(headplane.listen)}</span>
+        {headplaneTunnel ? (
+          <a
+            className="runtime-status__tunnel"
+            href={headplaneTunnel.href}
+            target="_blank"
+            rel="noreferrer noopener"
+          >
+            {headplaneTunnel.label}
+          </a>
+        ) : (
+          <span className="runtime-status__tunnel runtime-status__tunnel--closed">
+            kafelek zamkniety — tunel niedostepny
+          </span>
+        )}
       </div>
 
       <div className="lane-bar" role="group" aria-label="Rodzaje ruchu">

@@ -788,6 +788,19 @@ body {
   font-size: 0.72rem;
 }
 
+.runtime-status__tunnel {
+  font-size: 0.74rem;
+  font-weight: 700;
+  color: #9ae6a8;
+  text-decoration: underline;
+}
+
+.runtime-status__tunnel--closed {
+  color: #ffb0a0;
+  text-decoration: none;
+  font-weight: 400;
+}
+
 .graph-canvas {
   flex: 1;
   min-height: 27rem;

@@ -113,6 +113,31 @@ export function headplaneAccessNote(listen: string): string {
     : 'stan dostepu z sieci prywatnej nieznany'
 }
 
+/**
+ * Adres tunelu SSH Windows -> CBMS dla Headplane. Dziala WYLACZNIE tutaj, w Control
+ * Room - tunel istnieje jako lokalny port na maszynie operatora, nie na CBMS. Ten
+ * link NIGDY nie trafia do frontend/public/world: telefon i inne urzadzenia w sieci
+ * prywatnej nie maja tego tunelu, wiec adres byłby dla nich martwy.
+ */
+const CONTROL_ROOM_HEADPLANE_TUNNEL_URL = 'http://127.0.0.1:3001/admin'
+
+export interface HeadplaneTunnelLink {
+  href: string
+  label: string
+}
+
+/**
+ * Link przez tunel, TYLKO gdy sonda zmierzyla usluge jako `up`. Gdy tunel albo sama
+ * usluga nie odpowiada, zwraca `null` - kafelek ma wtedy pokazac "zamkniety", NIGDY
+ * podpowiadac adresu 192.168.2.1:3000 jako zastepstwa (takiego naslucha nie ma).
+ */
+export function headplaneTunnelLink(
+  state: WorldServiceState | 'unknown',
+): HeadplaneTunnelLink | null {
+  if (state !== 'up') return null
+  return { href: CONTROL_ROOM_HEADPLANE_TUNNEL_URL, label: 'Otworz przez tunel' }
+}
+
 /** Publiczna sonda stanu: jeden GET, bez PIN-u, cookies i ciala zapytania. */
 export async function fetchWorldStatus(): Promise<WorldStatus> {
   const response = await fetch('/v1/world/status', {
