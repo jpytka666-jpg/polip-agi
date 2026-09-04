@@ -1,0 +1,470 @@
+/*
+THIS IS VERY IMPORTANT!!!
+==========================================
+AUTHOR: M. SZUL
+AI MODEL: Claude Opus 5
+TIMESTAMP: 2026-09-04 01:14:26
+REASON FOR CREATION: Warstwa wizualna powloki wejsciowej. Control Room ma wlasny arkusz w ciemnej
+palecie edytora - wejscie "ze swiata" jest czyms innym: ma byc jasne, czytelne na telefonie
+w sloncu i ma wygladac jak cos, co ktos zbudowal, a nie jak surowy ekran cudzej uslugi.
+MECHANICS: Estetyka Aero - szklane plyty na perlowym tle. Kazda plyta sklada sie z trzech rzeczy:
+przezroczystego tla z rozmyciem, polysku (gradient bieli od gory do polowy wysokosci, realizowany
+pseudoelementem ::before) i cienkiej zlotej krawedzi. Tlo strony to trzy nalozone gradienty
+radialne - zloty, czerwony i bialy - na stalej warstwie .sky, zeby nie przewijaly sie z trescia.
+Uklad jest mobile-first: reguly bazowe opisuja telefon, dwa zapytania medialne (40rem i 64rem)
+dokladaja kolumny. Zadna szerokosc nie jest podana w pikselach ekranu, wiec strona nie ma prawa
+przewijac sie w poziomie.
+KONTRAST: tekst #101010 na plycie o jasnosci ok. 0.93 daje ok. 18:1; opis #3b3833 ok. 11:1;
+zloto podpisu #7a5f0c ok. 5.6:1; czerwien plakietki #92151a ok. 8:1. Wszystko powyzej progu AA,
+wiekszosc powyzej AAA.
+SYSTEM PART: Control Room / warstwa wejsciowa (world landing).
+ARCHITECTURE FUNCTION: Odroznia wzrokowo to, co otwarte, od tego, co zamkniete - kafelek otwarty
+dostaje zlota krawedz i uniesienie pod palcem, kafelek zamkniety zostaje plaski i przygaszony,
+z czerwona plakietka. Kolor niesie tu informacje, ale nigdy sam: przy kazdym stanie stoi napis.
+DEPENDENCIES/LINKS: index.html w tym samym katalogu - jedyny plik, ktory ten arkusz styluje.
+TECH STACK: CSS3 - jedyny sposob opisania wygladu dokumentu w przegladarce; Rust go nie zastapi.
+LOCAL WORKSPACE: D:\codex-fresh-2026-08-28\worktrees\polip-agi-darkstar-plan\frontend\public\world
+GIT COMMIT: PENDING
+GITHUB METADATA: jpytka666-jpg/polip-agi, branch docs/darkstar-headscale-hotspot-plan
+==========================================
+*/
+
+:root {
+  color-scheme: light;
+
+  /* Perla i biel - podloze. */
+  --paper: #f6f2e8;
+  --paper-warm: #fbf7ee;
+  --white: #ffffff;
+
+  /* Tusz - czarny na jasnym, tak jak ustalone. */
+  --ink: #101010;
+  --ink-soft: #3b3833;
+  --ink-quiet: #5b564e;
+
+  /* Zloto - krawedzie, podpisy, polysk. */
+  --gold: #c8a02a;
+  --gold-deep: #7a5f0c;
+  --gold-veil: rgba(200, 160, 42, 0.16);
+
+  /* Czerwien - znak firmowy i stan zamkniety. */
+  --red: #a4161a;
+  --red-deep: #92151a;
+  --red-veil: rgba(164, 22, 26, 0.1);
+
+  /* Szklo. */
+  --glass: rgba(255, 255, 255, 0.62);
+  --glass-strong: rgba(255, 255, 255, 0.78);
+  --glass-line: rgba(255, 255, 255, 0.92);
+  --shadow: 0 10px 30px rgba(60, 45, 10, 0.12);
+  --shadow-lift: 0 16px 40px rgba(60, 45, 10, 0.2);
+
+  --radius: 16px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  font: 16px/1.55 "Segoe UI", system-ui, -apple-system, Roboto, sans-serif;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--paper);
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+/* Tlo - stale, wiec nie przewija sie razem z trescia. */
+.sky {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background:
+    radial-gradient(120% 80% at 12% -10%, rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0) 55%),
+    radial-gradient(90% 60% at 88% 4%, var(--gold-veil), rgba(255, 255, 255, 0) 60%),
+    radial-gradient(80% 70% at 50% 108%, var(--red-veil), rgba(255, 255, 255, 0) 62%),
+    linear-gradient(168deg, var(--paper-warm) 0%, var(--paper) 62%, #efe9db 100%);
+}
+
+/* Wspolna plyta Aero: rozmycie, polysk, zlota krawedz. */
+.glass {
+  position: relative;
+  overflow: hidden;
+  background: var(--glass);
+  border: 1px solid rgba(200, 160, 42, 0.38);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow), inset 0 1px 0 var(--glass-line);
+  backdrop-filter: blur(14px) saturate(150%);
+  -webkit-backdrop-filter: blur(14px) saturate(150%);
+}
+
+/* Polysk - gorna polowa plyty jasniejsza, jak w Aero. */
+.glass::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 52%;
+  pointer-events: none;
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.85) 0%,
+    rgba(255, 255, 255, 0.34) 60%,
+    rgba(255, 255, 255, 0) 100%
+  );
+}
+
+.page {
+  max-width: 68rem;
+  margin: 0 auto;
+  padding: 1rem 1rem 2.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+/* ---------- naglowek ---------- */
+
+.crown {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  padding: 0.9rem 1.1rem;
+}
+
+/* Podpis firmowy: zloto przechodzace w czerwien wzdluz dolnej krawedzi naglowka. */
+.crown::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 2px;
+  background: linear-gradient(90deg, var(--red) 0%, var(--gold) 42%, rgba(200, 160, 42, 0) 100%);
+}
+
+.crown__mark {
+  position: relative;
+  flex: 0 0 auto;
+  width: 2.6rem;
+  height: 2.6rem;
+}
+
+.crown__mark svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.mark-ring {
+  fill: none;
+  stroke: var(--gold-deep);
+  stroke-width: 1.6;
+}
+
+.mark-core {
+  fill: var(--red);
+}
+
+.mark-cross {
+  stroke: var(--gold);
+  stroke-width: 1.2;
+  opacity: 0.75;
+}
+
+.crown__text {
+  position: relative;
+  min-width: 0;
+}
+
+.crown__name {
+  margin: 0;
+  font-size: 1.35rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink);
+}
+
+.crown__tag {
+  margin: 0.1rem 0 0;
+  font-size: 0.8rem;
+  letter-spacing: 0.06em;
+  color: var(--gold-deep);
+}
+
+/* ---------- wstep ---------- */
+
+.page__body {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.lead {
+  padding: 1.25rem 1.15rem 1.4rem;
+}
+
+.lead__title {
+  position: relative;
+  margin: 0 0 0.7rem;
+  font-size: 1.5rem;
+  line-height: 1.25;
+  font-weight: 650;
+  color: var(--ink);
+}
+
+.lead__title::after {
+  content: "";
+  display: block;
+  width: 3.5rem;
+  height: 2px;
+  margin-top: 0.6rem;
+  background: linear-gradient(90deg, var(--red), var(--gold));
+  border-radius: 2px;
+}
+
+.lead__text {
+  position: relative;
+  margin: 0 0 0.65rem;
+  color: var(--ink-soft);
+  max-width: 44rem;
+}
+
+.lead__text:last-child {
+  margin-bottom: 0;
+}
+
+.lead__text--quiet {
+  color: var(--ink-quiet);
+  font-size: 0.94rem;
+}
+
+.section-title {
+  margin: 0.6rem 0 0;
+  padding-left: 0.15rem;
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--gold-deep);
+}
+
+/* ---------- kafelki ---------- */
+
+.tiles {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.85rem;
+}
+
+.tile {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.85rem;
+  height: 100%;
+  padding: 1rem;
+  text-decoration: none;
+  color: inherit;
+}
+
+.tile__glyph {
+  position: relative;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 2.6rem;
+  height: 2.6rem;
+  border-radius: 12px;
+  border: 1px solid rgba(200, 160, 42, 0.5);
+  background: linear-gradient(180deg, var(--white), rgba(255, 250, 235, 0.55));
+  box-shadow: inset 0 1px 0 var(--glass-line);
+}
+
+.tile__glyph svg {
+  width: 1.35rem;
+  height: 1.35rem;
+  fill: none;
+  stroke: var(--gold-deep);
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.tile__body {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.tile__name {
+  font-size: 1.06rem;
+  font-weight: 650;
+  color: var(--ink);
+}
+
+.tile__desc {
+  font-size: 0.92rem;
+  color: var(--ink-soft);
+}
+
+/* Plakietka stanu - kolor plus napis, nigdy sam kolor. */
+.chip {
+  align-self: flex-start;
+  margin-top: 0.2rem;
+  padding: 0.16rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.74rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  border: 1px solid transparent;
+}
+
+.chip--open {
+  color: var(--gold-deep);
+  background: rgba(255, 255, 255, 0.75);
+  border-color: rgba(200, 160, 42, 0.6);
+}
+
+.chip--closed {
+  color: var(--red-deep);
+  background: rgba(255, 255, 255, 0.72);
+  border-color: rgba(164, 22, 26, 0.42);
+}
+
+/* Otwarte - reaguje pod palcem. */
+.tile--open {
+  transition: transform 0.16s ease, box-shadow 0.16s ease, background 0.16s ease;
+}
+
+.tile--open:hover,
+.tile--open:focus-visible {
+  background: var(--glass-strong);
+  box-shadow: var(--shadow-lift), inset 0 1px 0 var(--glass-line);
+  transform: translateY(-2px);
+}
+
+.tile--open:focus-visible {
+  outline: 2px solid var(--red);
+  outline-offset: 2px;
+}
+
+.tile--open:active {
+  transform: translateY(0);
+}
+
+/* Zamkniete - plaskie i przygaszone, zeby nie zapraszalo do klikania. */
+.tile--closed {
+  background: rgba(255, 255, 255, 0.42);
+  border-color: rgba(120, 110, 95, 0.24);
+  box-shadow: 0 4px 14px rgba(60, 45, 10, 0.07), inset 0 1px 0 rgba(255, 255, 255, 0.8);
+}
+
+.tile--closed .tile__glyph {
+  border-color: rgba(164, 22, 26, 0.32);
+  background: linear-gradient(180deg, var(--white), rgba(255, 245, 245, 0.5));
+}
+
+.tile--closed .tile__glyph svg {
+  stroke: var(--red-deep);
+}
+
+/* ---------- przypis i stopka ---------- */
+
+.note {
+  padding: 0.9rem 1.05rem;
+  background: rgba(255, 255, 255, 0.5);
+  border-color: rgba(164, 22, 26, 0.3);
+}
+
+.note p {
+  position: relative;
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--ink-soft);
+}
+
+.note strong {
+  color: var(--red-deep);
+}
+
+.page__foot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  padding-top: 0.4rem;
+  font-size: 0.78rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-quiet);
+}
+
+.dot {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--gold);
+}
+
+/* ---------- szersze ekrany ---------- */
+
+@media (min-width: 40rem) {
+  .page {
+    padding: 1.75rem 1.5rem 3rem;
+    gap: 1.25rem;
+  }
+
+  .crown {
+    padding: 1.1rem 1.4rem;
+  }
+
+  .crown__name {
+    font-size: 1.6rem;
+  }
+
+  .lead {
+    padding: 1.75rem 1.6rem;
+  }
+
+  .lead__title {
+    font-size: 1.9rem;
+  }
+
+  .tiles {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1rem;
+  }
+}
+
+@media (min-width: 64rem) {
+  .lead__title {
+    font-size: 2.15rem;
+  }
+
+  .tiles {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+/* Szanuj ustawienie systemowe - bez ruchu, jesli uzytkownik go nie chce. */
+@media (prefers-reduced-motion: reduce) {
+  .tile--open {
+    transition: none;
+  }
+
+  .tile--open:hover,
+  .tile--open:focus-visible {
+    transform: none;
+  }
+}

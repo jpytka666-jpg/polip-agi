@@ -1,0 +1,228 @@
+<!-- darkstar-header-v1 -->
+<!-- po co: index.html -->
+<!-- nie wolno: hotspot, ruszac wlp2s0, wracac do 10.44, gasic DARKSTAR-WiFi, haslo w gicie -->
+<!-- autor: Marcin -->
+<!-- powstal: 2026-09-04 -->
+<!doctype html>
+<!--
+THIS IS VERY IMPORTANT!!!
+==========================================
+AUTHOR: M. SZUL
+AI MODEL: Claude Opus 5
+TIMESTAMP: 2026-09-04 01:14:26
+REASON FOR CREATION: Powloka wejsciowa "ze swiata" dla Darkstar. Telefon podlaczony do sieci
+prywatnej trafia dzis prosto na surowy ekran Headscale - stron rejestracji wezla, ktora nie mowi
+czym jest ten system ani gdzie sa pozostale miejsca. Ta strona jest twarza wejscia: nazwa, krotki
+opis i kafelki do miejsc, ktore naprawde istnieja.
+MECHANICS: Czysty HTML bez frameworka i bez skryptu. Zero zapytan sieciowych, zero stanu na zywo,
+zero nasluchow - to swiadomie sama POWLOKA. Kafelek prowadzacy do dzialajacego adresu jest
+odnosnikiem <a>; kafelek do miejsca zamknietego dla swiata jest zwyklym <div> z plakietka
+"tylko lokalnie", zeby strona nie obiecywala dostepu, ktorego nie ma. Uklad jest mobile-first:
+jedna kolumna na telefonie, dwie od 40rem, trzy od 64rem.
+SYSTEM PART: Control Room / warstwa wejsciowa (world landing).
+ARCHITECTURE FUNCTION: Pierwszy ekran dla kogos, kto wchodzi z zewnatrz. Rozdziela to, co otwarte
+(rejestracja wezla w sieci prywatnej, repozytorium) od tego, co zamkniete i osiagalne wylacznie
+przez tunel z zaufanej maszyny. Nie jest panelem operatora - panel to aplikacja React pod "/".
+DEPENDENCIES/LINKS: world.css (jedyna zaleznosc, plik obok). Serwowane jako zasob statyczny Vite
+z frontend/public, wiec dostepne pod /world/ zarowno w dev serverze, jak i w zbudowanym dist/.
+Zaden bind ani zadna konfiguracja Headscale nie sa przez ten plik dotykane.
+TECH STACK: HTML5 + CSS3, swiadomie zamiast Rusta - domyslnego jezyka tego projektu.
+  (1) MUSI: byc otwarte przez przegladarke telefonu jako pierwsza rzecz, jaka widzi czlowiek.
+  (2) DLACZEGO NIE RUST: to dokument do wyswietlenia, nie program do uruchomienia. Przegladarka
+      przyjmuje HTML i CSS; Rust musialby i tak wyprodukowac dokladnie ten sam dokument.
+  (3) DLACZEGO NIE REACT, skoro obok stoi aplikacja React: powloka nie ma logiki, wiec doklada
+      by tylko kompilacje i zaleznosc od budowania. Statyczny plik otwiera sie tez wtedy, gdy
+      nic innego nie dziala - a to jest wlasnie ekran na zle dni.
+  (4) TRACIMY: wspolny system komponentow z Control Room. Rekompensata: strona nie ma zadnej
+      wladzy - nie wykonuje skryptu, nie pyta zadnego API, nie przechowuje niczego.
+LOCAL WORKSPACE: D:\codex-fresh-2026-08-28\worktrees\polip-agi-darkstar-plan\frontend\public\world
+GIT COMMIT: PENDING
+GITHUB METADATA: jpytka666-jpg/polip-agi, branch docs/darkstar-headscale-hotspot-plan
+==========================================
+-->
+<html lang="pl">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light" />
+    <meta
+      name="description"
+      content="Darkstar - wejscie do systemu. Sieć prywatna, panel operatora, dokumentacja."
+    />
+    <title>Darkstar</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="stylesheet" href="./world.css" />
+  </head>
+
+  <body>
+    <div class="sky" aria-hidden="true"></div>
+
+    <div class="page">
+      <header class="crown glass">
+        <span class="crown__mark" aria-hidden="true">
+          <svg viewBox="0 0 32 32" role="presentation" focusable="false">
+            <circle cx="16" cy="16" r="14" class="mark-ring" />
+            <circle cx="16" cy="16" r="7" class="mark-core" />
+            <path d="M16 1 L16 31 M1 16 L31 16" class="mark-cross" />
+          </svg>
+        </span>
+        <div class="crown__text">
+          <p class="crown__name">Darkstar</p>
+          <p class="crown__tag">system prywatny &middot; wejscie</p>
+        </div>
+      </header>
+
+      <main class="page__body">
+        <section class="lead glass" aria-labelledby="lead-title">
+          <h1 id="lead-title" class="lead__title">Jestes na wejsciu do Darkstara</h1>
+          <p class="lead__text">
+            Darkstar to prywatna siec i panel jednej maszyny. Nie ma tu konta do zalozenia
+            ani niczego na sprzedaz. Urzadzenie najpierw dolacza do sieci prywatnej, a dopiero
+            potem widzi cokolwiek wiecej.
+          </p>
+          <p class="lead__text lead__text--quiet">
+            Ponizej sa wylacznie miejsca, ktore naprawde istnieja. Przy kazdym stoi, czy da sie
+            tam wejsc z zewnatrz, czy tylko z zaufanej maszyny.
+          </p>
+        </section>
+
+        <h2 class="section-title" id="places">Miejsca</h2>
+
+        <ul class="tiles" aria-labelledby="places">
+          <li>
+            <a class="tile glass tile--open" href="http://192.168.2.1:8080/windows">
+              <span class="tile__glyph" aria-hidden="true">
+                <svg viewBox="0 0 24 24" role="presentation" focusable="false">
+                  <rect x="4" y="2" width="16" height="20" rx="3" />
+                  <path d="M10 18h4" />
+                </svg>
+              </span>
+              <span class="tile__body">
+                <span class="tile__name">Dolacz urzadzenie</span>
+                <span class="tile__desc">
+                  Instrukcja rejestracji wezla w sieci prywatnej. To jest krok pierwszy -
+                  bez niego reszta systemu pozostaje niewidoczna.
+                </span>
+                <span class="chip chip--open">otwarte z sieci</span>
+              </span>
+            </a>
+          </li>
+
+          <li>
+            <a class="tile glass tile--open" href="http://192.168.2.1:8080/">
+              <span class="tile__glyph" aria-hidden="true">
+                <svg viewBox="0 0 24 24" role="presentation" focusable="false">
+                  <circle cx="12" cy="12" r="9" />
+                  <path d="M3 12h18M12 3c3 3.5 3 14 0 18M12 3c-3 3.5-3 14 0 18" />
+                </svg>
+              </span>
+              <span class="tile__body">
+                <span class="tile__name">Serwer sieci prywatnej</span>
+                <span class="tile__desc">
+                  Wlasny control server siatki. Rozdaje adresy w zakresie 100.64.x.x
+                  i trzyma liste wezlow.
+                </span>
+                <span class="chip chip--open">otwarte z sieci</span>
+              </span>
+            </a>
+          </li>
+
+          <li>
+            <a
+              class="tile glass tile--open"
+              href="https://github.com/jpytka666-jpg/polip-agi"
+              rel="noreferrer noopener"
+            >
+              <span class="tile__glyph" aria-hidden="true">
+                <svg viewBox="0 0 24 24" role="presentation" focusable="false">
+                  <path d="M5 4h11l3 3v13H5z" />
+                  <path d="M8 10h8M8 14h8M8 18h5" />
+                </svg>
+              </span>
+              <span class="tile__body">
+                <span class="tile__name">Dokumentacja i kod</span>
+                <span class="tile__desc">
+                  Architektura, mapa drogowa i dowody z pomiarow. Repozytorium polip-agi
+                  jest zrodlem prawdy dla tego, co tu stoi.
+                </span>
+                <span class="chip chip--open">otwarte z internetu</span>
+              </span>
+            </a>
+          </li>
+
+          <li>
+            <div class="tile glass tile--closed">
+              <span class="tile__glyph" aria-hidden="true">
+                <svg viewBox="0 0 24 24" role="presentation" focusable="false">
+                  <rect x="3" y="4" width="18" height="13" rx="2" />
+                  <path d="M8 21h8M12 17v4" />
+                </svg>
+              </span>
+              <span class="tile__body">
+                <span class="tile__name">Control Room</span>
+                <span class="tile__desc">
+                  Panel operatora: stan bramy, pamiec kontekstu, graf systemu i przeglad Gita.
+                  Wylacznie do odczytu.
+                </span>
+                <span class="chip chip--closed">tylko przez tunel z zaufanej maszyny</span>
+              </span>
+            </div>
+          </li>
+
+          <li>
+            <div class="tile glass tile--closed">
+              <span class="tile__glyph" aria-hidden="true">
+                <svg viewBox="0 0 24 24" role="presentation" focusable="false">
+                  <path d="M12 3v6M12 15v6M3 12h6M15 12h6" />
+                  <circle cx="12" cy="12" r="3" />
+                </svg>
+              </span>
+              <span class="tile__body">
+                <span class="tile__name">Stan uslugi</span>
+                <span class="tile__desc">
+                  Odpowiedz zdrowia serwera Darkstar. Nasluch jest zwiazany z petla zwrotna
+                  i celowo nie wychodzi na siec.
+                </span>
+                <span class="chip chip--closed">tylko z petli zwrotnej</span>
+              </span>
+            </div>
+          </li>
+
+          <li>
+            <div class="tile glass tile--closed">
+              <span class="tile__glyph" aria-hidden="true">
+                <svg viewBox="0 0 24 24" role="presentation" focusable="false">
+                  <ellipse cx="12" cy="6" rx="8" ry="3" />
+                  <path d="M4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6" />
+                  <path d="M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3" />
+                </svg>
+              </span>
+              <span class="tile__body">
+                <span class="tile__name">Pamiec kontekstu</span>
+                <span class="tile__desc">
+                  Dwie bazy wektorowe - lokalna i zdalna. Odpowiadaja, ale wylacznie
+                  wewnatrz maszyny; nic z tego nie jest wystawione na zewnatrz.
+                </span>
+                <span class="chip chip--closed">tylko wewnatrz maszyny</span>
+              </span>
+            </div>
+          </li>
+        </ul>
+
+        <section class="note glass" aria-label="Stan tej strony">
+          <p>
+            <strong>To jest sama powloka.</strong> Kafelki nie sprawdzaja niczego na zywo -
+            plakietki opisuja zamierzony dostep, nie zmierzony stan. Zywy stan dochodzi
+            osobnym krokiem.
+          </p>
+        </section>
+      </main>
+
+      <footer class="page__foot">
+        <span>Darkstar</span>
+        <span class="dot" aria-hidden="true"></span>
+        <span>powloka wejsciowa</span>
+      </footer>
+    </div>
+  </body>
+</html>
