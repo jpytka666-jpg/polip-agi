@@ -235,7 +235,19 @@ Brama wyjścia:
 
 ### M2 — Firewall jako kod i prawdziwy reboot
 
-Stan: PLANNED, najwyższy priorytet infrastrukturalny
+Stan: DONE
+
+Dowód 2026-09-04: operator wykonał prawdziwy restart CBMS. Boot ID zmienił się z
+`dbe6ad68...` na `e2f73b6e...`; `darkstar-firewall.service` wstał sam i przeładował
+reguły (`journalctl` pokazuje "loaded inet darkstar_host_guard" na nowym boot ID);
+kontenery `darkstar` i `darkstar-headplane` wróciły zdrowe; API i kanał administracyjny
+odpowiadają z prawdziwego klienta LAN (Windows), nie tylko z pętli CBMS -
+`http://192.168.2.1:18080/world/` = 200, `/v1/context/health` bez tokenu = 401.
+Dowód: `docs/operations/evidence/2026-09-04-real-reboot.md`.
+
+Osobno odkryty, nowy wątek (nie blokuje tej bramy): noga pamięci na porcie 8000 nie ma
+jednostki systemd i nie wstała po restarcie - dane są realne, brakuje tylko instrukcji
+autostartu. To wymaga osobnej decyzji, nie jest częścią zakresu tego kroku.
 
 Zakres:
 
@@ -249,11 +261,11 @@ Zakres:
 
 Brama wyjścia:
 
-- nowy boot_id;
-- darkstar-firewall.service active;
-- reguły nftables obecne;
-- Darkstar API i kanał administracyjny dostępne;
-- dowód zapisany w runbooku bez sekretów.
+- nowy boot_id — SPEŁNIONE;
+- darkstar-firewall.service active — SPEŁNIONE;
+- reguły nftables obecne — SPEŁNIONE (usługa przeładowała stół po starcie);
+- Darkstar API i kanał administracyjny dostępne — SPEŁNIONE, potwierdzone z LAN;
+- dowód zapisany w runbooku bez sekretów — SPEŁNIONE, ten wpis + evidence.
 
 ### M3 — Natywny link Windows -> Darkstar
 
