@@ -15,6 +15,7 @@ REVISION: 2026-09-04 12:43 Europe/London — dopisano zmierzony stan dual bind i
 REVISION: 2026-09-04 14:05 Europe/London — dopisano stan po uruchomieniu Headplane wyłącznie na pętli (GPT-5 Codex).
 REVISION: 2026-09-04 14:40 Europe/London — dopisano żywe, wyłącznie odczytowe kafelki po wdrożeniu obrazu na CBMS (GPT-5 Codex).
 REVISION: 2026-09-04 16:19 Europe/London — dopisano otwarcie zapory hosta dla portu 18080 z LAN i istnienie plików unitów systemd Headscale/Headplane (Claude Sonnet 5).
+REVISION: 2026-09-04 17:33 Europe/London — Task 14 (14.1-14.11) zamknięte papierowo; 14.12 to bramka, nie osobne zadanie (Claude Sonnet 5).
 ==========================================
 -->
 
@@ -51,12 +52,15 @@ commit `a8eb53b`.
 |---|---|---|
 | Zapora hosta — port 18080 z LAN | ŻYWE | `darkstar-firewall-apply` zwrócił "loaded"; `grep -c 18080 /etc/darkstar/host-guard.nft` = 4, zgodnie z commitem `a8eb53b`; `/world/` odpowiada z kafelkami UP bez tunelu. |
 | Jednostki systemd Headscale/Headplane | PARTIAL — pliki istnieją, nie zainstalowane | `deploy/systemd/darkstar-headscale.service` i `darkstar-headplane.service` są w repozytorium, ze ścieżką roboczą poprawioną na `/home/owner/polip-agi`; żaden nie jest `enable`d ani wystartowany — oba serwisy działają dziś bez systemd. |
-| Headplane — Step 14.4/14.5, sekrety+config+start | DONE | `docker ps` `healthy`, `127.0.0.1:3000/admin` = 302, sekrety w `/etc/darkstar/headplane/*`. Pętla zwrotna jest docelowym stanem, nie tymczasowym — `192.168.2.1:3000` = 000 jest warunkiem PASS, nie zaległością do domknięcia. |
-| Headplane — Step 14.3, prywatny nasłuch | PASS (ręcznie zmierzone) | `ss` pokazuje wyłącznie `127.0.0.1:3000`, `/admin` przez pętlę = 302, LAN `192.168.2.0/24` = 000 — zmierzone zaraz po przeładowaniu zapory dla 18080, więc to też kontrola, że 3000 nie otworzył się przy okazji. Automatyczny skrypt testu wciąż nie istnieje. Dowód: `docs/operations/evidence/2026-09-04-headplane-private-listen.md`. |
+| Headplane — Step 14.3, 14.4, 14.5 | LIVE | `ss` wyłącznie `127.0.0.1:3000`, `/admin` przez pętlę = 302, LAN `192.168.2.0/24` = 000, sekrety w `/etc/darkstar/headplane/*`, `docker ps` `healthy`. Pętla zwrotna jest docelowym stanem, nie tymczasowym. Dowody: `docs/operations/evidence/2026-09-04-headplane-private-listen.md`, `docs/operations/evidence/2026-09-04-network-done.md`. |
+| Headplane — Step 14.6 | UNIT PLIK ONLY | `deploy/systemd/darkstar-headplane.service` istnieje w repozytorium, ścieżka robocza poprawiona na `/home/owner/polip-agi`. Nikt go nie `enable`ował ani nie startował na hoście — to zostaje ręczną czynnością operatora. |
+| Headplane — Step 14.7–14.10 | KOD JEST | 14.7 węzeł `runtime:headplane` w grafie (`4019b4d`). 14.8 pasek statusu w Control Room (istniał już wcześniej). 14.9 link przez tunel `127.0.0.1:3001`, tylko Control Room, nigdy `frontend/public/world` (`a794fff`). 14.10 testy granic: sonda przypięta do `127.0.0.1:3000` w `main.rs`, `frontend/public/world` bez tunelu/LAN/`0.0.0.0` (`9b767aa`). |
+| Headplane — Step 14.11 | DONE, opis się mylił | `deploy/headplane/verify-config` (`1789eec`) mierzy naprawdę: `docker compose config` kończy się kodem 0 niezależnie od obecności plików sekretów — to polecenie sprawdza wyłącznie składnię YAML, nie istnienie ścieżek na dysku. Poprzedni opis w README zakładał odwrotnie; poprawiony tym samym zapisem co ten wiersz. |
 
-Task 14, kroki 14.1–14.6 (ops/infrastruktura): zamknięte. Kroki 14.7–14.10 (węzeł w grafie,
-`MeshPanel` w Control Room, nawigacja, testy granic uprawnień) i 14.11–14.12 (bramki, commit
-integracji) zostają — to pliki w `crates/` i `frontend/`, poza zakresem tej sesji.
+Task 14, kroki 14.1–14.11 (ops/infrastruktura i kod granic uprawnień w `crates/`/`frontend/`):
+zamknięte, każdy z commitem i dowodem powyżej. Krok 14.12 jest bramką papierową, nie osobnym
+zadaniem: instalacja unitu na hoście (14.6) i szerszy zakres UI (osobny widok `MeshPanel`,
+dodatkowa nawigacja) zostają świadomie otwarte jako następny, inny kawałek pracy.
 
 ## Historia — stan na 2026-09-04 14:40 — ZMIERZONE
 

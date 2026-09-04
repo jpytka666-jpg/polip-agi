@@ -226,10 +226,34 @@ Kroki 14.1 i 14.2 sa zamkniete. Stan pozostalych, zmierzony na zywym hoscie:
   `darkstar-headscale.service`), ale nie jest zainstalowany ani `enable`d na hoscie — panel dziala
   dzis bez niego. Rozszerzenie `verify` o sprawdzenia sensowne dopiero na dzialajacym kontenerze
   pozostaje nadal otwarte.
-- **14.7 do 14.10** — wezel w grafie systemu, `MeshPanel` w Control Room, bezpieczna nawigacja,
-  testy granic uprawnien. To pliki w `crates/` i `frontend/`, nietkniete w tym commicie.
-- **14.11 i 14.12** — bramki i commit calosci integracji.
+- **14.7 — DONE.** `runtime:headplane` w `crates/darkstar-core/src/system_graph.rs`, jedna
+  krawedz `admin_view_of -> runtime:headscale`. Commit `4019b4d`.
+- **14.8 — DONE (istnialo juz wczesniej).** Pasek statusu Headplane w `SystemGraph.tsx`
+  (`headplanePanelView`) czytal `/v1/world/status` jeszcze przed ta sesja - sprawdzone, nie
+  dopisane od nowa.
+- **14.9 — DONE.** `headplaneAccessNote()` i `headplaneTunnelLink()` w `frontend/src/api.ts`:
+  link `http://127.0.0.1:3001/admin` istnieje WYLACZNIE w Control Room i tylko gdy sonda
+  zmierzyla `up`; w kazdym innym stanie kafelek pokazuje "zamkniety", nigdy
+  `192.168.2.1:3000`. `frontend/public/world` nietkniety. Commit `a794fff`.
+- **14.10 — DONE.** Testy granic uprawnien: sonda Headplane przypieta do `127.0.0.1:3000` w
+  `main.rs` (nigdy `0.0.0.0`), a `frontend/public/world/{index.html,world.js}` nie zawieraja
+  ani tunelu, ani adresu LAN, ani `0.0.0.0`. Commit `9b767aa`.
+- **14.11 — DONE, opis ponizej byl bledny.** `deploy/headplane/verify-config` (nowy skrypt)
+  uruchamia `docker compose -f compose.yml config` na Windows, bez SSH do CBMS. Zmierzone
+  naprawde: `config` konczy sie kodem `0` NIEZALEZNIE od tego, czy pliki sekretow istnieja -
+  to polecenie sprawdza wylacznie skladnie YAML, nigdy istnienia sciezek na dysku. To
+  sprawdzenie robi dopiero `up`/`create`, ktorego skrypt celowo nie wola. Commit `1789eec`.
+- **14.12 — ten wpis jest bramka.** Wszystkie powyzsze siedem krokow (14.4-14.11) ma commit i
+  dowod. Zostaja swiadomie OTWARTE, bo naleza do innego zadania niz operacyjne domkniecie
+  Task 14: 14.6 instalacja unitu na hoscie (plik istnieje, nikt go nie `enable`owal - operator
+  robi to recznie), oraz zakres poza `deploy/`/`crates/darkstar-core`/`frontend`: wezel w
+  Control Room jako osobny widok `MeshPanel`, dodatkowa nawigacja i testy granic uprawnien
+  we frontendzie wykraczajace poza status i link opisane w 14.9/14.10.
 
-Przy 14.11 plan uruchamia `docker compose -f deploy/headplane/compose.yml config`. Jesli docker
-zglosi brak plikow sekretow — to jest oczekiwane. Pliki `/etc/darkstar/headplane/*` powstaja dopiero
-na hoscie, w kroku 14.4, i nie naleza do repozytorium.
+`docker compose -f deploy/headplane/compose.yml config` sprawdza WYLACZNIE skladnie -
+poprawnosc YAML, interpolacje zmiennych, rozwiazanie `secrets:`/`volumes:` do ich definicji.
+NIE sprawdza, czy pliki pod `/etc/darkstar/headplane/*` albo `deploy/headplane/config.yaml`
+naprawde istnieja na dysku - te sciezki staja sie prawdziwym problemem dopiero przy `up` albo
+`create`, ktorych ten dokument nigdy nie zaleca uruchamiac z tego katalogu bez fizycznego
+dostepu do CBMS. Pliki `/etc/darkstar/headplane/*` powstaja dopiero na hoscie, w kroku 14.4,
+i nie naleza do repozytorium.
