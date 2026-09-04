@@ -37,7 +37,7 @@ PartOf=darkstar.target
 
 [Service]
 Type=simple
-WorkingDirectory=/opt/darkstar/deploy/headplane
+WorkingDirectory=/home/owner/polip-agi/deploy/headplane
 
 # User/group - root dla dostepu do sieci i zarzadzania kontenerami, tak samo jak Headscale.
 User=root

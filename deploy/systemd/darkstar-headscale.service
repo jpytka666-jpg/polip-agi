@@ -28,7 +28,7 @@ PartOf=darkstar.target
 
 [Service]
 Type=simple
-WorkingDirectory=/opt/darkstar/deploy/headscale
+WorkingDirectory=/home/owner/polip-agi/deploy/headscale
 
 # User/group — root dla dostępu do sieci i zarzadzania kontenerami
 User=root
