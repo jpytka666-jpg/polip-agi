@@ -1,0 +1,46 @@
+# darkstar-header-v1
+# po co: mnt-aionslab.mount
+# nie wolno: hotspot, ruszac wlp2s0, wracac do 10.44, gasic DARKSTAR-WiFi, haslo w gicie
+# autor: Marcin
+# powstal: 2026-09-04
+# THIS IS VERY IMPORTANT!!!
+# ==========================================
+# AUTHOR: M. SZUL
+# AI MODEL: Claude Opus 5
+# TIMESTAMP: 2026-09-04 22:20:00
+# REASON FOR CREATION: Dysk 477 GB z etykieta AIONS_LAB byl fizycznie podlaczony do CBMS, ale
+#            NIGDY nie zamontowany i nie mial wpisu w /etc/fstab - dlatego system dusil sie na
+#            6 GB wolnego, majac obok 307 GB wolnej przestrzeni. Ta jednostka montuje go
+#            trwale, po kazdym starcie, bez udzialu czlowieka.
+# MECHANICS: Jednostka .mount systemd zamiast wpisu w /etc/fstab - nazwa pliku MUSI odpowiadac
+#            punktowi montowania (/mnt/aionslab -> mnt-aionslab.mount), inaczej systemd jej nie
+#            zaladuje. Urzadzenie wskazane przez UUID, nie przez /dev/sdb1: litery dyskow
+#            przestawiaja sie przy podlaczeniu innego nosnika, UUID nie.
+# SYSTEM PART: deploy/systemd - warstwa orkestracji uslug Darkstar.
+# ARCHITECTURE FUNCTION: Udostepnia przestrzen na ciezkie artefakty (modele, obrazy, archiwa),
+#            zdejmujac je z 114 GB dysku systemowego. NIE jest miejscem na baze danych ani na
+#            magazyn Dockera - exFAT nie ma uprawnien uniksowych, dowiazan ani rzetelnych
+#            blokad plikow, wiec baza na nim predzej czy pozniej ulegnie uszkodzeniu.
+# DEPENDENCIES/LINKS: pakiet exfatprogs (sterownik), dysk UUID=D4C8-8A18 (etykieta AIONS_LAB).
+# TECH STACK: systemd mount unit - zgodnie z reszta deploy/systemd, zero dodatkowych zaleznosci.
+# LOCAL WORKSPACE: D:\codex-fresh-2026-08-28\worktrees\polip-agi-darkstar-plan
+# GIT COMMIT: PENDING
+# GITHUB METADATA: jpytka666-jpg/polip-agi, branch docs/darkstar-headscale-hotspot-plan
+# ==========================================
+
+[Unit]
+Description=AIONS_LAB data disk (477 GB, exFAT)
+Documentation=file:///mnt/aionslab/AIONS_LAB/README.md
+
+[Mount]
+# UUID, nie /dev/sdb1 - litera dysku zmienia sie po podlaczeniu innego nosnika.
+What=/dev/disk/by-uuid/D4C8-8A18
+Where=/mnt/aionslab
+Type=exfat
+# exFAT nie ma wlasciciela ani praw dostepu - nadaje sie je dopiero przy montowaniu.
+# nofail: gdy dysk zostanie wyciagniety, system MA wstac normalnie. Bez tego brak dysku
+# blokuje uruchomienie maszyny - a to jest brama sieciowa calego domu.
+Options=uid=1000,gid=1000,umask=0022,nofail,x-systemd.device-timeout=10
+
+[Install]
+WantedBy=multi-user.target
