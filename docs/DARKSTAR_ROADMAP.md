@@ -52,6 +52,7 @@ commit `a8eb53b`.
 | Zapora hosta — port 18080 z LAN | ŻYWE | `darkstar-firewall-apply` zwrócił "loaded"; `grep -c 18080 /etc/darkstar/host-guard.nft` = 4, zgodnie z commitem `a8eb53b`; `/world/` odpowiada z kafelkami UP bez tunelu. |
 | Jednostki systemd Headscale/Headplane | PARTIAL — pliki istnieją, nie zainstalowane | `deploy/systemd/darkstar-headscale.service` i `darkstar-headplane.service` są w repozytorium, ze ścieżką roboczą poprawioną na `/home/owner/polip-agi`; żaden nie jest `enable`d ani wystartowany — oba serwisy działają dziś bez systemd. |
 | Headplane — sekrety, config, start | ŻYWE — TYLKO PĘTLA | Bez zmian od poprzedniego pomiaru: `docker ps` `healthy`, `127.0.0.1:3000/admin` = 302, `192.168.2.1:3000` = 000 (świadomie, panel nie jest otwarty na LAN). |
+| Headplane — Step 14.3, prywatny nasłuch | PASS (ręcznie zmierzone) | `ss` pokazuje wyłącznie `127.0.0.1:3000`, `/admin` przez pętlę = 302, LAN `192.168.2.0/24` = 000 — zmierzone zaraz po przeładowaniu zapory dla 18080, więc to też kontrola, że 3000 nie otworzył się przy okazji. Automatyczny skrypt testu wciąż nie istnieje. Dowód: `docs/operations/evidence/2026-09-04-headplane-private-listen.md`. |
 
 ## Historia — stan na 2026-09-04 14:40 — ZMIERZONE
 

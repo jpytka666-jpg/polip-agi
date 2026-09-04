@@ -208,8 +208,12 @@ Dwie pulapki, ktore test musi ominac:
 
 Kroki 14.1 i 14.2 sa zamkniete. Stan pozostalych, zmierzony na zywym hoscie:
 
-- **14.3** — napisac test prywatnego nasluchu wedlug rozdzialu powyzej; ma byc czerwony, zanim panel
-  wstanie. Nadal otwarte.
+- **14.3 — PASS (recznie zmierzone, skrypt testu nadal nie istnieje).** Operator zmierzyl:
+  `ss` pokazuje wylacznie `127.0.0.1:3000`, `/admin` przez petle = `302`, LAN (`192.168.2.0/24`)
+  = `000` - potwierdzone po tym samym przeladowaniu zapory, ktore otworzylo port 18080, wiec
+  ten pomiar jest tez kontrola, ze 3000 nie zostal przy okazji otwarty. Dowod i dokladne
+  pokrycie siedmiu wierszy checklisty: `docs/operations/evidence/2026-09-04-headplane-private-listen.md`.
+  Automatyczny skrypt opisany w rozdziale powyzej wciaz nie istnieje - to pomiar reczny.
 - **14.4 i 14.5 — ZYWE (czesciowo).** Sekrety, `config.yaml` i start panelu sa zrobione i zmierzone:
   `docker ps` pokazuje `darkstar-headplane` jako `Up ... (healthy)`, `cookie_secret` ma 32 bajty
   z prawami `0600` i wlascicielem `root:root`, a `127.0.0.1:3000/admin` odpowiada `302`.
