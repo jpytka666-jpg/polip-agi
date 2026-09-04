@@ -139,6 +139,57 @@ async fn health_reports_both_legs() {
     assert_eq!(json["local_cbms_ok"], true);
 }
 
+struct UrlSpy {
+    urls: std::sync::Mutex<Vec<String>>,
+}
+
+impl ContextTransport for UrlSpy {
+    fn get(&self, url: &str) -> Result<String, ContextError> {
+        self.urls.lock().unwrap().push(url.to_string());
+        if url.ends_with("/heartbeat") {
+            Ok(r#"{"nanosecond heartbeat":1}"#.into())
+        } else {
+            Ok("[]".into())
+        }
+    }
+}
+
+#[tokio::test]
+async fn both_legs_default_to_chroma_v2_matching_the_live_host() {
+    // Zmierzone naprawde na CBMS 2026-09-04: /api/v1/heartbeat -> 410 Gone na obu portach
+    // 8000 i 8001, /api/v2/heartbeat -> 200 na obu. Zywy host mowi wylacznie v2, wiec
+    // ContextState::new() musi zbudowac OBIE nogi na v2 bez zadnej zmiennej srodowiskowej -
+    // to zabezpieczenie przed regresja, nie naprawa istniejacego bledu (bledu nie znaleziono).
+    let spy = Arc::new(UrlSpy {
+        urls: std::sync::Mutex::new(Vec::new()),
+    });
+    let response = context_router(ContextState::new(Some(Arc::from("secret")), spy.clone()))
+        .oneshot(
+            Request::builder()
+                .uri("/v1/context/health")
+                .header("authorization", "Bearer secret")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let urls = spy.urls.lock().unwrap();
+    assert_eq!(urls.len(), 2, "health() musi zapytac obie nogi");
+    for url in urls.iter() {
+        assert!(
+            url.contains("/api/v2/"),
+            "noga zapytala {url} - domyslna konstrukcja ma mowic v2 do obu nog, \
+             bo to jedyna wersja, na ktora odpowiada zywy host"
+        );
+        assert!(
+            !url.contains("/api/v1/"),
+            "noga zapytala sciezke v1 ({url}) - zywy host zwraca na nia 410 Gone"
+        );
+    }
+}
+
 #[tokio::test]
 async fn mutating_methods_are_not_registered() {
     for method in ["POST", "PUT", "DELETE", "PATCH"] {
