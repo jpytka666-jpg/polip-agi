@@ -156,3 +156,6 @@ target/
 
 # Headplane runtime config is host-local; secrets remain under /etc/darkstar/headplane.
 /deploy/headplane/config.yaml
+
+# Per-worktree collaboration instructions are supplied out of band.
+/AGENTS.md
