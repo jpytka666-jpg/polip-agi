@@ -1,0 +1,66 @@
+# darkstar-header-v1
+# po co: darkstar-recall.service
+# nie wolno: hotspot, ruszac wlp2s0, wracac do 10.44, gasic DARKSTAR-WiFi, haslo w gicie
+# autor: Marcin
+# powstal: 2026-09-04
+# THIS IS VERY IMPORTANT!!!
+# ==========================================
+# AUTHOR: M. SZUL
+# AI MODEL: Claude Opus 5
+# TIMESTAMP: 2026-09-04 22:52:00
+# REASON FOR CREATION: Autostart magazynu pamieci. To jest bezposrednia odpowiedz na lekcje
+#            z restartu 2026-09-04: noga pamieci na porcie 8000 NIE wstala, bo nikt nigdy nie
+#            napisal jej jednostki - dane byly caly czas na dysku, tylko nikt ich nie podawal.
+#            Zasada v2: nic nie istnieje, dopoki nie wstaje samo po restarcie.
+# MECHANICS: Deleguje do docker compose w deploy/recall/, ten sam wzorzec co
+#            darkstar-headscale.service i darkstar-headplane.service. Katalogi danych powstaja
+#            przez ExecStartPre, bo docker utworzylby je jako root i uzytkownik nie mialby
+#            do nich dostepu przy robieniu kopii.
+# SYSTEM PART: deploy/systemd - warstwa orkestracji uslug Darkstar.
+# ARCHITECTURE FUNCTION: Gwarantuje, ze pamiec dziewieciu i pol miesiaca historii jest dostepna
+#            po kazdym starcie maszyny, bez udzialu czlowieka.
+# DEPENDENCIES/LINKS: deploy/recall/compose.yml, deploy/.env (DARKSTAR_RECALL_API_KEY),
+#            docker.service, /var/lib/darkstar/recall, /var/lib/darkstar/recall-snapshots.
+# TECH STACK: systemd unit file - zgodnie z reszta deploy/systemd.
+# LOCAL WORKSPACE: D:\codex-fresh-2026-08-28\worktrees\polip-agi-darkstar-plan
+# GIT COMMIT: PENDING
+# GITHUB METADATA: jpytka666-jpg/polip-agi, branch docs/darkstar-headscale-hotspot-plan
+# ==========================================
+
+[Unit]
+Description=Darkstar Recall - long-term memory store (Qdrant)
+Documentation=https://github.com/qdrant/qdrant
+After=docker.service network-online.target
+Requires=docker.service
+PartOf=darkstar.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/owner/polip-agi/deploy/recall
+
+# root, bo zarzadza kontenerami. Sam Qdrant biegnie w kontenerze z odebranymi zdolnosciami.
+User=root
+Group=root
+
+# Katalogi danych i migawek. Bez tego docker zalozylby je sam jako root z prawami, ktore
+# uniemozliwilyby operatorowi wyniesienie kopii zapasowej bez sudo.
+ExecStartPre=/usr/bin/install -d -m 0750 -o root -g root /var/lib/darkstar/recall
+ExecStartPre=/usr/bin/install -d -m 0750 -o root -g root /var/lib/darkstar/recall-snapshots
+
+ExecStart=/usr/bin/docker compose --env-file /home/owner/polip-agi/deploy/.env -f compose.yml up --no-build
+ExecStop=/usr/bin/docker compose --env-file /home/owner/polip-agi/deploy/.env -f compose.yml down
+
+Restart=always
+RestartSec=30
+StartLimitInterval=300
+StartLimitBurst=5
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=darkstar-recall
+
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,44 @@
+# darkstar-header-v1
+# po co: darkstar-index.timer
+# nie wolno: hotspot, ruszac wlp2s0, wracac do 10.44, gasic DARKSTAR-WiFi, haslo w gicie
+# autor: Marcin
+# powstal: 2026-09-04
+# THIS IS VERY IMPORTANT!!!
+# ==========================================
+# AUTHOR: M. SZUL
+# AI MODEL: Claude Opus 5
+# TIMESTAMP: 2026-09-04 22:54:00
+# REASON FOR CREATION: plocate to linuksowy odpowiednik Everything Search: zmierzone 0,032 s na
+#            caly system wobec 0,706 s dla find na trzech katalogach. Ma jedna slabosc wobec
+#            Everything - Windows zglasza kazdy nowy plik natychmiast, Linux nie, wiec indeks
+#            trzeba odswiezac samemu. Fabryczny timer robi to RAZ NA DOBE (3:38 w nocy), czyli
+#            plik utworzony dzis znalazlbys jutro. Ten timer skraca to do godziny.
+# MECHANICS: Osobna jednostka darkstar-* zamiast nadpisania fabrycznej: aktualizacja pakietu
+#            plocate nie zdmuchnie naszej zmiany, a wylaczenie jej to jedno polecenie na
+#            jednostce, ktora jawnie nalezy do Darkstara.
+# SYSTEM PART: deploy/systemd - warstwa orkestracji uslug Darkstar.
+# ARCHITECTURE FUNCTION: Zdolnosc "znajdz plik natychmiast" dla operatora i dla agentow -
+#            fundament pod narzedzie wyszukiwania plikow w warstwie MCP.
+# DEPENDENCIES/LINKS: darkstar-index.service, pakiet plocate, /var/lib/plocate/plocate.db.
+# TECH STACK: systemd timer - zgodnie z reszta deploy/systemd, zero dodatkowych zaleznosci.
+# LOCAL WORKSPACE: D:\codex-fresh-2026-08-28\worktrees\polip-agi-darkstar-plan
+# GIT COMMIT: PENDING
+# GITHUB METADATA: jpytka666-jpg/polip-agi, branch docs/darkstar-headscale-hotspot-plan
+# ==========================================
+
+[Unit]
+Description=Darkstar file index refresh (plocate), hourly
+Documentation=man:plocate(1) man:updatedb(8)
+
+[Timer]
+# Co godzine od uruchomienia maszyny, potem co godzine od poprzedniego przebiegu.
+OnBootSec=10min
+OnUnitActiveSec=1h
+# Rozrzut, zeby odswiezanie nie trafialo zawsze w te sama sekunde razem z innymi zadaniami.
+RandomizedDelaySec=5min
+# Nadrobienie po wybudzeniu: jesli maszyna spala, indeks ma sie odswiezyc zaraz po starcie.
+Persistent=true
+Unit=darkstar-index.service
+
+[Install]
+WantedBy=timers.target

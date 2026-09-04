@@ -1,0 +1,48 @@
+# darkstar-header-v1
+# po co: darkstar-index.service
+# nie wolno: hotspot, ruszac wlp2s0, wracac do 10.44, gasic DARKSTAR-WiFi, haslo w gicie
+# autor: Marcin
+# powstal: 2026-09-04
+# THIS IS VERY IMPORTANT!!!
+# ==========================================
+# AUTHOR: M. SZUL
+# AI MODEL: Claude Opus 5
+# TIMESTAMP: 2026-09-04 22:55:00
+# REASON FOR CREATION: Jednorazowa praca wolana przez darkstar-index.timer - przebudowa indeksu
+#            plocate. Osobny plik, bo timer w systemd nie wykonuje pracy, tylko ja wyzwala.
+# MECHANICS: Type=oneshot: uruchamia sie, robi swoje i konczy - nie jest demonem. Nice i
+#            IOSchedulingClass=idle sprawiaja, ze przebudowa indeksu ustepuje kazdej innej
+#            pracy; na bramie sieciowej nic nie moze konkurowac z ruchem sieciowym o dysk.
+# SYSTEM PART: deploy/systemd - warstwa orkestracji uslug Darkstar.
+# ARCHITECTURE FUNCTION: Utrzymuje indeks plikow swiezym, zeby "znajdz plik" bylo natychmiastowe
+#            takze dla plikow utworzonych przed chwila.
+# DEPENDENCIES/LINKS: /usr/bin/updatedb (pakiet plocate), /etc/updatedb.conf,
+#            /var/lib/plocate/plocate.db, darkstar-index.timer.
+# TECH STACK: systemd oneshot unit - zgodnie z reszta deploy/systemd.
+# LOCAL WORKSPACE: D:\codex-fresh-2026-08-28\worktrees\polip-agi-darkstar-plan
+# GIT COMMIT: PENDING
+# GITHUB METADATA: jpytka666-jpg/polip-agi, branch docs/darkstar-headscale-hotspot-plan
+# ==========================================
+
+[Unit]
+Description=Darkstar file index rebuild (plocate updatedb)
+Documentation=man:updatedb(8)
+# Duzy dysk ma byc w indeksie - jesli jeszcze nie wstal, nie ma sensu budowac indeksu bez niego.
+After=mnt-aionslab.mount
+Wants=mnt-aionslab.mount
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/updatedb
+
+# Indeksowanie ustepuje wszystkiemu innemu. To brama sieciowa - ruch jest wazniejszy niz indeks.
+Nice=19
+IOSchedulingClass=idle
+CPUSchedulingPolicy=idle
+
+# Przebudowa nie moze wisiec w nieskonczonosc, gdyby dysk sie zawiesil.
+TimeoutStartSec=30min
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=darkstar-index

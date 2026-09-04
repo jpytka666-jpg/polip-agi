@@ -1,0 +1,88 @@
+#!/usr/bin/env docker-compose
+# darkstar-header-v1
+# po co: compose.yml
+# nie wolno: hotspot, ruszac wlp2s0, wracac do 10.44, gasic DARKSTAR-WiFi, haslo w gicie
+# autor: Marcin
+# powstal: 2026-09-04
+# THIS IS VERY IMPORTANT!!!
+# ==========================================
+# AUTHOR: M. SZUL
+# AI MODEL: Claude Opus 5
+# TIMESTAMP: 2026-09-04 22:50:00
+# REASON FOR CREATION: Magazyn pamieci dlugoterminowej Darkstara (AIONS v2). Dzis cala pamiec
+#            - dziewiec i pol miesiaca historii - zyje wylacznie na Windowsie, wiec bez tego
+#            jednego laptopa nie ma kontekstu. Ta usluga przenosi ja na brame, ktora stoi.
+# MECHANICS: Qdrant przypiety digestem z version.lock. Nasluch WYMUSZONY na 127.0.0.1 przez
+#            QDRANT__SERVICE__HOST - do pamieci wchodzi sie wylacznie przez darkstar-server,
+#            nigdy bezposrednio. Klucz API z deploy/.env, nigdy z repozytorium. Katalog danych
+#            na dysku systemowym (ext4), NIGDY na /mnt/aionslab: exFAT nie ma rzetelnych blokad
+#            plikow i baza na nim ulegnie uszkodzeniu.
+# SYSTEM PART: deploy/recall - magazyn pamieci dlugoterminowej.
+# ARCHITECTURE FUNCTION: Jedno zrodlo prawdy dla pamieci wszystkich maszyn i wszystkich sesji.
+#            Trzy szuflady w jednej bazie: wspomnienia, katalog narzedzi, katalog umiejetnosci.
+# DEPENDENCIES/LINKS: version.lock (digest), deploy/.env (klucz API, tryb 0600),
+#            deploy/systemd/darkstar-recall.service, deploy/recall/verify, deploy/recall/backup.
+# TECH STACK: Docker Compose YAML - identyczna konwencja jak deploy/headscale i deploy/headplane.
+# LOCAL WORKSPACE: D:\codex-fresh-2026-08-28\worktrees\polip-agi-darkstar-plan
+# GIT COMMIT: PENDING
+# GITHUB METADATA: jpytka666-jpg/polip-agi, branch docs/darkstar-headscale-hotspot-plan
+# ==========================================
+
+services:
+  recall:
+    # Przypiecie przez digest, nie przez tag. Tag stoi obok wylacznie dla czytelnosci -
+    # gdyby ktos przepial v1.19.1 na inna zawartosc, docker odmowi startu.
+    # Zrodlo: deploy/recall/version.lock, pole container_image_digest.
+    image: qdrant/qdrant:v1.19.1@sha256:12364fe851b9f17356fc88189fc06d1b521262e04659ec7345975b00c9246a10
+    container_name: darkstar-recall
+    restart: unless-stopped
+
+    # Siec hosta, z tego samego powodu co Headscale i Headplane: ten host jest brama domowa,
+    # wlasna siec dockerowa dolozylaby mostek i reguly przekierowania. Przy sieci hosta
+    # o ekspozycji decyduje WYLACZNIE adres nasluchu ponizej.
+    network_mode: host
+
+    environment:
+      # ---- NASLUCH - tu zapada decyzja o ekspozycji ----
+      # 0.0.0.0 JEST ZAKAZANE. Przy sieci hosta wystawiloby pamiec takze na wlp2s0, czyli do
+      # sieci Vodafone, i na 192.168.2.1, czyli do sieci prywatnej. Do pamieci wchodzi sie
+      # przez darkstar-server (token, polityka, audyt), nie przez goly port bazy.
+      QDRANT__SERVICE__HOST: "127.0.0.1"
+      QDRANT__SERVICE__HTTP_PORT: "6333"
+      QDRANT__SERVICE__GRPC_PORT: "6334"
+
+      # Bez klucza kazdy proces na hoscie moglby czytac i kasowac cala pamiec. Wartosc zyje
+      # w deploy/.env (tryb 0600, ignorowany przez git), nigdy w repozytorium.
+      QDRANT__SERVICE__API_KEY: ${DARKSTAR_RECALL_API_KEY:?ustaw DARKSTAR_RECALL_API_KEY w deploy/.env}
+
+      # Telemetria wylaczona: to jest prywatna pamiec jednego czlowieka, nie ma powodu, zeby
+      # cokolwiek o niej wychodzilo na zewnatrz.
+      QDRANT__TELEMETRY_DISABLED: "true"
+
+    volumes:
+      # Dane na dysku systemowym (ext4). NIGDY /mnt/aionslab - patrz naglowek.
+      - /var/lib/darkstar/recall:/qdrant/storage
+      # Migawki (kopie zapasowe) osobno, zeby dalo sie je wyniesc bez ruszania zywej bazy.
+      - /var/lib/darkstar/recall-snapshots:/qdrant/snapshots
+
+    # Obraz jest oparty o distroless-podobna baze; odbieramy mu wszystko, czego nie potrzebuje.
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+    healthcheck:
+      # /readyz odpowiada dopiero, gdy baza jest gotowa przyjmowac zapytania - w odroznieniu
+      # od /livez, ktore mowi tylko "proces zyje". Sonda idzie po petli zwrotnej, bo tam
+      # i tylko tam ta usluga nasluchuje.
+      test: ["CMD", "/qdrant/qdrant", "--version"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

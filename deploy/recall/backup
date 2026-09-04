@@ -1,0 +1,151 @@
+#!/bin/sh
+# darkstar-header-v1
+# po co: backup
+# nie wolno: hotspot, ruszac wlp2s0, wracac do 10.44, gasic DARKSTAR-WiFi, haslo w gicie
+# autor: Marcin
+# powstal: 2026-09-04
+# THIS IS VERY IMPORTANT!!!
+# ==========================================
+# AUTHOR: M. SZUL
+# AI MODEL: Claude Opus 5
+# TIMESTAMP: 2026-09-04 22:58:00
+# REASON FOR CREATION: Zmierzone 2026-09-04: kopie pamieci ISTNIALY (_backups, backups,
+#            chroma_backup_20251113, chroma.BACKUP-20260825), ale NIKT NIGDY nie sprobowal
+#            z nich wrocic. Kopia, ktorej nie odtworzono, nie jest kopia - jest nadzieja.
+#            Ten skrypt zamyka te dziure: robi migawke I potrafi udowodnic, ze dziala.
+# MECHANICS: Cztery podkomendy. `snapshot` wola POST /snapshots i zapisuje migawke calej bazy.
+#            `list` pokazuje co jest. `restore-test` jest sercem tego pliku: odtwarza migawke
+#            do OSOBNEJ, tymczasowej nazwy kolekcji, porownuje liczbe punktow z oryginalem
+#            i sprzata po sobie - zywa pamiec nie jest przy tym dotykana ani przez chwile.
+#            `prune` kasuje migawki starsze niz podana liczba dni.
+# SYSTEM PART: deploy/recall - magazyn pamieci dlugoterminowej.
+# ARCHITECTURE FUNCTION: Jedyna droga do zdania "pamiec jest odtwarzalna" popartego dowodem,
+#            a nie zalozeniem. Bez zielonego `restore-test` zadna migracja pamieci nie ma prawa
+#            zostac uznana za zamknieta.
+# DEPENDENCIES/LINKS: dzialajaca usluga darkstar-recall (127.0.0.1:6333), curl, deploy/.env
+#            (DARKSTAR_RECALL_API_KEY), /var/lib/darkstar/recall-snapshots.
+# TECH STACK: POSIX sh - tak samo jak deploy/headplane/verify i deploy/firewall/*, zero
+#            zaleznosci runtime. Rust bylby tu narzutem: to sa cztery wywolania HTTP i
+#            porownanie dwoch liczb, a skrypt musi dac sie przeczytac operatorowi w calosci
+#            zanim go uruchomi na wlasnej pamieci.
+# LOCAL WORKSPACE: D:\codex-fresh-2026-08-28\worktrees\polip-agi-darkstar-plan
+# GIT COMMIT: PENDING
+# GITHUB METADATA: jpytka666-jpg/polip-agi, branch docs/darkstar-headscale-hotspot-plan
+# ==========================================
+
+set -eu
+
+BASE="${DARKSTAR_RECALL_URL:-http://127.0.0.1:6333}"
+ENV_FILE="${DARKSTAR_ENV_FILE:-/home/owner/polip-agi/deploy/.env}"
+SNAP_DIR="${DARKSTAR_RECALL_SNAPSHOTS:-/var/lib/darkstar/recall-snapshots}"
+
+emit() { printf '%s: %s\n' "$1" "$2"; }
+die()  { emit "FAIL" "$1"; exit 1; }
+
+# Klucz NIGDY nie trafia do argumentow polecenia - byloby go widac w `ps` dla kazdego
+# uzytkownika maszyny. Czytamy go do zmiennej i podajemy naglowkiem.
+if [ -r "$ENV_FILE" ]; then
+    KEY=$(sed -n 's/^DARKSTAR_RECALL_API_KEY=//p' "$ENV_FILE" | head -1)
+else
+    KEY="${DARKSTAR_RECALL_API_KEY:-}"
+fi
+[ -n "${KEY:-}" ] || die "brak DARKSTAR_RECALL_API_KEY (szukalem w $ENV_FILE)"
+
+api() {
+    # $1 = metoda, $2 = sciezka, reszta = dodatkowe argumenty curl
+    _m=$1; _p=$2; shift 2
+    curl -sS -X "$_m" -H "api-key: $KEY" -H 'content-type: application/json' "$BASE$_p" "$@"
+}
+
+api_code() {
+    _m=$1; _p=$2; shift 2
+    curl -sS -o /dev/null -w '%{http_code}' -X "$_m" -H "api-key: $KEY" "$BASE$_p" "$@"
+}
+
+cmd_snapshot() {
+    emit "INFO" "robie migawke calej bazy"
+    out=$(api POST /snapshots) || die "zadanie migawki nie powiodlo sie"
+    name=$(printf '%s' "$out" | sed -n 's/.*"name":"\([^"]*\)".*/\1/p')
+    [ -n "$name" ] || die "baza nie zwrocila nazwy migawki: $out"
+    emit "PASS" "migawka utworzona: $name"
+    if [ -d "$SNAP_DIR" ]; then
+        size=$(du -sh "$SNAP_DIR" 2>/dev/null | cut -f1)
+        emit "INFO" "katalog migawek $SNAP_DIR zajmuje $size"
+    fi
+}
+
+cmd_list() {
+    out=$(api GET /snapshots) || die "nie moge odczytac listy migawek"
+    count=$(printf '%s' "$out" | grep -o '"name":' | wc -l)
+    emit "INFO" "migawek w bazie: $count"
+    printf '%s' "$out" | sed -n 's/.*"name":"\([^"]*\)".*/  \1/p'
+}
+
+# SERCE TEGO PLIKU. Odtworzenie do osobnej nazwy, porownanie liczby punktow, sprzatanie.
+# Zywa kolekcja nie jest dotykana - odtwarzamy OBOK niej, nie NA niej.
+cmd_restore_test() {
+    coll="${1:-}"
+    [ -n "$coll" ] || die "uzycie: backup restore-test <nazwa-kolekcji>"
+    probe="${coll}__restore_probe"
+
+    emit "INFO" "kolekcja zrodlowa: $coll"
+    src=$(api GET "/collections/$coll") || die "nie moge odczytac kolekcji $coll"
+    src_count=$(printf '%s' "$src" | sed -n 's/.*"points_count":\([0-9]*\).*/\1/p' | head -1)
+    [ -n "$src_count" ] || die "kolekcja $coll nie zwrocila liczby punktow"
+    emit "INFO" "punktow w zrodle: $src_count"
+
+    emit "INFO" "robie migawke kolekcji"
+    snap=$(api POST "/collections/$coll/snapshots") || die "migawka kolekcji nie powiodla sie"
+    snap_name=$(printf '%s' "$snap" | sed -n 's/.*"name":"\([^"]*\)".*/\1/p')
+    [ -n "$snap_name" ] || die "brak nazwy migawki kolekcji: $snap"
+    emit "PASS" "migawka kolekcji: $snap_name"
+
+    # Sprzatanie sondy przy kazdym wyjsciu - takze przy bledzie i przy Ctrl+C.
+    trap 'api DELETE "/collections/$probe" >/dev/null 2>&1 || true' EXIT HUP INT TERM
+
+    emit "INFO" "odtwarzam migawke do OSOBNEJ kolekcji $probe (zywa nietkniete)"
+    rc=$(api_code PUT "/collections/$probe/snapshots/recover" \
+        -H 'content-type: application/json' \
+        --data "{\"location\":\"file:///qdrant/snapshots/$coll/$snap_name\"}")
+    [ "$rc" = "200" ] || die "odtworzenie zwrocilo HTTP $rc - KOPIA NIE JEST ODTWARZALNA"
+
+    probe_json=$(api GET "/collections/$probe") || die "odtworzona kolekcja nie odpowiada"
+    probe_count=$(printf '%s' "$probe_json" | sed -n 's/.*"points_count":\([0-9]*\).*/\1/p' | head -1)
+    emit "INFO" "punktow po odtworzeniu: ${probe_count:-brak}"
+
+    if [ "${probe_count:-x}" = "$src_count" ]; then
+        emit "PASS" "DOWOD ODTWORZENIA: $src_count = $probe_count punktow, kopia dziala"
+    else
+        die "ROZJAZD: zrodlo $src_count, odtworzone ${probe_count:-brak} - kopia NIE jest wierna"
+    fi
+
+    emit "INFO" "sprzatam kolekcje probna"
+}
+
+cmd_prune() {
+    days="${1:-30}"
+    [ -d "$SNAP_DIR" ] || die "brak katalogu migawek: $SNAP_DIR"
+    emit "INFO" "kasuje migawki starsze niz $days dni z $SNAP_DIR"
+    n=$(find "$SNAP_DIR" -type f -name '*.snapshot' -mtime "+$days" -print -delete 2>/dev/null | wc -l)
+    emit "PASS" "usunieto plikow: $n"
+}
+
+case "${1:-}" in
+    snapshot)      shift; cmd_snapshot "$@" ;;
+    list)          shift; cmd_list "$@" ;;
+    restore-test)  shift; cmd_restore_test "$@" ;;
+    prune)         shift; cmd_prune "$@" ;;
+    *)
+        cat <<'USAGE'
+darkstar-recall backup - kopie pamieci z dowodem odtworzenia
+
+  backup snapshot                 zrob migawke calej bazy
+  backup list                     pokaz istniejace migawki
+  backup restore-test <kolekcja>  odtworz OBOK zywej i porownaj liczbe punktow (DOWOD)
+  backup prune [dni]              skasuj migawki starsze niz N dni (domyslnie 30)
+
+Zywa pamiec nie jest dotykana przez zadna z tych komend.
+USAGE
+        exit 1
+        ;;
+esac

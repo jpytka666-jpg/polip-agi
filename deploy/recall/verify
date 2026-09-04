@@ -1,0 +1,152 @@
+#!/bin/sh
+# darkstar-header-v1
+# po co: verify
+# nie wolno: hotspot, ruszac wlp2s0, wracac do 10.44, gasic DARKSTAR-WiFi, haslo w gicie
+# autor: Marcin
+# powstal: 2026-09-04
+# THIS IS VERY IMPORTANT!!!
+# ==========================================
+# AUTHOR: M. SZUL
+# AI MODEL: Claude Opus 5
+# TIMESTAMP: 2026-09-04 23:02:00
+# REASON FOR CREATION: Bramka wejscia dla magazynu pamieci. Sprawdza to, co musi byc prawda,
+#            zeby pamiec byla bezpieczna i odtwarzalna - zanim ktokolwiek uzna ja za gotowa.
+# MECHANICS: Wylacznie odczyt. Czesc pierwsza sprawdza pliki w repozytorium i dziala nawet
+#            wtedy, gdy nic nie jest wdrozone. Czesc druga dotyka hosta tylko jesli kontener
+#            faktycznie chodzi. Zaden krok nie zmienia stanu.
+# SYSTEM PART: deploy/recall - magazyn pamieci dlugoterminowej.
+# ARCHITECTURE FUNCTION: Bramka dla wdrozenia i dla kazdej pozniejszej zmiany wersji.
+# DEPENDENCIES/LINKS: version.lock, compose.yml, deploy/systemd/darkstar-recall.service,
+#            docker, ss, curl.
+# TECH STACK: POSIX sh - tak samo jak deploy/headplane/verify, zero zaleznosci runtime.
+# LOCAL WORKSPACE: D:\codex-fresh-2026-08-28\worktrees\polip-agi-darkstar-plan
+# GIT COMMIT: PENDING
+# GITHUB METADATA: jpytka666-jpg/polip-agi, branch docs/darkstar-headscale-hotspot-plan
+# ==========================================
+
+set -eu
+
+DIR="$(cd "$(dirname "$0")" && pwd)"
+CONTAINER="${DARKSTAR_RECALL_CONTAINER:-darkstar-recall}"
+PORT="${DARKSTAR_RECALL_PORT:-6333}"
+DATA_DIR="${DARKSTAR_RECALL_DATA:-/var/lib/darkstar/recall}"
+FAILED=0
+
+emit() { printf '%s: %s\n' "$1" "$2"; }
+note_fail() { emit "FAIL" "$1"; FAILED=1; }
+
+# --- Czesc 1: pliki w repozytorium. Dziala takze gdy nic nie jest wdrozone. ---
+
+for f in version.lock compose.yml backup; do
+    [ -f "$DIR/$f" ] || note_fail "brakuje pliku $f"
+done
+
+# 1. Zakaz ruchomego taga.
+if grep -n ':latest' "$DIR/compose.yml" >/dev/null 2>&1; then
+    note_fail "compose.yml uzywa taga latest - przypiecie ma byc niezmienne"
+else
+    emit "PASS" "compose.yml nie uzywa taga latest"
+fi
+
+# 2. Obraz przypiety digestem zgodnym z version.lock.
+LOCK_DIGEST=$(sed -n 's/^container_image_digest *= *//p' "$DIR/version.lock" | tr -d ' \r')
+if [ -z "$LOCK_DIGEST" ]; then
+    note_fail "version.lock nie podaje container_image_digest"
+elif grep -F "$LOCK_DIGEST" "$DIR/compose.yml" >/dev/null 2>&1; then
+    emit "PASS" "compose.yml wskazuje digest z version.lock"
+else
+    note_fail "compose.yml nie wskazuje digestu z version.lock"
+fi
+
+# 3. Adres nasluchu. 0.0.0.0 poza komentarzem jest zakazane.
+if grep -n '0\.0\.0\.0' "$DIR/compose.yml" 2>/dev/null | grep -v '^[0-9]*: *#' >/dev/null 2>&1; then
+    note_fail "0.0.0.0 wystepuje poza komentarzem - pamiec nie moze byc publiczna"
+else
+    emit "PASS" "brak 0.0.0.0 w konfiguracji (poza komentarzami wyjasniajacymi zakaz)"
+fi
+
+if grep -q 'QDRANT__SERVICE__HOST: *"127\.0\.0\.1"' "$DIR/compose.yml"; then
+    emit "PASS" "nasluch wymuszony na petli zwrotnej"
+else
+    note_fail "compose.yml nie wymusza nasluchu na 127.0.0.1"
+fi
+
+# 4. Klucz wylacznie przez zmienna, nigdy wartoscia w repozytorium.
+if grep -nE '^[^#]*QDRANT__SERVICE__API_KEY: *"' "$DIR/compose.yml" >/dev/null 2>&1; then
+    note_fail "compose.yml zawiera klucz API jako wartosc zamiast odwolania do zmiennej"
+else
+    emit "PASS" "klucz API podany wylacznie jako odwolanie do deploy/.env"
+fi
+
+# 5. Dane NIE na dysku exFAT. To nie jest preferencja - exFAT nie ma rzetelnych blokad plikow.
+if grep -n '/mnt/aionslab' "$DIR/compose.yml" >/dev/null 2>&1; then
+    note_fail "katalog danych wskazuje /mnt/aionslab (exFAT) - baza tam ulegnie uszkodzeniu"
+else
+    emit "PASS" "katalog danych poza dyskiem exFAT"
+fi
+
+# --- Czesc 2: stan na hoscie. Brak kontenera to jeszcze nie blad. ---
+
+if ! command -v docker >/dev/null 2>&1; then
+    emit "WARN" "brak polecenia docker - pomijam sprawdzenia kontenera"
+    printf '\n%s\n' "darkstar-recall: weryfikacja plikow zakonczona"
+    [ "$FAILED" -eq 0 ] || exit 1
+    exit 0
+fi
+
+if ! docker ps --format '{{.Names}}' 2>/dev/null | grep -q "^${CONTAINER}\$"; then
+    emit "INFO" "kontener $CONTAINER nie dziala - wdrozenie jeszcze przed nami"
+    printf '\n%s\n' "darkstar-recall: weryfikacja plikow zakonczona"
+    [ "$FAILED" -eq 0 ] || exit 1
+    exit 0
+fi
+
+emit "PASS" "kontener $CONTAINER dziala"
+
+# 6. Czy dziala dokladnie ten obraz, ktory jest przypiety.
+RUNNING=$(docker inspect "$CONTAINER" --format '{{.Image}} {{range .RepoDigests}}{{.}} {{end}}' 2>/dev/null || echo '')
+if [ -n "$LOCK_DIGEST" ] && printf '%s' "$RUNNING" | grep -F "$LOCK_DIGEST" >/dev/null 2>&1; then
+    emit "PASS" "dzialajacy obraz zgadza sie z digestem z version.lock"
+else
+    emit "WARN" "nie potwierdzono digestu dzialajacego obrazu - sprawdz: docker inspect $CONTAINER"
+fi
+
+# 7. Adres nasluchu widziany z hosta - jedyny wiarygodny dowod ekspozycji.
+if command -v ss >/dev/null 2>&1; then
+    LISTEN=$(ss -lnt 2>/dev/null | awk -v p=":$PORT" '$4 ~ p"$" {print $4}')
+    if [ -z "$LISTEN" ]; then
+        emit "WARN" "nikt nie nasluchuje na porcie $PORT"
+    else
+        for addr in $LISTEN; do
+            case "$addr" in
+                127.0.0.1:*) emit "PASS" "nasluch na petli zwrotnej: $addr" ;;
+                *)           note_fail "nasluch na niedozwolonym adresie: $addr" ;;
+            esac
+        done
+    fi
+else
+    emit "WARN" "brak polecenia ss - nie moge sprawdzic adresu nasluchu"
+fi
+
+# 8. Katalog danych faktycznie poza exFAT.
+if [ -d "$DATA_DIR" ]; then
+    FS=$(df -T "$DATA_DIR" 2>/dev/null | awk 'NR==2 {print $2}')
+    case "$FS" in
+        exfat|vfat|ntfs) note_fail "dane leza na systemie plikow $FS - brak rzetelnych blokad" ;;
+        "")              emit "WARN" "nie moge ustalic systemu plikow dla $DATA_DIR" ;;
+        *)               emit "PASS" "dane na systemie plikow $FS" ;;
+    esac
+else
+    emit "WARN" "katalog danych $DATA_DIR jeszcze nie istnieje"
+fi
+
+# 9. Klucz nie moze wyciekac do logow kontenera.
+if docker logs --tail 500 "$CONTAINER" 2>&1 | grep -qE 'api[_-]?key["=: ]+[A-Za-z0-9_-]{16,}'; then
+    note_fail "w logach widac cos, co wyglada na klucz - zbadaj to zanim pojdziesz dalej"
+else
+    emit "PASS" "brak sladu klucza w ostatnich 500 wierszach logow"
+fi
+
+printf '\n%s\n' "darkstar-recall: weryfikacja zakonczona (wylacznie odczyt)"
+[ "$FAILED" -eq 0 ] || exit 1
+exit 0

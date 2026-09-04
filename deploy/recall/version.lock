@@ -1,0 +1,60 @@
+# darkstar-header-v1
+# po co: version.lock
+# nie wolno: hotspot, ruszac wlp2s0, wracac do 10.44, gasic DARKSTAR-WiFi, haslo w gicie
+# autor: Marcin
+# powstal: 2026-09-04
+# THIS IS VERY IMPORTANT!!!
+# ==========================================
+# AUTHOR: M. SZUL
+# AI MODEL: Claude Opus 5
+# TIMESTAMP: 2026-09-04 22:47:18
+# REASON FOR CREATION: Przypiecie wykonawcze magazynu pamieci Darkstar (darkstar-recall).
+#            Bez tego pliku "qdrant/qdrant" jest ruchomym celem - ta sama nazwa moze jutro
+#            wskazywac inna zawartosc, a pamiec dziewieciu miesiecy nie moze zalezec od tego,
+#            co ktos wypchnal do rejestru w nocy.
+# MECHANICS: Digest indeksu multi-arch, nie tag. compose.yml MUSI wskazywac dokladnie ten
+#            digest; deploy/recall/verify sprawdza zgodnosc i czerwieni sie przy rozjezdzie.
+# SYSTEM PART: deploy/recall - magazyn pamieci dlugoterminowej (AIONS v2).
+# ARCHITECTURE FUNCTION: Jedno miejsce, w ktorym zapisana jest odpowiedz na pytanie
+#            "ktora dokladnie wersja bazy trzyma nasza pamiec".
+# DEPENDENCIES/LINKS: deploy/recall/compose.yml, deploy/recall/verify,
+#            deploy/systemd/darkstar-recall.service.
+# TECH STACK: plik tekstowy klucz=wartosc - czytelny dla czlowieka i dla grep, zero zaleznosci.
+# LOCAL WORKSPACE: D:\codex-fresh-2026-08-28\worktrees\polip-agi-darkstar-plan
+# GIT COMMIT: PENDING
+# GITHUB METADATA: jpytka666-jpg/polip-agi, branch docs/darkstar-headscale-hotspot-plan
+# ==========================================
+
+upstream_repository  = https://github.com/qdrant/qdrant
+upstream_license     = Apache-2.0
+container_image_ref  = qdrant/qdrant:v1.19.1
+container_image_tag  = v1.19.1
+container_image_digest = sha256:12364fe851b9f17356fc88189fc06d1b521262e04659ec7345975b00c9246a10
+digest_amd64         = sha256:0699e7733a6fa7fa7f6b95dcbed84ebb04584110da525cdfdef9f305c4f57738
+digest_arm64         = sha256:410824dfda27af4473714bcd06cfbf380a2765d4bb050e3a5ca1ce69e3117726
+host_architecture    = x86_64 (zmierzone na CBMS: uname -m)
+pinned_at            = 2026-09-04
+
+# DLACZEGO TA BAZA, a nie Chroma ktora juz stoi na Windowsie:
+# 1. Napisana w Rust - ten sam jezyk co darkstar-server i co Redox, ktory jest celem docelowym.
+#    Chroma to Python; zasada projektu mowi Rust domyslnie.
+# 2. Jedno wejscie HTTP dla kazdej maszyny. Android, iOS i Redox nigdy nie dostana biblioteki
+#    Pythona, ale kazde z nich umie wyslac zapytanie HTTP.
+# 3. Kopie zapasowe przez wlasne API (POST /snapshots) - to domyka najwieksza dziure
+#    zmierzona 2026-09-04: kopie istnialy, ale NIGDY nie sprawdzono czy da sie z nich wrocic.
+# 4. Skala: 4629 embeddingow x 384 wymiary to okolo 5 MB pamieci. Qdrant liczy ~1 GB RAM na
+#    milion wektorow 384D, wiec zapas jest liczony w latach, nie miesiacach.
+
+# ZAKAZY WYKONAWCZE (sprawdzane przez deploy/recall/verify):
+# - nasluch WYLACZNIE na 127.0.0.1. Nigdy 0.0.0.0, nigdy adres bramy. Do pamieci wchodzi sie
+#   przez darkstar-server, nie bezposrednio - tak samo jak do Headplane.
+# - katalog danych na dysku systemowym (ext4), NIGDY na /mnt/aionslab. exFAT nie ma rzetelnych
+#   blokad plikow; baza na nim ulegnie uszkodzeniu, to kwestia czasu, nie szansy.
+# - klucz API wylacznie w deploy/.env (tryb 0600), nigdy w repozytorium.
+
+# AKTUALIZACJA WERSJI:
+# 1. Odczytaj nowe wydanie: https://github.com/qdrant/qdrant/releases
+# 2. docker buildx imagetools inspect qdrant/qdrant:<nowy-tag>  -> przepisz digest tutaj
+# 3. Zmien digest w compose.yml na ten sam
+# 4. Zrob kopie PRZED podmiana: deploy/recall/backup snapshot
+# 5. deploy/recall/verify musi byc zielony po podmianie
