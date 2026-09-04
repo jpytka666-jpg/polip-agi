@@ -1,0 +1,104 @@
+#!/bin/sh
+# darkstar-header-v1
+# po co: verify-config
+# nie wolno: hotspot, ruszac wlp2s0, wracac do 10.44, gasic DARKSTAR-WiFi, haslo w gicie
+# autor: Marcin
+# powstal: 2026-09-04
+# THIS IS VERY IMPORTANT!!!
+# ==========================================
+# AUTHOR: M. SZUL
+# AI MODEL: Claude Sonnet 5
+# TIMESTAMP: 2026-09-04 17:25:00
+# REASON FOR CREATION: Task 14, Step 14.11 - operatorska bramka uruchamiana na Windows, bez SSH
+#            do CBMS. Zmierzone 2026-09-04: `docker compose -f compose.yml config` NIE pada na
+#            braku plikow sekretow pod /etc/darkstar/headplane/* - `config` wylacznie rozwiazuje
+#            i renderuje YAML, nie sprawdza istnienia sciezek `secrets: file:` ani bind-mountow.
+#            To sprawdzenie robi dopiero `up`/`create`, ktorego ten skrypt swiadomie nigdy nie
+#            wywoluje. Ten plik zastepuje bledne zalozenie z README ("ma paść na braku sekretow")
+#            prawdziwym, zmierzonym zachowaniem narzedzia.
+# MECHANICS: Jedno wywolanie `docker compose config`, wylacznie odczyt. Sprawdza to, co to
+#            polecenie NAPRAWDE gwarantuje: config sie rozwiazuje, sekrety sa odwolaniem do sciezki
+#            /etc/darkstar/headplane/*, nigdy wartoscia, nasluch to 127.0.0.1, nigdzie nie ma
+#            0.0.0.0. Na koniec potwierdza, ze samo uruchomienie tego skryptu nie zostawilo w
+#            worktree zadnego nowego pliku (zero efektow ubocznych).
+# SYSTEM PART: deploy/headplane - panel administracyjny prywatnego mesh.
+# ARCHITECTURE FUNCTION: Bramka wejscia dla Step 14.11. Nigdy nie wywoluje `up` ani `create`,
+#            wiec nigdy nie startuje kontenera i nigdy nie potrzebuje CBMS ani SSH.
+# DEPENDENCIES/LINKS: compose.yml, docker compose (lokalnie na maszynie operatora).
+# TECH STACK: POSIX sh - tak samo jak deploy/headplane/verify, zero zaleznosci runtime.
+# LOCAL WORKSPACE: D:\codex-fresh-2026-08-28\worktrees\polip-agi-darkstar-plan
+# GIT COMMIT: PENDING
+# GITHUB METADATA: jpytka666-jpg/polip-agi, branch docs/darkstar-headscale-hotspot-plan
+# ==========================================
+
+set -eu
+
+DIR="$(cd "$(dirname "$0")" && pwd)"
+FAILED=0
+
+emit() {
+    printf '%s: %s\n' "$1" "$2"
+}
+
+note_fail() {
+    emit "FAIL" "$1"
+    FAILED=1
+}
+
+if ! command -v docker >/dev/null 2>&1; then
+    emit "WARN" "brak polecenia docker - pomijam Step 14.11"
+    exit 0
+fi
+
+BEFORE=$(ls -1 "$DIR" | sort)
+
+# `cd` najpierw i wolaj docker z golym plikiem wzglednym - przekazanie dockerowi
+# absolutnej sciezki w stylu Git Bash (/d/...) na Windows konczy sie zlym tlumaczeniem
+# na sciezke Windows i "system cannot find the path specified", nawet gdy plik istnieje.
+OUTPUT=$(cd "$DIR" && docker compose -f compose.yml config 2>&1)
+STATUS=$?
+
+# `config` rozwiazuje YAML; nie dotyka dysku poza plikami wejsciowymi, wiec oczekiwany
+# kod wyjscia to 0 - to jest zmierzone zachowanie, nie zalozenie.
+if [ "$STATUS" -eq 0 ]; then
+    emit "PASS" "docker compose config rozwiazuje sie (kod 0) - tak jak zmierzono"
+else
+    note_fail "docker compose config zakonczyl sie kodem $STATUS - zachowanie narzedzia sie zmienilo, zbadaj to"
+fi
+
+if printf '%s' "$OUTPUT" | grep -q '0\.0\.0\.0'; then
+    note_fail "rozwiazany config zawiera 0.0.0.0"
+else
+    emit "PASS" "rozwiazany config nie zawiera 0.0.0.0"
+fi
+
+if printf '%s' "$OUTPUT" | grep -q '127\.0\.0\.1'; then
+    emit "PASS" "rozwiazany config wiaze nasluch z petla zwrotna"
+else
+    note_fail "rozwiazany config nie wskazuje 127.0.0.1 - sprawdz HEADPLANE_SERVER__HOST"
+fi
+
+for secret in headplane_cookie_secret headplane_headscale_api_key; do
+    if printf '%s' "$OUTPUT" | grep -q "$secret"; then
+        emit "PASS" "sekret $secret jest odwolaniem do pliku, obecny w rozwiazanym config"
+    else
+        note_fail "sekret $secret zniknal z rozwiazanego config"
+    fi
+done
+
+if printf '%s' "$OUTPUT" | grep -qE '/etc/darkstar/headplane/(cookie_secret|headscale_api_key)'; then
+    emit "PASS" "sekrety wskazuja na sciezki hosta pod /etc/darkstar/headplane, nie na wartosci"
+else
+    note_fail "brak oczekiwanych sciezek sekretow w rozwiazanym config"
+fi
+
+AFTER=$(ls -1 "$DIR" | sort)
+if [ "$BEFORE" = "$AFTER" ]; then
+    emit "PASS" "uruchomienie tego skryptu nie zostawilo zadnego nowego pliku w $DIR"
+else
+    note_fail "znaleziono nowy plik w $DIR po uruchomieniu - docker compose config nie powinien niczego tworzyc"
+fi
+
+printf '\n%s\n' "darkstar-headplane: Step 14.11 zakonczony (wylacznie config, zero up, zero CBMS)"
+[ "$FAILED" -eq 0 ] || exit 1
+exit 0
