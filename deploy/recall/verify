@@ -79,10 +79,12 @@ else
 fi
 
 # 5. Dane NIE na dysku exFAT. To nie jest preferencja - exFAT nie ma rzetelnych blokad plikow.
-if grep -n '/mnt/aionslab' "$DIR/compose.yml" >/dev/null 2>&1; then
+# Komentarze pomijane: ten plik SAM ostrzega przed ta sciezka slowami, wiec doslowne szukanie
+# ciagu czerwienilo sie na wlasnym ostrzezeniu (zlapane przy pierwszym przebiegu 2026-09-04).
+if grep -n '/mnt/aionslab' "$DIR/compose.yml" 2>/dev/null | grep -v '^[0-9]*: *#' >/dev/null 2>&1; then
     note_fail "katalog danych wskazuje /mnt/aionslab (exFAT) - baza tam ulegnie uszkodzeniu"
 else
-    emit "PASS" "katalog danych poza dyskiem exFAT"
+    emit "PASS" "katalog danych poza dyskiem exFAT (poza komentarzem wyjasniajacym zakaz)"
 fi
 
 # --- Czesc 2: stan na hoscie. Brak kontenera to jeszcze nie blad. ---
