@@ -73,9 +73,18 @@ async fn main() {
         .and_then(|value| value.parse::<u16>().ok())
         .unwrap_or(8080);
 
-    let address: SocketAddr = format!("{host}:{port}")
+    let primary: SocketAddr = format!("{host}:{port}")
         .parse()
         .expect("DARKSTAR_HOST and DARKSTAR_PORT must form a valid socket address");
+    // 0.0.0.0 jest zakazane przez konfiguracje, wiec zakaz stoi TU, w kodzie, a nie
+    // wylacznie w komentarzu pliku compose. Pomylka w srodowisku ma zatrzymac start,
+    // a nie po cichu wystawic brame na siec nadrzedna.
+    assert!(
+        !primary.ip().is_unspecified(),
+        "DARKSTAR_HOST must name one interface; 0.0.0.0 and :: are refused because they \
+         would also expose Darkstar on the upstream Vodafone segment"
+    );
+    let addresses = bind_addresses(primary);
 
     let state = AppState::from_env();
     // Odczyt stanu bramy jest osobnym routerem z wlasnym stanem: wystawia wylacznie
@@ -97,8 +106,8 @@ async fn main() {
     ));
     // Prywatny mesh OBOK dzialajacego Tailscale, nigdy zamiast niego. Adres domyslny to
     // petla zwrotna - Headscale nie jest tu nigdy szukany pod adresem publicznym.
-    let headscale_url = env::var("DARKSTAR_HEADSCALE_URL")
-        .unwrap_or_else(|_| "http://127.0.0.1:8080".into());
+    let headscale_url =
+        env::var("DARKSTAR_HEADSCALE_URL").unwrap_or_else(|_| "http://127.0.0.1:8080".into());
     let headscale = headscale_http::headscale_router(headscale_http::HeadscaleState::new(
         state.api_token.clone(),
         std::sync::Arc::new(HeadscaleViaReadOnlyHttp(context_http::ReadOnlyHttp)),
@@ -122,25 +131,118 @@ async fn main() {
             loopback_state,
             loopback::allow_loopback,
         ));
-    tracing::info!(%address, api_version = darkstar_core::API_VERSION, "darkstar server starting");
+    tracing::info!(
+        addresses = ?addresses,
+        api_version = darkstar_core::API_VERSION,
+        "darkstar server starting"
+    );
 
-    let listener = tokio::net::TcpListener::bind(address)
-        .await
-        .expect("bind Darkstar listener");
-    // Adres drugiej strony polaczenia musi dojechac do warstwy posredniej, inaczej
-    // nie da sie odroznic petli zwrotnej od reszty i wszystko konczy sie 401.
-    axum::serve(
-        listener,
-        app.into_make_service_with_connect_info::<SocketAddr>(),
-    )
-    .await
-    .expect("serve Darkstar HTTP application");
+    // DWA GNIAZDA, nie jedno przestawione. Petla zwrotna niesie tunel Sterowni z Windows
+    // i musi przezyc te zmiane; adres bramy dokladamy OBOK niej, dla telefonu i /world/.
+    // Zamiana jednego na drugie zerwalaby tunel, a 0.0.0.0 objeloby tez wlp2s0.
+    let mut servers = tokio::task::JoinSet::new();
+    let mut live: Vec<SocketAddr> = Vec::new();
+    for address in addresses {
+        match tokio::net::TcpListener::bind(address).await {
+            Ok(listener) => {
+                live.push(address);
+                let app = app.clone();
+                servers.spawn(async move {
+                    // Adres drugiej strony polaczenia musi dojechac do warstwy posredniej,
+                    // inaczej nie da sie odroznic petli zwrotnej od reszty i wszystko
+                    // konczy sie 401.
+                    axum::serve(
+                        listener,
+                        app.into_make_service_with_connect_info::<SocketAddr>(),
+                    )
+                    .await
+                    .expect("serve Darkstar HTTP application");
+                });
+            }
+            // Petla zwrotna jest obowiazkowa: bez niej ginie dostep operatora do maszyny,
+            // czyli jedyna droga, ktora pozwala cokolwiek naprawic zdalnie.
+            Err(err) if address.ip().is_loopback() => {
+                panic!("bind Darkstar loopback listener {address}: {err}");
+            }
+            // Adres bramy jest najlepszym staraniem. Gdy interfejs jeszcze nie wstal,
+            // GLOSNO to zglaszamy, ale NIE zabijamy procesu - inaczej awaria kabla
+            // zabralaby przy okazji tunel Sterowni i nie byloby czym diagnozowac.
+            Err(err) => {
+                tracing::error!(
+                    %address,
+                    %err,
+                    "nie udalo sie stanac na adresie sieci prywatnej - telefon nie zobaczy \
+                     /world/; serwer dziala dalej na petli zwrotnej"
+                );
+            }
+        }
+    }
+    tracing::info!(listening = ?live, "darkstar server listening");
+
+    while let Some(finished) = servers.join_next().await {
+        finished.expect("serve Darkstar HTTP application");
+    }
+}
+
+/// Adresy, na ktorych serwer ma stanac: petla zwrotna ZAWSZE plus adres podany w
+/// srodowisku, gdy jest inny. Zwracana kolejnosc jest stabilna, a duplikat znika -
+/// `DARKSTAR_HOST=127.0.0.1` ma dawac jedno gniazdo, nie dwa razy to samo.
+fn bind_addresses(primary: SocketAddr) -> Vec<SocketAddr> {
+    let loopback = SocketAddr::from(([127, 0, 0, 1], primary.port()));
+    if primary == loopback {
+        return vec![loopback];
+    }
+    vec![loopback, primary]
 }
 
 #[cfg(test)]
 mod tests {
+    use super::bind_addresses;
+    use std::net::SocketAddr;
+
     #[test]
     fn core_api_version_is_present() {
         assert_eq!(darkstar_core::API_VERSION, "darkstar.core/v1");
+    }
+
+    #[test]
+    fn lan_bind_keeps_the_loopback_socket_alive() {
+        // Tunel Sterowni z Windows wchodzi przez petle zwrotna. Dolozenie adresu bramy
+        // NIE moze go zabrac - to jest cala tresc tej zmiany.
+        let primary: SocketAddr = "192.168.2.1:18080".parse().expect("valid socket address");
+
+        let addresses = bind_addresses(primary);
+
+        assert_eq!(
+            addresses,
+            vec![
+                "127.0.0.1:18080".parse::<SocketAddr>().expect("loopback"),
+                primary,
+            ],
+            "petla zwrotna musi zostac, a adres bramy dojsc OBOK niej"
+        );
+    }
+
+    #[test]
+    fn loopback_only_configuration_does_not_bind_twice() {
+        let primary: SocketAddr = "127.0.0.1:18080".parse().expect("valid socket address");
+
+        let addresses = bind_addresses(primary);
+
+        assert_eq!(addresses, vec![primary], "duplikat gniazda nie ma sensu");
+    }
+
+    #[test]
+    fn every_bind_address_names_one_interface() {
+        // Zaden zwracany adres nie moze byc adresem wszystkich interfejsow: 0.0.0.0
+        // objeloby takze wlp2s0, czyli siec nadrzedna Vodafone.
+        let primary: SocketAddr = "192.168.2.1:18080".parse().expect("valid socket address");
+
+        for address in bind_addresses(primary) {
+            assert!(
+                !address.ip().is_unspecified(),
+                "{address} jest adresem wszystkich interfejsow"
+            );
+        }
     }
 }

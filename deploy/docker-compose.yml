@@ -45,9 +45,10 @@ services:
       - ..:/srv/repo:ro
     restart: on-failure:5
     healthcheck:
-      # Sonda musi pytac pod adresem, na ktorym serwer FAKTYCZNIE slucha. Odkad wiazanie
-      # przenioslo sie z petli zwrotnej na brame, 127.0.0.1 juz nie odpowiada.
-      test: ["CMD", "curl", "--fail", "--silent", "--show-error", "http://${DARKSTAR_BIND_ADDRESS:-192.168.2.1}:${DARKSTAR_HOST_PORT}/health"]
+      # Sonda pyta po petli zwrotnej, bo to gniazdo istnieje ZAWSZE - serwer otwiera dwa:
+      # 127.0.0.1 i adres bramy. Pytanie po bramie oznaczaloby kontener jako chory, gdyby
+      # interfejs DARKSTAR-WiFi jeszcze nie wstal, mimo ze usluga dziala poprawnie.
+      test: ["CMD", "curl", "--fail", "--silent", "--show-error", "http://127.0.0.1:${DARKSTAR_HOST_PORT}/health"]
       interval: 30s
       timeout: 5s
       retries: 3

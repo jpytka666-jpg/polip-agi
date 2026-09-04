@@ -23,7 +23,7 @@ Allocate and inspect the Dark Star host port:
 ./deploy/port-manager/port-manager.sh audit
 ```
 
-The container keeps its application port at `8080`; only the host-side port is variable. The current deployment binds the host port to `127.0.0.1` by design so the service is not exposed on every host interface.
+The container keeps its application port at `8080`; only the host-side port is variable. The deployment binds `127.0.0.1` and `192.168.2.1` explicitly, never every host interface.
 
 ## Runtime
 
@@ -61,7 +61,7 @@ docker compose --env-file deploy/.env -f deploy/docker-compose.yml down
 
 ## Contract
 
-The service binds explicitly to `DARKSTAR_HOST` and keeps `DARKSTAR_PORT` in sync with the allocated host port. The default bind address is `192.168.2.1` - the DARKSTAR-WiFi gateway - so the `/world/` landing is reachable from that private network. `0.0.0.0` is forbidden: with `network_mode: host` it would also expose the service on `wlp2s0`, the upstream Vodafone segment. The host port is allocated centrally by Port Manager from the registered pool `18080-18999`.
+The service opens TWO sockets: `127.0.0.1` always, plus `DARKSTAR_HOST` when it differs. The loopback socket carries the Control Room SSH tunnel from Windows and must survive; the gateway address is added ALONGSIDE it so the `/world/` landing is reachable from the private network. The default `DARKSTAR_HOST` is `192.168.2.1` - the DARKSTAR-WiFi gateway. If that interface is not up at start, the server logs a loud error and keeps serving on loopback instead of dying, so remote diagnosis stays possible. `0.0.0.0` is forbidden: with `network_mode: host` it would also expose the service on `wlp2s0`, the upstream Vodafone segment. The host port is allocated centrally by Port Manager from the registered pool `18080-18999`.
 
 Static files under the built frontend (including `/world/`) are served by the fallback service and need no token. Every `/v1/*` route checks the `Authorization: Bearer` header inside its own handler, so opening the landing does not open the API. Copy `deploy/.env.example` to `deploy/.env`, fill in the real values and `chmod 0600` it.
 
