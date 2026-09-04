@@ -14,10 +14,11 @@
 //! Dzieki temu zdjecie zamka jest w JEDNYM miejscu i przywrocenie go to usuniecie tej
 //! warstwy, a nie przepisywanie autoryzacji w czterech modulach.
 //! SYSTEM PART: Darkstar Server / HTTP boundary - warstwa wejscia.
-//! ARCHITECTURE FUNCTION: Granica zaufania. Serwer wiaze sie jawnie na 127.0.0.1, wiec
-//! adres spoza petli i tak nie ma jak sie polaczyc; ta warstwa jest drugim zamkiem, gdyby
-//! adres nasluchu kiedykolwiek sie poszerzyl. Nie nadaje zadnych uprawnien poza tymi,
-//! ktore daje token - jedynie zwalnia lokalnego operatora z jego wpisywania.
+//! ARCHITECTURE FUNCTION: Granica zaufania. Serwer wiaze sie jawnie na 127.0.0.1 oraz
+//! 192.168.2.1, dlatego ta warstwa musi odrozniac adres PEER od adresu listenera.
+//! Zapytanie przychodzace z 192.168.2.1 nie jest petla zwrotna i nie moze dostac tokenu.
+//! Warstwa nie nadaje innych uprawnien - jedynie zwalnia lokalnego operatora z wpisywania
+//! tokenu, gdy polaczenie naprawde przychodzi z 127.0.0.0/8 albo ::1.
 //! DEPENDENCIES/LINKS: axum 0.8 (ConnectInfo, middleware::from_fn_with_state); main.rs
 //! musi serwowac przez into_make_service_with_connect_info, inaczej adres jest nieznany.
 //! TECH STACK: Rust 2024 + Axum 0.8, zgodnie z reszta warstwy HTTP.

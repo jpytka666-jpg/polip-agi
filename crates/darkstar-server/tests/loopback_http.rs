@@ -74,6 +74,10 @@ fn downstream_address() -> SocketAddr {
     SocketAddr::from((Ipv4Addr::new(192, 168, 2, 50), 51234))
 }
 
+fn gateway_address() -> SocketAddr {
+    SocketAddr::from((Ipv4Addr::new(192, 168, 2, 1), 51234))
+}
+
 #[tokio::test]
 async fn loopback_without_authorization_is_allowed() {
     let response = app(Some(TOKEN))
@@ -95,9 +99,24 @@ async fn address_outside_loopback_still_needs_the_token() {
 }
 
 #[tokio::test]
+async fn gateway_address_does_not_receive_the_loopback_token() {
+    // Curl hosta do jego wlasnego listenera 192.168.2.1 przychodzi z adresem peer
+    // 192.168.2.1. To nadal NIE jest petla zwrotna i bez jawnego tokenu ma dostac 401.
+    let response = app(Some(TOKEN))
+        .oneshot(request_from(Some(gateway_address()), None))
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
 async fn a_wrong_token_from_loopback_is_not_replaced() {
     let response = app(Some(TOKEN))
-        .oneshot(request_from(Some(loopback_address()), Some("Bearer nieprawda")))
+        .oneshot(request_from(
+            Some(loopback_address()),
+            Some("Bearer nieprawda"),
+        ))
         .await
         .unwrap();
 
