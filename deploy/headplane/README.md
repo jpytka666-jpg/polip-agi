@@ -206,14 +206,22 @@ Dwie pulapki, ktore test musi ominac:
 
 ## Co zostaje do zrobienia w Task 14
 
-Kroki 14.1 i 14.2 sa zamkniete. Otwarte pozostaja:
+Kroki 14.1 i 14.2 sa zamkniete. Stan pozostalych, zmierzony na zywym hoscie:
 
 - **14.3** — napisac test prywatnego nasluchu wedlug rozdzialu powyzej; ma byc czerwony, zanim panel
-  wstanie.
-- **14.4 i 14.5** — wytworzyc sekrety na hoscie, zlozyc `config.yaml` z wzorca, uruchomic panel
-  i domknac regule zapory dla `192.168.2.0/24`.
-- **14.6** — `deploy/systemd/darkstar-headplane.service` oraz rozszerzenie `verify` o sprawdzenia,
-  ktore maja sens dopiero na dzialajacym kontenerze.
+  wstanie. Nadal otwarte.
+- **14.4 i 14.5 — ZYWE (czesciowo).** Sekrety, `config.yaml` i start panelu sa zrobione i zmierzone:
+  `docker ps` pokazuje `darkstar-headplane` jako `Up ... (healthy)`, `cookie_secret` ma 32 bajty
+  z prawami `0600` i wlascicielem `root:root`, a `127.0.0.1:3000/admin` odpowiada `302`.
+  Dowod: `docs/operations/evidence/2026-09-04-network-done.md`, sekcja
+  "Headplane — petla live 2026-09-04T13:28:40+01:00". Regula zapory dla `192.168.2.0/24`
+  NIE zostala domknieta — to swiadomy wybor, nie zaleglosc: `192.168.2.1:3000` odpowiada `000`,
+  wiec panel zostaje dostepny wylacznie z petli zwrotnej hosta, tak jak Control Room, dopoki
+  ktos jawnie nie zdecyduje inaczej.
+- **14.6 — CZESCIOWO.** `deploy/systemd/darkstar-headplane.service` istnieje (wzorowany na
+  `darkstar-headscale.service`), ale nie jest zainstalowany ani `enable`d na hoscie — panel dziala
+  dzis bez niego. Rozszerzenie `verify` o sprawdzenia sensowne dopiero na dzialajacym kontenerze
+  pozostaje nadal otwarte.
 - **14.7 do 14.10** — wezel w grafie systemu, `MeshPanel` w Control Room, bezpieczna nawigacja,
   testy granic uprawnien. To pliki w `crates/` i `frontend/`, nietkniete w tym commicie.
 - **14.11 i 14.12** — bramki i commit calosci integracji.

@@ -1,3 +1,8 @@
+<!-- darkstar-header-v1 -->
+<!-- po co: DARKSTAR_ROADMAP.md -->
+<!-- nie wolno: hotspot, ruszac wlp2s0, wracac do 10.44, gasic DARKSTAR-WiFi, haslo w gicie -->
+<!-- autor: Marcin -->
+<!-- powstal: 2026-09-04 -->
 <!--
 THIS IS VERY IMPORTANT!!!
 ==========================================
@@ -9,6 +14,7 @@ REVISION: 2026-09-03 17:49 Europe/London — sekcja stanu przepisana na pomiar �
 REVISION: 2026-09-04 12:43 Europe/London — dopisano zmierzony stan dual bind i drogi telefonu do /world/ (GPT-5 Codex).
 REVISION: 2026-09-04 14:05 Europe/London — dopisano stan po uruchomieniu Headplane wyłącznie na pętli (GPT-5 Codex).
 REVISION: 2026-09-04 14:40 Europe/London — dopisano żywe, wyłącznie odczytowe kafelki po wdrożeniu obrazu na CBMS (GPT-5 Codex).
+REVISION: 2026-09-04 16:19 Europe/London — dopisano otwarcie zapory hosta dla portu 18080 z LAN i istnienie plików unitów systemd Headscale/Headplane (Claude Sonnet 5).
 ==========================================
 -->
 
@@ -33,9 +39,23 @@ REVISION: 2026-09-04 14:40 Europe/London — dopisano żywe, wyłącznie odczyto
 - ŻYWE — działa teraz i ma pomiar z żywego środowiska.
 - NIE — nie działa, nie zostało uruchomione albo nie należy jeszcze do aktywnego zakresu.
 
-## Stan na 2026-09-04 14:40 — ZMIERZONE
+## Stan na 2026-09-04 16:19 — ZMIERZONE
 
-To jest najnowsza prawda dnia. Kafelki są podłączone do żywych sond, ale niczego nie
+To jest najnowsza prawda dnia. Zapora hosta puszcza teraz LAN do portu 18080 — wcześniej
+serwer miał już oba jawne bindy, ale reguła zapory wciąż odcinała `192.168.2.0/24` od
+`18080`, mimo że `8080` (Headscale) przechodził. Operator ręcznie przeładował zaporę;
+szczegółowy pomiar jest w `docs/operations/evidence/2026-09-04-lan-18080.md`, reguła to
+commit `a8eb53b`.
+
+| Obszar | Stan | Dowód zmierzony 2026-09-04 |
+|---|---|---|
+| Zapora hosta — port 18080 z LAN | ŻYWE | `darkstar-firewall-apply` zwrócił "loaded"; `grep -c 18080 /etc/darkstar/host-guard.nft` = 4, zgodnie z commitem `a8eb53b`; `/world/` odpowiada z kafelkami UP bez tunelu. |
+| Jednostki systemd Headscale/Headplane | PARTIAL — pliki istnieją, nie zainstalowane | `deploy/systemd/darkstar-headscale.service` i `darkstar-headplane.service` są w repozytorium, ze ścieżką roboczą poprawioną na `/home/owner/polip-agi`; żaden nie jest `enable`d ani wystartowany — oba serwisy działają dziś bez systemd. |
+| Headplane — sekrety, config, start | ŻYWE — TYLKO PĘTLA | Bez zmian od poprzedniego pomiaru: `docker ps` `healthy`, `127.0.0.1:3000/admin` = 302, `192.168.2.1:3000` = 000 (świadomie, panel nie jest otwarty na LAN). |
+
+## Historia — stan na 2026-09-04 14:40 — ZMIERZONE
+
+To był wcześniejszy pomiar dnia. Kafelki są podłączone do żywych sond, ale niczego nie
 uruchamiają ani nie zatrzymują. Szczegółowy pomiar jest w
 `docs/operations/evidence/2026-09-04-world-tiles-live.md`; poprawka self-probe to `3ad0df7`.
 
