@@ -736,6 +736,52 @@ body {
   flex-direction: column;
 }
 
+.runtime-status {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  flex-wrap: wrap;
+  margin: 0 0 0.7rem;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #1c1c1d;
+  font-size: 0.78rem;
+}
+
+.runtime-status__name {
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.runtime-status__state {
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  background: #3d3420;
+  color: #ffd98a;
+  font-size: 0.7rem;
+  letter-spacing: 0.06em;
+}
+
+.runtime-status--up .runtime-status__state {
+  background: #14361c;
+  color: #9ae6a8;
+}
+
+.runtime-status--down .runtime-status__state {
+  background: #4a2020;
+  color: #ffb0a0;
+}
+
+.runtime-status code {
+  color: var(--value);
+}
+
+.runtime-status__note {
+  margin-left: auto;
+  color: var(--muted);
+}
+
 .graph-canvas {
   flex: 1;
   min-height: 27rem;

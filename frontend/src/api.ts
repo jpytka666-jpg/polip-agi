@@ -66,6 +66,55 @@ export interface ArchitectureSnapshot {
   edges: ArchitectureEdge[]
 }
 
+export type WorldServiceState = 'up' | 'down'
+
+export interface WorldServiceStatus {
+  state: WorldServiceState
+  probe: 'http' | 'tcp'
+  target: string
+}
+
+export interface WorldStatus {
+  readOnly: true
+  services: {
+    darkstar: WorldServiceStatus
+    headscale: WorldServiceStatus
+    headplane: WorldServiceStatus
+  }
+}
+
+export interface HeadplanePanelView {
+  state: WorldServiceState | 'unknown'
+  label: 'UP' | 'DOWN' | 'BRAK ODCZYTU'
+  listen: string
+}
+
+/** Widok panelu zachowuje jawny stan nieznany; brak pomiaru nie staje sie awaria uslugi. */
+export function headplanePanelView(status: WorldServiceStatus | undefined): HeadplanePanelView {
+  if (!status) {
+    return { state: 'unknown', label: 'BRAK ODCZYTU', listen: '127.0.0.1:3000' }
+  }
+  return {
+    state: status.state,
+    label: status.state === 'up' ? 'UP' : 'DOWN',
+    listen: status.target,
+  }
+}
+
+/** Publiczna sonda stanu: jeden GET, bez PIN-u, cookies i ciala zapytania. */
+export async function fetchWorldStatus(): Promise<WorldStatus> {
+  const response = await fetch('/v1/world/status', {
+    method: 'GET',
+    headers: { accept: 'application/json' },
+    credentials: 'omit',
+    cache: 'no-store',
+  })
+  if (!response.ok) {
+    throw new Error(`Blad odczytu stanu uslug (${response.status})`)
+  }
+  return (await response.json()) as WorldStatus
+}
+
 async function getJson<T>(path: string, pin: string): Promise<T> {
   const response = await fetch(path, {
     method: 'GET',

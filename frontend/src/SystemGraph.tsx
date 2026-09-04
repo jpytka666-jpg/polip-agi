@@ -42,11 +42,14 @@ import {
 import '@xyflow/react/dist/style.css'
 import { FlowEdge } from './FlowEdge'
 import {
+  fetchWorldStatus,
   fetchSystemGraph,
+  headplanePanelView,
   runReadCommand,
   type ArchitectureNode,
   type ArchitectureSnapshot,
   type ReadCommandResult,
+  type WorldStatus,
 } from './api'
 import { execute, type Command } from './commands'
 import { commandFor } from './nodeCommands'
@@ -231,6 +234,8 @@ function layout(snapshot: ArchitectureSnapshot) {
 export function SystemGraph({ token }: { token: string }) {
   const [snapshot, setSnapshot] = useState<ArchitectureSnapshot | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [worldStatus, setWorldStatus] = useState<WorldStatus | null>(null)
+  const [worldStatusError, setWorldStatusError] = useState(false)
   const [selected, setSelected] = useState<ArchitectureNode | null>(null)
   // Wylaczone nitki zyja TYLKO w widoku - API nie ma zadnej sciezki zapisu.
   const [muted, setMuted] = useState<Set<string>>(new Set())
@@ -313,6 +318,31 @@ export function SystemGraph({ token }: { token: string }) {
       cancelled = true
     }
   }, [token])
+
+  useEffect(() => {
+    let cancelled = false
+    const refresh = () => {
+      void fetchWorldStatus()
+        .then((next) => {
+          if (!cancelled) {
+            setWorldStatus(next)
+            setWorldStatusError(false)
+          }
+        })
+        .catch(() => {
+          if (!cancelled) {
+            setWorldStatus(null)
+            setWorldStatusError(true)
+          }
+        })
+    }
+    refresh()
+    const timer = window.setInterval(refresh, 15_000)
+    return () => {
+      cancelled = true
+      window.clearInterval(timer)
+    }
+  }, [])
 
   const flow = useMemo(() => {
     if (!snapshot) return { nodes: [] as Node[], edges: [] as Edge[], onPath: new Set<string>() }
@@ -434,6 +464,7 @@ export function SystemGraph({ token }: { token: string }) {
   }
 
   const linked = selected ? Math.max(flow.onPath.size - 1, 0) : 0
+  const headplane = headplanePanelView(worldStatus?.services.headplane)
 
   return (
     <section className="panel panel--graph">
@@ -450,6 +481,18 @@ export function SystemGraph({ token }: { token: string }) {
           </span>
         ) : null}
       </h2>
+
+      <div
+        className={`runtime-status runtime-status--${headplane.state}`}
+        aria-label={`Headplane ${headplane.label}, listen ${headplane.listen}`}
+      >
+        <span className="runtime-status__name">Headplane</span>
+        <strong className="runtime-status__state">{headplane.label}</strong>
+        <code>listen {headplane.listen}</code>
+        <span className="runtime-status__note">
+          {worldStatusError ? 'sonda niedostepna' : 'sonda TCP · tylko odczyt'}
+        </span>
+      </div>
 
       <div className="lane-bar" role="group" aria-label="Rodzaje ruchu">
         {MODES.map((mode) => {
