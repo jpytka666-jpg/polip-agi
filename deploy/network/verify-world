@@ -1,0 +1,155 @@
+#!/bin/sh
+# darkstar-header-v1
+# po co: verify-world
+# nie wolno: nft, 0.0.0.0, systemctl start/stop/restart, docker compose up, zapis na CBMS,
+#            gasic cloudflared, tailscale down/logout, ruszac DARKSTAR-WiFi ani enp1s0
+# autor: Marcin
+# powstal: 2026-09-04
+# THIS IS VERY IMPORTANT!!!
+# ==========================================
+# AUTHOR: M. SZUL
+# AI MODEL: Claude Opus 5
+# TIMESTAMP: 2026-09-04 02:10:00
+# REASON FOR CREATION: Jedno polecenie, ktore odpowiada na pytanie "czy droga do swiata
+#   stoi", bez zgadywania i bez zmieniania czegokolwiek. Osiem sprawdzen zamiast osmiu
+#   recznych curli wklejanych z pamieci.
+# MECHANICS: Osiem niezaleznych pomiarow. Kazdy wypisuje jedna linie PASS/FAIL/INFO wraz
+#   z faktycznie zmierzona wartoscia (kod HTTP albo adres nasluchu z ss). Zaden pomiar nie
+#   przerywa nastepnych - licznik bledow zbiera wynik, a kod wyjscia to 0 gdy nie bylo ani
+#   jednego FAIL, w przeciwnym razie 1.
+# SYSTEM PART: deploy/network - warstwa sieci Darkstar (brama 192.168.2.0/24, Headscale,
+#   Sterownia, named tunnel Cloudflare).
+# ARCHITECTURE FUNCTION: Sedzia stanu sieci. Uzupelnia deploy/headscale/verify (ktory
+#   pyta o kontener Headscale) o pytanie szersze: czy caly lancuch telefon -> WARP ->
+#   tunnel -> LAN -> Sterownia ma dzis komplet ogniw.
+# DEPENDENCIES/LINKS: curl, ss (iproute2), dzialajacy Headscale na 192.168.2.1:8080,
+#   darkstar-server na 18080, warstwa loopback.rs (token tylko dla prawdziwej petli
+#   zwrotnej), bramka Bearer w darkstar-server.
+# TECH STACK: POSIX sh - jak reszta deploy/. Zero zaleznosci runtime, uruchamialny po SSH
+#   na golym Ubuntu, takze przez `ssh ... sh -s < verify-world`. Rust odpada: caly zakres
+#   to odczytanie kodow HTTP i tabeli nasluchow, wiec kompilacja i dostarczenie binarki
+#   byloby ta sama praca w wiekszej liczbie krokow.
+# LOCAL WORKSPACE: D:\codex-fresh-2026-08-28\worktrees\polip-agi-darkstar-plan
+# GIT COMMIT: PENDING
+# GITHUB METADATA: jpytka666-jpg/polip-agi, branch docs/darkstar-headscale-hotspot-plan
+#
+# WYLACZNIE DO ODCZYTU. Nie startuje, nie zatrzymuje i nie przeladowuje zadnej uslugi,
+# nie zaklada plikow, nie dotyka nft, nie dotyka Tailscale, nie dotyka cloudflared.
+# Sprawdzenia 5, 6 i 7 sa dzis czerwone Z ZALOZENIA - stary obraz nie ma listenera LAN.
+# ==========================================
+
+set -eu
+
+GW_ADDR="${DARKSTAR_GW_ADDR:-192.168.2.1}"
+HS_PORT="${DARKSTAR_HS_PORT:-8080}"
+DS_PORT="${DARKSTAR_DS_PORT:-18080}"
+LOOPBACK="${DARKSTAR_LOOPBACK:-127.0.0.1}"
+TIMEOUT="${DARKSTAR_TIMEOUT:-5}"
+GUARDED_PATH="${DARKSTAR_GUARDED_PATH:-/v1/gateway/status}"
+
+FAILURES=0
+STEP=0
+
+# Jedna linia wyniku: status, numer, nazwa, zmierzona wartosc.
+emit() {
+    STEP=$((STEP + 1))
+    printf '%-4s %d/8 %-22s %s\n' "$1" "$STEP" "$2" "$3"
+    [ "$1" = 'FAIL' ] && FAILURES=$((FAILURES + 1))
+    return 0
+}
+
+# Sam kod odpowiedzi HTTP. `|| true` jest konieczne: przy `set -e` nieudany curl
+# przerwalby skrypt, a tu wlasnie mierzymy adresy, ktore moga nie odpowiadac.
+# Nie wolno dopisywac `|| echo 000` - curl przy porazce wypisuje `000` sam z `-w`,
+# wiec doklejenie drugiego dawaloby `000000`, czyli liczbe ktora nie jest kodem.
+probe() {
+    code=$(curl -s -o /dev/null -w '%{http_code}' --max-time "$TIMEOUT" "$@" 2>/dev/null || true)
+    [ -n "$code" ] || code=000
+    printf '%s' "$code"
+}
+
+# Adresy nasluchu z `ss` dla dokladnie jednego portu. Kolumna 4 to Local Address:Port.
+listeners_on_port() {
+    ss -lntH 2>/dev/null | awk -v p=":$1\$" '$4 ~ p {print $4}' || true
+}
+
+# ---- 1. Headscale odpowiada pod adresem sieci domowej -----------------------
+CODE=$(probe "http://${GW_ADDR}:${HS_PORT}/")
+if [ "$CODE" = '200' ]; then
+    emit PASS 'headscale-http' "http://${GW_ADDR}:${HS_PORT}/ -> ${CODE}"
+else
+    emit FAIL 'headscale-http' "http://${GW_ADDR}:${HS_PORT}/ -> ${CODE} (oczekiwano 200)"
+fi
+
+# ---- 2. ... i faktycznie tam slucha -----------------------------------------
+HS_LISTEN=$(listeners_on_port "$HS_PORT")
+if printf '%s\n' "$HS_LISTEN" | grep -qx "${GW_ADDR}:${HS_PORT}"; then
+    emit PASS 'headscale-listen' "ss: ${GW_ADDR}:${HS_PORT} LISTEN"
+else
+    emit FAIL 'headscale-listen' "ss: brak ${GW_ADDR}:${HS_PORT}; widziane: [${HS_LISTEN:-brak}]"
+fi
+
+# ---- 3. Sterownia zyje po petli zwrotnej ------------------------------------
+CODE=$(probe "http://${LOOPBACK}:${DS_PORT}/health")
+if [ "$CODE" = '200' ]; then
+    emit PASS 'darkstar-health' "http://${LOOPBACK}:${DS_PORT}/health -> ${CODE}"
+else
+    emit FAIL 'darkstar-health' "http://${LOOPBACK}:${DS_PORT}/health -> ${CODE} (oczekiwano 200)"
+fi
+
+# ---- 4. ... i ma gniazdo na petli zwrotnej (tunel SSH z Windows ma po czym isc) ----
+DS_LISTEN=$(listeners_on_port "$DS_PORT")
+if printf '%s\n' "$DS_LISTEN" | grep -qx "${LOOPBACK}:${DS_PORT}"; then
+    emit PASS 'darkstar-loopback' "ss: ${LOOPBACK}:${DS_PORT} LISTEN"
+else
+    emit FAIL 'darkstar-loopback' "ss: brak ${LOOPBACK}:${DS_PORT}; widziane: [${DS_LISTEN:-brak}]"
+fi
+
+# ---- 5. Drugie gniazdo Sterowni, na adresie bramy ---------------------------
+# Pliki dwoch gniazd sa w repozytorium, ale obraz uruchomiony na CBMS jest starszy.
+# Do czasu przebudowy to sprawdzenie ma sie czerwienic - i to jest jego cala wartosc.
+if printf '%s\n' "$DS_LISTEN" | grep -qx "${GW_ADDR}:${DS_PORT}"; then
+    emit PASS 'darkstar-gw-listen' "ss: ${GW_ADDR}:${DS_PORT} LISTEN"
+else
+    emit FAIL 'darkstar-gw-listen' "ss: brak ${GW_ADDR}:${DS_PORT}; widziane: [${DS_LISTEN:-brak}] (oczekiwane po przebudowie obrazu)"
+fi
+
+# ---- 6. /world/ na adresie bramy --------------------------------------------
+CODE=$(probe "http://${GW_ADDR}:${DS_PORT}/world/")
+if [ "$CODE" = '200' ]; then
+    emit PASS 'world-ingress' "http://${GW_ADDR}:${DS_PORT}/world/ -> ${CODE}"
+else
+    emit FAIL 'world-ingress' "http://${GW_ADDR}:${DS_PORT}/world/ -> ${CODE} (oczekiwano 200 po przebudowie obrazu)"
+fi
+
+# ---- 7. Adres bramy NIE dostaje zaufania petli zwrotnej ---------------------
+# Wymuszamy adres zrodlowy 192.168.2.1 i NIE wysylamy Authorization. 401 to wynik
+# pozytywny: listener LAN dziala, ale loopback-auth nie dokleil mu sekretnego tokenu.
+# 200 oznaczaloby krytyczne poszerzenie granicy zaufania z petli na adres bramy.
+CODE=$(probe --interface "$GW_ADDR" "http://${GW_ADDR}:${DS_PORT}${GUARDED_PATH}")
+if [ "$CODE" = '401' ]; then
+    emit PASS 'lan-auth-boundary' "${GW_ADDR} bez tokenu na ${GUARDED_PATH} -> ${CODE} (odmowa, tak ma byc)"
+elif [ "$CODE" = '200' ]; then
+    emit FAIL 'lan-auth-boundary' "${GW_ADDR} bez tokenu na ${GUARDED_PATH} -> ${CODE} (loopback-auth nie moze ufac adresowi bramy)"
+elif [ "$CODE" = '404' ]; then
+    emit FAIL 'lan-auth-boundary' "${GW_ADDR} bez tokenu na ${GUARDED_PATH} -> ${CODE} (trasa nie istnieje, pomiar bez wartosci)"
+else
+    emit FAIL 'lan-auth-boundary' "${GW_ADDR} bez tokenu na ${GUARDED_PATH} -> ${CODE} (oczekiwano 401)"
+fi
+
+# ---- 8. Nic nie wisi na wszystkich interfejsach ------------------------------
+WILDCARD=$(printf '%s\n%s\n' "$HS_LISTEN" "$DS_LISTEN" | grep -E '^(0\.0\.0\.0|\[::\]|\*):' || true)
+if [ -z "$WILDCARD" ]; then
+    ALL=$(printf '%s\n%s\n' "$HS_LISTEN" "$DS_LISTEN" | grep -v '^$' | tr '\n' ' ')
+    emit PASS 'no-wildcard-bind' "porty ${HS_PORT}/${DS_PORT} tylko na: ${ALL:-brak}"
+else
+    emit FAIL 'no-wildcard-bind' "nasluch na wszystkich interfejsach: $(printf '%s' "$WILDCARD" | tr '\n' ' ')"
+fi
+
+printf '\n'
+if [ "$FAILURES" -eq 0 ]; then
+    printf 'darkstar-network: 8/8 PASS - droga do swiata kompletna\n'
+    exit 0
+fi
+printf 'darkstar-network: %d FAIL z 8 - patrz linie FAIL wyzej\n' "$FAILURES"
+exit 1
