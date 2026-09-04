@@ -153,3 +153,6 @@ target/
 /deploy/.env.*
 # Wzorzec konfiguracji JEST czescia repozytorium - nie zawiera zadnej prawdziwej wartosci.
 !/deploy/.env.example
+
+# Headplane runtime config is host-local; secrets remain under /etc/darkstar/headplane.
+/deploy/headplane/config.yaml

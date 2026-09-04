@@ -1,0 +1,91 @@
+#!/bin/sh
+# THIS IS VERY IMPORTANT!!!
+# ==========================================
+# AUTHOR: M. SZUL
+# AI MODEL: GPT-5 Codex
+# TIMESTAMP: 2026-09-04 12:48:57 Europe/London
+# REASON FOR CREATION: Gate Headplane startup on an exact loopback-only bind and a free host port.
+# ==========================================
+
+set -eu
+
+MODE=${1:-preflight}
+EXPECTED_HOST=127.0.0.1
+EXPECTED_PORT=3000
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+COMPOSE_FILE=$SCRIPT_DIR/compose.yml
+EXAMPLE_CONFIG=$SCRIPT_DIR/config.yaml.example
+RUNTIME_CONFIG=$SCRIPT_DIR/config.yaml
+
+pass() {
+    printf 'PASS %s\n' "$1"
+}
+
+fail() {
+    printf 'FAIL %s\n' "$1" >&2
+    exit 1
+}
+
+check_compose_binding() {
+    host_lines=$(grep -Ec '^[[:space:]]*HEADPLANE_SERVER__HOST:' "$COMPOSE_FILE" || true)
+    port_lines=$(grep -Ec '^[[:space:]]*HEADPLANE_SERVER__PORT:' "$COMPOSE_FILE" || true)
+    compose_host=$(sed -n 's/^[[:space:]]*HEADPLANE_SERVER__HOST:[[:space:]]*"\([^"]*\)"[[:space:]]*$/\1/p' "$COMPOSE_FILE")
+    compose_port=$(sed -n 's/^[[:space:]]*HEADPLANE_SERVER__PORT:[[:space:]]*"\([^"]*\)"[[:space:]]*$/\1/p' "$COMPOSE_FILE")
+
+    [ "$host_lines" -eq 1 ] || fail "compose host declaration count=$host_lines"
+    [ "$port_lines" -eq 1 ] || fail "compose port declaration count=$port_lines"
+    [ "$compose_host" = "$EXPECTED_HOST" ] || fail "compose host=${compose_host:-missing}"
+    [ "$compose_port" = "$EXPECTED_PORT" ] || fail "compose port=${compose_port:-missing}"
+    pass "compose host=$compose_host port=$compose_port"
+}
+
+check_config_binding() {
+    config_file=$1
+    label=$2
+    host_lines=$(grep -Ec '^[[:space:]]*host:' "$config_file" || true)
+    port_lines=$(grep -Ec '^[[:space:]]*port:' "$config_file" || true)
+    config_host=$(sed -n 's/^[[:space:]]*host:[[:space:]]*"\([^"]*\)"[[:space:]]*$/\1/p' "$config_file")
+    config_port=$(sed -n 's/^[[:space:]]*port:[[:space:]]*\([0-9][0-9]*\)[[:space:]]*$/\1/p' "$config_file")
+
+    [ "$host_lines" -eq 1 ] || fail "$label host declaration count=$host_lines"
+    [ "$port_lines" -eq 1 ] || fail "$label port declaration count=$port_lines"
+    [ "$config_host" = "$EXPECTED_HOST" ] || fail "$label host=${config_host:-missing}"
+    [ "$config_port" = "$EXPECTED_PORT" ] || fail "$label port=${config_port:-missing}"
+    pass "$label host=$config_host port=$config_port"
+}
+
+listeners_on_port() {
+    if ! socket_table=$(ss -lntH 2>/dev/null); then
+        fail "ss could not read TCP listeners"
+    fi
+    printf '%s\n' "$socket_table" | awk -v suffix=":$EXPECTED_PORT" '
+        substr($4, length($4) - length(suffix) + 1) == suffix { print $4 }
+    '
+}
+
+case "$MODE" in
+    preflight|runtime) ;;
+    *) fail "usage: $0 [preflight|runtime]" ;;
+esac
+
+[ -r "$COMPOSE_FILE" ] || fail "missing $COMPOSE_FILE"
+[ -r "$EXAMPLE_CONFIG" ] || fail "missing $EXAMPLE_CONFIG"
+check_compose_binding
+check_config_binding "$EXAMPLE_CONFIG" "example"
+
+if [ -e "$RUNTIME_CONFIG" ]; then
+    [ -r "$RUNTIME_CONFIG" ] || fail "unreadable $RUNTIME_CONFIG"
+    check_config_binding "$RUNTIME_CONFIG" "runtime-config"
+fi
+
+pass "host=$EXPECTED_HOST"
+pass "wildcard=absent"
+
+listeners=$(listeners_on_port)
+if [ "$MODE" = preflight ]; then
+    [ -z "$listeners" ] || fail "port=$EXPECTED_PORT occupied by $(printf '%s' "$listeners" | tr '\n' ' ')"
+    pass "port=$EXPECTED_PORT free"
+else
+    [ "$listeners" = "$EXPECTED_HOST:$EXPECTED_PORT" ] || fail "unexpected listen=${listeners:-none}"
+    pass "listen=$EXPECTED_HOST:$EXPECTED_PORT only"
+fi
