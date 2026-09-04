@@ -86,3 +86,57 @@ Quick connector    : 2fe2f9d6-9567-48d3-a954-7656a372f02a (osobny proces, sesyjn
 i nie rotowany. Quick tunnel nie ubity. Chroma nie wystawiona na `0.0.0.0`. Port 18080
 nie wystawiony na swiat. `config.yml` pod named tunelem nie zalozony. Zadnej domeny
 nie kupiono. Zaden nowy unit nie zostal wlaczony.
+
+## Potwierdzenie po stronie operatora — 2026-09-04
+
+Telefon na 5G z wlaczonym One Agent otworzyl `http://192.168.2.1:8080/windows` i zobaczyl
+ekran Headscale. **Chrome otworzyl ten sam adres i ten sam ekran.** Droga A dziala z dwoch
+niezaleznych przegladarek, nie tylko z Safari.
+
+To zamyka diagnoze z sekcji wyzej: nie brakowalo zadnego ogniwa, brakowalo numeru portu.
+
+## Sterownia (18080) — zmierzone, NIE wystawiona
+
+```
+ss -lnt                              -> LISTEN 127.0.0.1:18080   (tylko petla zwrotna)
+curl http://192.168.2.1:18080/health -> HTTP 000
+curl http://127.0.0.1:18080/health   -> HTTP 200
+```
+
+Sterownia **nie sluchа** na adresie sieci domowej, wiec przez WARP jej nie widac i nie ma
+czego dokumentowac jako testu telefonu. Bindu nie zmieniono: zmiana na `0.0.0.0` albo na
+`192.168.2.1` wystawilaby ja calej sieci domowej, a operator tego zabronil. Dostep do
+Sterowni pozostaje tunelem SSH z Windows, tak jak dzis rano.
+
+## Headscale server_url — bez zmian
+
+`server_url` zostaje na `http://192.168.2.1:8080`, czyli w sieci domowej. Publiczny adres
+nie zostal wymyslony ani wpisany: konto nie ma zadnej domeny, a jedyny publiczny adres,
+jaki dzis istnial, pochodzil z tunelu tymczasowego i nie ma gwarancji trwalosci.
+
+## Nastepny brakujacy tick — Task 14, nie GUI
+
+Warunek wejscia Task 14 ("Headscale Task 13 jest zdrowy") jest **spelniony**: w
+`deploy/headscale/` sa `compose.yml`, `config.yaml`, `config.yaml.example`, `policy.hujson`,
+`verify`, `version.lock`, `README.md`, `join-cbms`.
+
+Task 14 nie ma ANI JEDNEGO pliku:
+
+```
+BRAK  deploy/headplane/compose.yml
+BRAK  deploy/headplane/config.yaml.example
+BRAK  deploy/headplane/version.lock
+BRAK  deploy/headplane/verify
+BRAK  deploy/headplane/README.md
+BRAK  deploy/systemd/darkstar-headplane.service
+BRAK  frontend/src/features/mesh/MeshPanel.tsx
+```
+
+Nastepny tick to **Step 14.1 — Review upstream** (github.com/tale/headplane, MIT: README,
+LICENSE, model uwierzytelniania, macierz zgodnosci z Headscale, uprawnienia), a zaraz po nim
+**Step 14.2 — przypiecie niezmiennego wydania** w `version.lock` (tag, commit SHA, digest
+obrazu, zgodna wersja Headscale, procedura aktualizacji i wycofania). Bez `latest`.
+
+Step 14.3 wymaga testu, ktory **czerwieni sie**, gdy Headplane sluchа na adresie publicznym
+albo jest osiagalny z segmentu Wi-Fi nadrzednego — czyli dokladnie ta sama zasada, ktora
+dzis powstrzymala nas przed wystawieniem 18080.
