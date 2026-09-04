@@ -6,6 +6,7 @@ AI MODEL: GPT-5 Codex
 TIMESTAMP: 2026-08-29 11:19:11 Europe/London
 REASON FOR CREATION: Utworzenie jednego kanonicznego harmonogramu rozwoju Darkstar od checkpointu fd8099e przez Ghost Gate, Headscale/Headplane, Warlock/Kali i przyszłą infrastrukturę AIONS.
 REVISION: 2026-09-03 17:49 Europe/London — sekcja stanu przepisana na pomiar żywego hosta (Claude Opus 5).
+REVISION: 2026-09-04 12:43 Europe/London — dopisano zmierzony stan dual bind i drogi telefonu do /world/ (GPT-5 Codex).
 ==========================================
 -->
 
@@ -27,12 +28,37 @@ REVISION: 2026-09-03 17:49 Europe/London — sekcja stanu przepisana na pomiar �
 - NEXT — najbliższy etap wykonawczy.
 - PLANNED — zaplanowane po spełnieniu wcześniejszych bramek.
 - BLOCKED — wymaga sprzętu, decyzji lub zewnętrznego warunku.
+- ŻYWE — działa teraz i ma pomiar z żywego środowiska.
+- NIE — nie działa, nie zostało uruchomione albo nie należy jeszcze do aktywnego zakresu.
 
-## Stan na 2026-09-03 — ZMIERZONE
+## Stan na 2026-09-04 — ZMIERZONE
 
-To jest prawda dnia. Każdy wiersz pochodzi z komendy uruchomionej 2026-09-03 na żywej
-maszynie, nie z dokumentu. Tabela z 2026-08-29 została przesunięta niżej, do sekcji
-historycznej, i nie jest już źródłem prawdy.
+To jest prawda dnia 2026-09-04. Sekcja rozdziela działające elementy od plików i planów,
+które jeszcze niczego nie uruchamiają. Dowód dual bind i końcowy pomiar ośmiu bramek jest
+w `docs/operations/evidence/2026-09-04-network-done.md`, commit `b318433`.
+
+| Obszar | Stan | Dowód zmierzony 2026-09-04 |
+|---|---|---|
+| Bramka `DARKSTAR-WiFi` | ŻYWE | CBMS ma `192.168.2.1`; Windows przechodzi przez hub do bramki Darkstar. |
+| Headscale | ŻYWE | Headscale v0.29.3 odpowiada na `192.168.2.1:8080`; telefon z One Agent otwiera `/windows` z HTTP 200. |
+| Named tunnel `darkstar` | ŻYWE | Stan `Healthy`, trasa CIDR `192.168.2.0/24`, zespół Zero Trust `weathered-bar-3262`. |
+| Darkstar dual bind | ŻYWE | Kod `26ba7e0` jest w obrazie uruchomionym na CBMS; `ss` pokazuje `127.0.0.1:18080` oraz `192.168.2.1:18080`. |
+| `/world/` | ŻYWE | Telefon otrzymuje HTTP 200. To żywa powłoka strony; kafelki nie mają jeszcze żywych danych. |
+| `verify-world` | ŻYWE | Commit dowodowy `b318433`; skrypt zwrócił 8/8 PASS, w tym LAN bez tokenu → 401 i brak wildcard bindu. |
+| Procesy drogi do świata | ŻYWE | `cloudflared.service` jest `active`; kontener `darkstar` jest `running/healthy`. |
+| Tailscale SaaS | ŻYWE OBOK | Nadal działa jako fallback obok własnego Headscale. To nie jest wykonanie M8 i niczego nie odłączono. |
+| Headplane | NIE | Pliki są w `7d67562`, ale nie wykonano `compose up` i kontener nie działa. |
+| Control Room ze świata | NIE | Dostęp pozostaje przez tunel SSH i pętlę `127.0.0.1`; `/world/` nie otwiera Control Room. |
+| Kafelki live | NIE | Powłoka `/world/` działa, ale kafelki nie są podłączone do żywych źródeł. |
+| Warlock | NIE | Host i publiczna warstwa Warlock nie istnieją; M9 pozostaje zablokowane. |
+| Kontekst AIONS ze świata | NIE | Kontekst działa lokalnie, ale nie jest wystawiony przez drogę światową. |
+| `nft` w tej fali | NIE — nietknięte | Nie odczytywano ani nie zmieniano reguł; dual bind, obraz i pomiary nie wymagały operacji `nft`. |
+
+## Historia — stan na 2026-09-03 — ZMIERZONE
+
+To była prawda dnia 2026-09-03. Każdy wiersz pochodził z komendy uruchomionej tego dnia
+na żywej maszynie, nie z dokumentu. Tabela zostaje jako historia i nie jest już źródłem
+prawdy bieżącej; w razie różnicy obowiązuje sekcja z 2026-09-04 powyżej.
 
 | Obszar | Stan | Dowód zmierzony 2026-09-03 |
 |---|---|---|
