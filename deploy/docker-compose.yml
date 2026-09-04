@@ -10,8 +10,10 @@ services:
     environment:
       # network_mode: host - kontener dzieli stos sieciowy z maszyna, wiec 0.0.0.0
       # wystawiloby usluge takze na wlp2s0, czyli do sieci Vodafone. Wiazemy JAWNIE
-      # na petle zwrotna; ekspozycji nie ogranicza juz mapowanie portow.
-      DARKSTAR_HOST: 127.0.0.1
+      # na brame prywatnej sieci DARKSTAR-WiFi; ekspozycji nie ogranicza juz mapowanie
+      # portow. Landing /world/ ma zyc pod tym adresem, wiec petla zwrotna nie wystarcza.
+      # Wartosc da sie nadpisac w deploy/.env, ale domyslna jest waska - nigdy 0.0.0.0.
+      DARKSTAR_HOST: ${DARKSTAR_BIND_ADDRESS:-192.168.2.1}
       DARKSTAR_PORT: ${DARKSTAR_HOST_PORT}
       DARKSTAR_HOST_PORT: ${DARKSTAR_HOST_PORT:?run ./deploy/port-manager/port-manager.sh allocate darkstar}
       # Bez tokenu kazda sciezka poza /health i /ready odpowiada 401 - fail-closed.
@@ -43,7 +45,9 @@ services:
       - ..:/srv/repo:ro
     restart: on-failure:5
     healthcheck:
-      test: ["CMD", "curl", "--fail", "--silent", "--show-error", "http://127.0.0.1:${DARKSTAR_HOST_PORT}/health"]
+      # Sonda musi pytac pod adresem, na ktorym serwer FAKTYCZNIE slucha. Odkad wiazanie
+      # przenioslo sie z petli zwrotnej na brame, 127.0.0.1 juz nie odpowiada.
+      test: ["CMD", "curl", "--fail", "--silent", "--show-error", "http://${DARKSTAR_BIND_ADDRESS:-192.168.2.1}:${DARKSTAR_HOST_PORT}/health"]
       interval: 30s
       timeout: 5s
       retries: 3

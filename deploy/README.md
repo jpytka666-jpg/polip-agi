@@ -61,6 +61,8 @@ docker compose --env-file deploy/.env -f deploy/docker-compose.yml down
 
 ## Contract
 
-The service uses `DARKSTAR_HOST=0.0.0.0` and keeps `DARKSTAR_PORT=8080` inside the container. The host port is allocated centrally by Port Manager from the registered pool `18080-18999`.
+The service binds explicitly to `DARKSTAR_HOST` and keeps `DARKSTAR_PORT` in sync with the allocated host port. The default bind address is `192.168.2.1` - the DARKSTAR-WiFi gateway - so the `/world/` landing is reachable from that private network. `0.0.0.0` is forbidden: with `network_mode: host` it would also expose the service on `wlp2s0`, the upstream Vodafone segment. The host port is allocated centrally by Port Manager from the registered pool `18080-18999`.
+
+Static files under the built frontend (including `/world/`) are served by the fallback service and need no token. Every `/v1/*` route checks the `Authorization: Bearer` header inside its own handler, so opening the landing does not open the API. Copy `deploy/.env.example` to `deploy/.env`, fill in the real values and `chmod 0600` it.
 
 The image remains non-root. Compose provides the container lifecycle contract and application healthcheck. Host boot supervision is added by the systemd unit in the next stage.

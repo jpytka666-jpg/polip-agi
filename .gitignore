@@ -151,3 +151,5 @@ target/
 /deploy/.port-manager/
 /deploy/.env
 /deploy/.env.*
+# Wzorzec konfiguracji JEST czescia repozytorium - nie zawiera zadnej prawdziwej wartosci.
+!/deploy/.env.example

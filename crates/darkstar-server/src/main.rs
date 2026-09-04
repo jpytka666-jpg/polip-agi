@@ -64,7 +64,10 @@ async fn main() {
         .with(tracing_subscriber::fmt::layer())
         .init();
 
-    let host = env::var("DARKSTAR_HOST").unwrap_or_else(|_| "0.0.0.0".into());
+    // Adres nasluchu. Domyslna wartosc to brama prywatnej sieci DARKSTAR-WiFi, a NIE
+    // 0.0.0.0: pominiecie zmiennej ma dawac adres waski, nie adres wszystkich interfejsow.
+    // 0.0.0.0 wystawiloby usluge takze na wlp2s0, czyli do sieci nadrzednej Vodafone.
+    let host = env::var("DARKSTAR_HOST").unwrap_or_else(|_| "192.168.2.1".into());
     let port = env::var("DARKSTAR_PORT")
         .ok()
         .and_then(|value| value.parse::<u16>().ok())
