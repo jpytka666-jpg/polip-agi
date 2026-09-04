@@ -8,6 +8,7 @@ REASON FOR CREATION: Utworzenie jednego kanonicznego harmonogramu rozwoju Darkst
 REVISION: 2026-09-03 17:49 Europe/London — sekcja stanu przepisana na pomiar żywego hosta (Claude Opus 5).
 REVISION: 2026-09-04 12:43 Europe/London — dopisano zmierzony stan dual bind i drogi telefonu do /world/ (GPT-5 Codex).
 REVISION: 2026-09-04 14:05 Europe/London — dopisano stan po uruchomieniu Headplane wyłącznie na pętli (GPT-5 Codex).
+REVISION: 2026-09-04 14:40 Europe/London — dopisano żywe, wyłącznie odczytowe kafelki po wdrożeniu obrazu na CBMS (GPT-5 Codex).
 ==========================================
 -->
 
@@ -32,9 +33,25 @@ REVISION: 2026-09-04 14:05 Europe/London — dopisano stan po uruchomieniu Headp
 - ŻYWE — działa teraz i ma pomiar z żywego środowiska.
 - NIE — nie działa, nie zostało uruchomione albo nie należy jeszcze do aktywnego zakresu.
 
-## Stan na 2026-09-04 14:05 — ZMIERZONE
+## Stan na 2026-09-04 14:40 — ZMIERZONE
 
-To jest najnowsza prawda dnia. Zastępuje wcześniejsze wiersze dotyczące Headplane i wejścia
+To jest najnowsza prawda dnia. Kafelki są podłączone do żywych sond, ale niczego nie
+uruchamiają ani nie zatrzymują. Szczegółowy pomiar jest w
+`docs/operations/evidence/2026-09-04-world-tiles-live.md`; poprawka self-probe to `3ad0df7`.
+
+| Obszar | Stan | Dowód zmierzony 2026-09-04 |
+|---|---|---|
+| Darkstar | ŻYWE | Kontener z obrazem `f0b2473c580f` jest `healthy`; health odpowiada HTTP 200, a `ss` pokazuje wyłącznie dwa jawne bindy `127.0.0.1:18080` i `192.168.2.1:18080`. |
+| `/world/` | ŻYWE | Landing i `world.js` odpowiadają HTTP 200; HTML rzeczywiście ładuje ten skrypt. |
+| Kafelki live | ŻYWE — TYLKO ODCZYT | `world.js` wykonuje GET `/v1/world/status`; odpowiedź ma `readOnly: true` oraz `up` dla Darkstar, Headscale i Headplane. |
+| Headscale | ŻYWE | `http://192.168.2.1:8080/windows` odpowiada HTTP 200; kontener nie został odtworzony w tej fali. |
+| Headplane | ŻYWE — TYLKO PĘTLA | Listen pozostaje wyłącznie `127.0.0.1:3000`, `/admin` odpowiada 302, a kontener nie został odtworzony. |
+| Tailscale SaaS | ŻYWE OBOK — NIE ODCIĘTE | `tailscaled.service` pozostaje `active`; M8 nie zostało wykonane. |
+| Warlock | NIE — ZAKAZANY W TEJ FAZIE | Nie uruchomiono, nie skonfigurowano i nie włączono żadnego hosta ani komponentu Warlock/Kali. |
+
+## Historia — stan na 2026-09-04 14:05 — ZMIERZONE
+
+To był wcześniejszy pomiar dnia. Zastąpił jeszcze starsze wiersze dotyczące Headplane i wejścia
 `/world/`, ale nie kasuje pomiaru sprzed uruchomienia panelu. Dowód runtime jest zapisany w
 `docs/operations/evidence/2026-09-04-network-done.md`, commit `c04a161`.
 
