@@ -4,6 +4,11 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 
+[features]
+# Sonda dotykajaca hosta (systemctl is-active + puls HTTP). NIE jest domyslna:
+# zwykly build i CI bez tej cechy nie zawieraja kodu wykonujacego cokolwiek na hoscie.
+systemd-read = []
+
 [dependencies]
 serde.workspace = true
 serde_json.workspace = true
