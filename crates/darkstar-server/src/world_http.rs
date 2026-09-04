@@ -1,3 +1,8 @@
+// darkstar-header-v1
+// po co: world_http.rs
+// nie wolno: hotspot, ruszac wlp2s0, wracac do 10.44, gasic DARKSTAR-WiFi, haslo w gicie
+// autor: Marcin
+// powstal: 2026-09-04
 // THIS IS VERY IMPORTANT!!!
 // ==========================================
 // AUTHOR: M. SZUL
@@ -23,20 +28,27 @@ pub struct WorldStatusState {
     darkstar_health_url: Arc<str>,
     headscale_health_url: Arc<str>,
     headplane_address: Arc<str>,
+    context_local_url: Arc<str>,
+    context_remote_url: Arc<str>,
 }
 
 impl WorldStatusState {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         reader: Arc<dyn WorldStatusReader + Send + Sync>,
         darkstar_health_url: impl Into<String>,
         headscale_health_url: impl Into<String>,
         headplane_address: impl Into<String>,
+        context_local_url: impl Into<String>,
+        context_remote_url: impl Into<String>,
     ) -> Self {
         Self {
             reader,
             darkstar_health_url: Arc::from(darkstar_health_url.into()),
             headscale_health_url: Arc::from(headscale_health_url.into()),
             headplane_address: Arc::from(headplane_address.into()),
+            context_local_url: Arc::from(context_local_url.into()),
+            context_remote_url: Arc::from(context_remote_url.into()),
         }
     }
 }
@@ -78,8 +90,27 @@ async fn world_status(State(status): State<WorldStatusState>) -> Json<WorldStatu
         let target = Arc::clone(&status.headplane_address);
         tokio::task::spawn_blocking(move || reader.tcp_open(target.as_ref()))
     };
-    let (darkstar_up, headscale_up, headplane_up) =
-        tokio::join!(darkstar_probe, headscale_probe, headplane_probe);
+    // Pamiec jest ZYWA, jesli ktorakolwiek noga odpowiada - te same reguly co
+    // ContextHealth::any_ok() w darkstar-core. Zaden probe tutaj nie niesie tokenu ani
+    // tresci notatek - to gole polaczenie z Chroma, ta sama sonda co darkstar/headscale.
+    let context_local_probe = {
+        let reader = Arc::clone(&status.reader);
+        let target = Arc::clone(&status.context_local_url);
+        tokio::task::spawn_blocking(move || reader.http_ok(target.as_ref()))
+    };
+    let context_remote_probe = {
+        let reader = Arc::clone(&status.reader);
+        let target = Arc::clone(&status.context_remote_url);
+        tokio::task::spawn_blocking(move || reader.http_ok(target.as_ref()))
+    };
+    let (darkstar_up, headscale_up, headplane_up, context_local_up, context_remote_up) = tokio::join!(
+        darkstar_probe,
+        headscale_probe,
+        headplane_probe,
+        context_local_probe,
+        context_remote_probe
+    );
+    let context_up = context_local_up.unwrap_or(false) || context_remote_up.unwrap_or(false);
 
     let mut services = BTreeMap::new();
     services.insert(
@@ -104,6 +135,17 @@ async fn world_status(State(status): State<WorldStatusState>) -> Json<WorldStatu
             state: state(headplane_up.unwrap_or(false)),
             probe: "tcp_connect",
             target: status.headplane_address.to_string(),
+        },
+    );
+    services.insert(
+        "context",
+        ServiceStatus {
+            state: state(context_up),
+            probe: "http_get_any_leg",
+            target: format!(
+                "{} | {}",
+                status.context_local_url, status.context_remote_url
+            ),
         },
     );
 

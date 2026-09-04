@@ -72,3 +72,23 @@ test('the public world page never binds or links to all interfaces', () => {
     assert.doesNotMatch(source, /0\.0\.0\.0/, `${name} must never reference 0.0.0.0`)
   }
 })
+
+test('the memory tile carries a context status badge but stays a closed div, never a link', () => {
+  const tileMatch = indexHtml.match(/<li>\s*<div class="tile[^>]*>[\s\S]*?<\/li>/g)?.find((block) =>
+    block.includes('data-world-status="context"'),
+  )
+  assert.ok(tileMatch, 'index.html must have a tile with data-world-status="context"')
+  const tile = tileMatch as string
+
+  assert.match(
+    tile,
+    /^<li>\s*<div class="tile/,
+    'the memory tile must open with <div>, not <a> - it has no working address to link to',
+  )
+  assert.doesNotMatch(tile, /<a\b/i, 'the memory tile must never contain an <a> element')
+  assert.doesNotMatch(
+    tile,
+    /href=/i,
+    'the memory tile must never carry an href, on the tile or on its status badge',
+  )
+})

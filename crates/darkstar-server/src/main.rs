@@ -143,11 +143,26 @@ async fn main() {
             .filter(|value| !value.is_empty())
             .map(std::sync::Arc::from),
     ));
+    // Te same dwie zmienne co ContextState::new() powyzej, czytane osobno bo world_http
+    // nie widzi rozwiazanych URL-i nogi kontekstu. Sonda pyta wprost /api/v2/heartbeat -
+    // zmierzone 2026-09-04: obie nogi na zywym hoscie mowia wylacznie v2 (v1 = 410 Gone).
+    let context_local_url =
+        env::var("DARKSTAR_CONTEXT_LOCAL").unwrap_or_else(|_| "http://127.0.0.1:8000".into());
+    let context_remote_url =
+        env::var("DARKSTAR_CONTEXT_REMOTE").unwrap_or_else(|_| "http://127.0.0.1:8001".into());
     let world = world_http::world_status_router(world_http::WorldStatusState::new(
         std::sync::Arc::new(HostWorldStatusReader),
         format!("http://127.0.0.1:{port}/health"),
         headscale_health_url,
         "127.0.0.1:3000",
+        format!(
+            "{}/api/v2/heartbeat",
+            context_local_url.trim_end_matches('/')
+        ),
+        format!(
+            "{}/api/v2/heartbeat",
+            context_remote_url.trim_end_matches('/')
+        ),
     ));
     // Zdjecie zamka dla lokalnego operatora. Warstwa jest JEDNA i obejmuje cale drzewo
     // sciezek: zapytanie z petli zwrotnej bez wlasnego naglowka dostaje doklejony token.

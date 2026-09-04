@@ -38,7 +38,10 @@ impl WorldStatusReader for Fixture {
     fn http_ok(&self, url: &str) -> bool {
         matches!(
             url,
-            "http://127.0.0.1:18080/health" | "http://192.168.2.1:8080/health"
+            "http://127.0.0.1:18080/health"
+                | "http://192.168.2.1:8080/health"
+                | "http://127.0.0.1:8000/api/v2/heartbeat"
+                | "http://127.0.0.1:8001/api/v2/heartbeat"
         )
     }
 
@@ -71,6 +74,8 @@ fn state() -> WorldStatusState {
         "http://127.0.0.1:18080/health",
         "http://192.168.2.1:8080/health",
         "127.0.0.1:3000",
+        "http://127.0.0.1:8000/api/v2/heartbeat",
+        "http://127.0.0.1:8001/api/v2/heartbeat",
     )
 }
 
@@ -82,7 +87,7 @@ async fn body_json(response: axum::response::Response) -> Value {
 }
 
 #[tokio::test]
-async fn public_get_reports_three_fresh_read_only_probes() {
+async fn public_get_reports_four_fresh_read_only_probes() {
     let response = world_status_router(state())
         .oneshot(
             Request::builder()
@@ -100,6 +105,7 @@ async fn public_get_reports_three_fresh_read_only_probes() {
     assert_eq!(json["services"]["headscale"]["state"], "up");
     assert_eq!(json["services"]["headplane"]["state"], "up");
     assert_eq!(json["services"]["headplane"]["target"], "127.0.0.1:3000");
+    assert_eq!(json["services"]["context"]["state"], "up");
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -116,6 +122,8 @@ async fn blocking_probes_do_not_starve_the_request_executor() {
         "http://127.0.0.1:18080/health",
         "http://192.168.2.1:8080/health",
         "127.0.0.1:3000",
+        "http://127.0.0.1:8000/api/v2/heartbeat",
+        "http://127.0.0.1:8001/api/v2/heartbeat",
     ))
     .oneshot(
         Request::builder()
@@ -129,6 +137,84 @@ async fn blocking_probes_do_not_starve_the_request_executor() {
     let json = body_json(response).await;
     assert_eq!(json["services"]["darkstar"]["state"], "up");
     assert_eq!(json["services"]["headscale"]["state"], "up");
+}
+
+struct OneLegFixture {
+    local_ok: bool,
+    remote_ok: bool,
+}
+
+impl WorldStatusReader for OneLegFixture {
+    fn http_ok(&self, url: &str) -> bool {
+        match url {
+            "http://127.0.0.1:8000/api/v2/heartbeat" => self.local_ok,
+            "http://127.0.0.1:8001/api/v2/heartbeat" => self.remote_ok,
+            "http://127.0.0.1:18080/health" | "http://192.168.2.1:8080/health" => true,
+            _ => false,
+        }
+    }
+
+    fn tcp_open(&self, address: &str) -> bool {
+        address == "127.0.0.1:3000"
+    }
+}
+
+#[tokio::test]
+async fn context_is_up_when_either_leg_answers_down_when_neither_does() {
+    for (local_ok, remote_ok, expected) in [
+        (true, true, "up"),
+        (true, false, "up"),
+        (false, true, "up"),
+        (false, false, "down"),
+    ] {
+        let response = world_status_router(WorldStatusState::new(
+            Arc::new(OneLegFixture {
+                local_ok,
+                remote_ok,
+            }),
+            "http://127.0.0.1:18080/health",
+            "http://192.168.2.1:8080/health",
+            "127.0.0.1:3000",
+            "http://127.0.0.1:8000/api/v2/heartbeat",
+            "http://127.0.0.1:8001/api/v2/heartbeat",
+        ))
+        .oneshot(
+            Request::builder()
+                .uri("/v1/world/status")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+        let json = body_json(response).await;
+        assert_eq!(
+            json["services"]["context"]["state"], expected,
+            "local_ok={local_ok} remote_ok={remote_ok}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn context_status_never_carries_collection_names_or_note_content() {
+    // Zero nazw kolekcji, zero tresci - target moze zawierac wylacznie adresy sond.
+    let response = world_status_router(state())
+        .oneshot(
+            Request::builder()
+                .uri("/v1/world/status")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let raw = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(
+        !raw.to_lowercase().contains("session_"),
+        "world status body must never carry a Chroma collection name"
+    );
 }
 
 #[test]
