@@ -1,7 +1,13 @@
+# darkstar-header-v1
+# po co: Cargo.toml
+# nie wolno: hotspot, ruszac wlp2s0, wracac do 10.44, gasic DARKSTAR-WiFi, haslo w gicie
+# autor: Marcin
+# powstal: 2026-09-04
 [workspace]
 resolver = "2"
 members = [
     "crates/darkstar-core",
+    "crates/darkstar-recall",
     "crates/darkstar-server",
 ]
 

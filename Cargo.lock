@@ -105,6 +105,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "darkstar-recall"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror",
+]
+
+[[package]]
 name = "darkstar-server"
 version = "0.1.0"
 dependencies = [
