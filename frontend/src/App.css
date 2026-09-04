@@ -782,6 +782,12 @@ body {
   color: var(--muted);
 }
 
+.runtime-status__access {
+  flex-basis: 100%;
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
 .graph-canvas {
   flex: 1;
   min-height: 27rem;

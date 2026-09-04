@@ -182,6 +182,16 @@ pub fn current_snapshot() -> ArchitectureSnapshot {
             "Go",
             "active",
         ),
+        // Panel administracyjny Headscale (Task 14). Sluchacz jest celowo wylacznie na
+        // petli zwrotnej hosta - to stan docelowy, nie tymczasowy, wiec status na grafie
+        // pokazuje wylacznie odczyt zdrowia, bez zadnej sciezki sterowania.
+        runtime(
+            "headplane",
+            "Headplane",
+            "mesh admin panel, loopback-only",
+            "TypeScript",
+            "active",
+        ),
     ];
 
     let edges = vec![
@@ -237,6 +247,15 @@ pub fn current_snapshot() -> ArchitectureSnapshot {
             "runtime:headscale",
             "runtime:ghost-gate",
             "mesh_control",
+        ),
+        // Headplane montuje config Headscale wylacznie do odczytu i pyta jego API - nie
+        // ma zadnej sciezki, ktora pozwalalaby mu zmienic polityke mesh. Krawedz opisuje
+        // ten jednokierunkowy odczyt, nie akcje.
+        edge(
+            "e17",
+            "runtime:headplane",
+            "runtime:headscale",
+            "admin_view_of",
         ),
     ];
 
@@ -331,6 +350,39 @@ mod tests {
         assert!(snapshot.nodes.iter().any(|n| n.id == "runtime:wpc-engine"));
         assert!(snapshot.nodes.iter().any(|n| n.id == "runtime:ghost-gate"));
         assert!(snapshot.edges.iter().any(|e| e.kind == "egress_through"));
+    }
+
+    #[test]
+    fn headplane_node_reads_headscale_only_no_egress_or_control_edge() {
+        let snapshot = current_snapshot();
+        assert!(
+            snapshot.nodes.iter().any(|n| n.id == "runtime:headplane"),
+            "Headplane node missing from the graph (Task 14, Step 14.7)"
+        );
+
+        let headplane_edges: Vec<_> = snapshot
+            .edges
+            .iter()
+            .filter(|e| e.from == "runtime:headplane" || e.to == "runtime:headplane")
+            .collect();
+        assert_eq!(
+            headplane_edges.len(),
+            1,
+            "Headplane must have exactly one edge - the read-only view of Headscale"
+        );
+        let e = headplane_edges[0];
+        assert_eq!(e.from, "runtime:headplane");
+        assert_eq!(e.to, "runtime:headscale");
+        assert_eq!(e.kind, "admin_view_of");
+
+        // Headplane never touches the egress boundary - it is an admin view, not a
+        // control-plane participant.
+        assert!(
+            !snapshot
+                .edges
+                .iter()
+                .any(|e| e.from == "runtime:headplane" && e.to == "runtime:ghost-gate")
+        );
     }
 
     #[test]

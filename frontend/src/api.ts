@@ -101,6 +101,18 @@ export function headplanePanelView(status: WorldServiceStatus | undefined): Head
   }
 }
 
+/**
+ * Informacja o dostepie z sieci prywatnej - NIGDY link. Nasluch petli zwrotnej jest
+ * celowym, docelowym stanem (Task 14, Step 14.9), wiec panel nie proponuje adresu
+ * 192.168.2.1:3000 - takiego nasluchu nie ma i nie bedzie. Jedyna droga to tunel SSH
+ * z zaufanej maszyny, tak samo jak Control Room.
+ */
+export function headplaneAccessNote(listen: string): string {
+  return listen.startsWith('127.0.0.1')
+    ? 'zamkniete dla sieci prywatnej - tylko przez tunel z zaufanej maszyny'
+    : 'stan dostepu z sieci prywatnej nieznany'
+}
+
 /** Publiczna sonda stanu: jeden GET, bez PIN-u, cookies i ciala zapytania. */
 export async function fetchWorldStatus(): Promise<WorldStatus> {
   const response = await fetch('/v1/world/status', {

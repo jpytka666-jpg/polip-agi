@@ -11,7 +11,7 @@ REASON FOR CREATION: Prove that Control Room reads Headplane status without cred
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { fetchWorldStatus, headplanePanelView } from '../src/api.ts'
+import { fetchWorldStatus, headplaneAccessNote, headplanePanelView } from '../src/api.ts'
 
 test('Control Room reads the public status endpoint with a credential-free GET', async () => {
   const previousFetch = globalThis.fetch
@@ -57,4 +57,16 @@ test('Headplane panel distinguishes up, down and unavailable readings', () => {
     label: 'BRAK ODCZYTU',
     listen: '127.0.0.1:3000',
   })
+})
+
+test('Headplane access note never proposes the LAN address, loopback stays closed', () => {
+  assert.equal(
+    headplaneAccessNote('127.0.0.1:3000'),
+    'zamkniete dla sieci prywatnej - tylko przez tunel z zaufanej maszyny',
+  )
+  assert.doesNotMatch(headplaneAccessNote('127.0.0.1:3000'), /192\.168\.2\.1/)
+  assert.equal(
+    headplaneAccessNote('192.168.2.1:3000'),
+    'stan dostepu z sieci prywatnej nieznany',
+  )
 })

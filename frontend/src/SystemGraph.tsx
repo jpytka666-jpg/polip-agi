@@ -44,6 +44,7 @@ import { FlowEdge } from './FlowEdge'
 import {
   fetchWorldStatus,
   fetchSystemGraph,
+  headplaneAccessNote,
   headplanePanelView,
   runReadCommand,
   type ArchitectureNode,
@@ -492,6 +493,9 @@ export function SystemGraph({ token }: { token: string }) {
         <span className="runtime-status__note">
           {worldStatusError ? 'sonda niedostepna' : 'sonda TCP · tylko odczyt'}
         </span>
+        {/* NIGDY href - petla zwrotna jest docelowym stanem, nie tymczasowym; zaden
+            link nie moze prowadzic na 192.168.2.1:3000, bo takiego naslucha nie ma. */}
+        <span className="runtime-status__access">{headplaneAccessNote(headplane.listen)}</span>
       </div>
 
       <div className="lane-bar" role="group" aria-label="Rodzaje ruchu">
