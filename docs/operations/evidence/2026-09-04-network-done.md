@@ -125,3 +125,12 @@ verify  -> deploy/network/verify-world = 8/8 PASS
 Jeśli polecenie operatorskie zatrzyma się na `sudo` albo Docker odmówi dostępu, wdrożenia
 nie ma. Należy pokazać dokładny błąd operatorowi, bez obchodzenia uprawnień i bez zmiany
 sieci hosta.
+
+1. AKTUALIZACJA LIVE 2026-09-04T12:18:18+01:00: ten pomiar zastępuje status PENDING; CBMS HEAD `c7ea026`.
+2. Build: `docker build --network=host -t darkstar:dev .` zakończył się kodem 0; obraz `sha256:7664a2c4a07c36bdb92909c8292cccca8f584c205e1e31c0cda57fc6519f0477`.
+3. Recreate: wyłącznie serwis `darkstar`; kontener używa tego samego SHA obrazu i ma health `healthy`.
+4. `ss` port 18080: `LISTEN 127.0.0.1:18080` — pętla dla Sterowni została zachowana.
+5. `ss` port 18080: `LISTEN 192.168.2.1:18080` — drugi jawny bind działa; wildcard lokalny nie występuje.
+6. Curl Darkstar: `http://127.0.0.1:18080/health` = `200`; `http://192.168.2.1:18080/world/` = `200`.
+7. Curl Headscale `/windows` = `200`; cloudflared = `active`; kontener `darkstar-headscale` = `running`; Headplane nie został uruchomiony.
+8. `deploy/network/verify-world` = `8/8 PASS`, w tym LAN bez tokenu = `401`; nie wykonano `nft`, rebootu ani zmian `DARKSTAR-WiFi`.
