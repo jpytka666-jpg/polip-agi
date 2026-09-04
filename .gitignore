@@ -159,3 +159,6 @@ target/
 
 # Per-worktree collaboration instructions are supplied out of band.
 /AGENTS.md
+
+# Personal Claude Code auto-mode settings for this worktree - never shared, never in repo.
+/.claude/settings.local.json
