@@ -342,6 +342,31 @@ body {
   border-color: rgba(164, 22, 26, 0.42);
 }
 
+.live-status {
+  align-self: flex-start;
+  padding: 0.16rem 0.55rem;
+  border: 1px solid rgba(95, 78, 42, 0.28);
+  border-radius: 999px;
+  color: var(--ink-soft);
+  background: rgba(255, 255, 255, 0.66);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.live-status[data-state='up'] {
+  color: #315d36;
+  border-color: rgba(49, 93, 54, 0.42);
+  background: rgba(238, 250, 236, 0.84);
+}
+
+.live-status[data-state='down'] {
+  color: var(--red-deep);
+  border-color: rgba(164, 22, 26, 0.42);
+  background: rgba(255, 245, 245, 0.8);
+}
+
 /* Otwarte - reaguje pod palcem. */
 .tile--open {
   transition: transform 0.16s ease, box-shadow 0.16s ease, background 0.16s ease;

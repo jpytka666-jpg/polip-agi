@@ -27,8 +27,13 @@ mod git_http;
 mod headscale_http;
 mod http;
 mod loopback;
+mod world_http;
 
-use std::{env, net::SocketAddr};
+use std::{
+    env,
+    net::{IpAddr, Ipv4Addr, SocketAddr, TcpStream},
+    time::Duration,
+};
 
 use darkstar_core::context_client::ContextTransport;
 use headscale_http::{HeadscaleError, HeadscaleReader};
@@ -54,6 +59,26 @@ impl HeadscaleReader for HeadscaleViaReadOnlyHttp {
         self.0
             .get(url)
             .map_err(|err| HeadscaleError::new(err.to_string()))
+    }
+}
+
+/// Sondy world landing są celowo węższe niż pozostałe API: dwa GET-y i jedno połączenie
+/// TCP do dokładnie wskazanej pętli. Nie ma tu komendy procesu ani metody HTTP z zapisem.
+struct HostWorldStatusReader;
+
+impl world_http::WorldStatusReader for HostWorldStatusReader {
+    fn http_ok(&self, url: &str) -> bool {
+        context_http::ReadOnlyHttp.get(url).is_ok()
+    }
+
+    fn tcp_open(&self, address: &str) -> bool {
+        let Ok(address) = address.parse::<SocketAddr>() else {
+            return false;
+        };
+        if address.ip() != IpAddr::V4(Ipv4Addr::LOCALHOST) {
+            return false;
+        }
+        TcpStream::connect_timeout(&address, Duration::from_secs(3)).is_ok()
     }
 }
 
@@ -108,6 +133,7 @@ async fn main() {
     // petla zwrotna - Headscale nie jest tu nigdy szukany pod adresem publicznym.
     let headscale_url =
         env::var("DARKSTAR_HEADSCALE_URL").unwrap_or_else(|_| "http://127.0.0.1:8080".into());
+    let headscale_health_url = format!("{}/health", headscale_url.trim_end_matches('/'));
     let headscale = headscale_http::headscale_router(headscale_http::HeadscaleState::new(
         state.api_token.clone(),
         std::sync::Arc::new(HeadscaleViaReadOnlyHttp(context_http::ReadOnlyHttp)),
@@ -116,6 +142,12 @@ async fn main() {
             .ok()
             .filter(|value| !value.is_empty())
             .map(std::sync::Arc::from),
+    ));
+    let world = world_http::world_status_router(world_http::WorldStatusState::new(
+        std::sync::Arc::new(HostWorldStatusReader),
+        format!("http://127.0.0.1:{port}/health"),
+        headscale_health_url,
+        "127.0.0.1:3000",
     ));
     // Zdjecie zamka dla lokalnego operatora. Warstwa jest JEDNA i obejmuje cale drzewo
     // sciezek: zapytanie z petli zwrotnej bez wlasnego naglowka dostaje doklejony token.
@@ -127,6 +159,7 @@ async fn main() {
         .merge(context)
         .merge(git)
         .merge(headscale)
+        .merge(world)
         .layer(axum::middleware::from_fn_with_state(
             loopback_state,
             loopback::allow_loopback,

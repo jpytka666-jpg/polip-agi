@@ -14,16 +14,16 @@ REASON FOR CREATION: Powloka wejsciowa "ze swiata" dla Darkstar. Telefon podlacz
 prywatnej trafia dzis prosto na surowy ekran Headscale - stron rejestracji wezla, ktora nie mowi
 czym jest ten system ani gdzie sa pozostale miejsca. Ta strona jest twarza wejscia: nazwa, krotki
 opis i kafelki do miejsc, ktore naprawde istnieja.
-MECHANICS: Czysty HTML bez frameworka i bez skryptu. Zero zapytan sieciowych, zero stanu na zywo,
-zero nasluchow - to swiadomie sama POWLOKA. Kafelek prowadzacy do dzialajacego adresu jest
-odnosnikiem <a>; kafelek do miejsca zamknietego dla swiata jest zwyklym <div> z plakietka
-"tylko lokalnie", zeby strona nie obiecywala dostepu, ktorego nie ma. Uklad jest mobile-first:
+MECHANICS: Czysty HTML bez frameworka plus world.js, ktory wykonuje tylko publiczny
+GET /v1/world/status bez tokenu i pokazuje trzy zmierzone stany. Kafelek prowadzacy do
+dzialajacego adresu jest odnosnikiem <a>; kafelek do miejsca zamknietego dla swiata jest
+zwyklym <div>, zeby strona nie obiecywala dostepu, ktorego nie ma. Uklad jest mobile-first:
 jedna kolumna na telefonie, dwie od 40rem, trzy od 64rem.
 SYSTEM PART: Control Room / warstwa wejsciowa (world landing).
 ARCHITECTURE FUNCTION: Pierwszy ekran dla kogos, kto wchodzi z zewnatrz. Rozdziela to, co otwarte
 (rejestracja wezla w sieci prywatnej, repozytorium) od tego, co zamkniete i osiagalne wylacznie
 przez tunel z zaufanej maszyny. Nie jest panelem operatora - panel to aplikacja React pod "/".
-DEPENDENCIES/LINKS: world.css (jedyna zaleznosc, plik obok). Serwowane jako zasob statyczny Vite
+DEPENDENCIES/LINKS: world.css i world.js (pliki obok), GET /v1/world/status. Serwowane jako zasob statyczny Vite
 z frontend/public, wiec dostepne pod /world/ zarowno w dev serverze, jak i w zbudowanym dist/.
 Zaden bind ani zadna konfiguracja Headscale nie sa przez ten plik dotykane.
 TECH STACK: HTML5 + CSS3, swiadomie zamiast Rusta - domyslnego jezyka tego projektu.
@@ -34,7 +34,7 @@ TECH STACK: HTML5 + CSS3, swiadomie zamiast Rusta - domyslnego jezyka tego proje
       by tylko kompilacje i zaleznosc od budowania. Statyczny plik otwiera sie tez wtedy, gdy
       nic innego nie dziala - a to jest wlasnie ekran na zle dni.
   (4) TRACIMY: wspolny system komponentow z Control Room. Rekompensata: strona nie ma zadnej
-      wladzy - nie wykonuje skryptu, nie pyta zadnego API, nie przechowuje niczego.
+      wladzy - wykonuje tylko GET bez uwierzytelnienia, niczego nie przechowuje ani nie zmienia.
 LOCAL WORKSPACE: D:\codex-fresh-2026-08-28\worktrees\polip-agi-darkstar-plan\frontend\public\world
 GIT COMMIT: PENDING
 GITHUB METADATA: jpytka666-jpg/polip-agi, branch docs/darkstar-headscale-hotspot-plan
@@ -52,6 +52,7 @@ GITHUB METADATA: jpytka666-jpg/polip-agi, branch docs/darkstar-headscale-hotspot
     <title>Darkstar</title>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="stylesheet" href="./world.css" />
+    <script type="module" src="./world.js"></script>
   </head>
 
   <body>
@@ -104,6 +105,7 @@ GITHUB METADATA: jpytka666-jpg/polip-agi, branch docs/darkstar-headscale-hotspot
                   bez niego reszta systemu pozostaje niewidoczna.
                 </span>
                 <span class="chip chip--open">otwarte z sieci</span>
+                <span class="live-status" data-world-status="headscale" data-state="unknown">pomiar...</span>
               </span>
             </a>
           </li>
@@ -123,6 +125,7 @@ GITHUB METADATA: jpytka666-jpg/polip-agi, branch docs/darkstar-headscale-hotspot
                   i trzyma liste wezlow.
                 </span>
                 <span class="chip chip--open">otwarte z sieci</span>
+                <span class="live-status" data-world-status="headscale" data-state="unknown">pomiar...</span>
               </span>
             </a>
           </li>
@@ -165,6 +168,7 @@ GITHUB METADATA: jpytka666-jpg/polip-agi, branch docs/darkstar-headscale-hotspot
                   Wylacznie do odczytu.
                 </span>
                 <span class="chip chip--closed">tylko przez tunel z zaufanej maszyny</span>
+                <span class="live-status" data-world-status="darkstar" data-state="unknown">pomiar...</span>
               </span>
             </div>
           </li>
@@ -184,6 +188,27 @@ GITHUB METADATA: jpytka666-jpg/polip-agi, branch docs/darkstar-headscale-hotspot
                   i celowo nie wychodzi na siec.
                 </span>
                 <span class="chip chip--closed">tylko z petli zwrotnej</span>
+                <span class="live-status" data-world-status="darkstar" data-state="unknown">pomiar...</span>
+              </span>
+            </div>
+          </li>
+
+          <li>
+            <div class="tile glass tile--closed">
+              <span class="tile__glyph" aria-hidden="true">
+                <svg viewBox="0 0 24 24" role="presentation" focusable="false">
+                  <path d="M5 5h14v14H5z" />
+                  <path d="M8 9h8M8 13h5" />
+                </svg>
+              </span>
+              <span class="tile__body">
+                <span class="tile__name">Headplane</span>
+                <span class="tile__desc">
+                  Panel administracyjny Headscale. Działa na pętli CBMS i jest dostępny
+                  wyłącznie przez tunel z zaufanej maszyny.
+                </span>
+                <span class="chip chip--closed">tylko przez tunel</span>
+                <span class="live-status" data-world-status="headplane" data-state="unknown">pomiar...</span>
               </span>
             </div>
           </li>
@@ -211,9 +236,9 @@ GITHUB METADATA: jpytka666-jpg/polip-agi, branch docs/darkstar-headscale-hotspot
 
         <section class="note glass" aria-label="Stan tej strony">
           <p>
-            <strong>To jest sama powloka.</strong> Kafelki nie sprawdzaja niczego na zywo -
-            plakietki opisuja zamierzony dostep, nie zmierzony stan. Zywy stan dochodzi
-            osobnym krokiem.
+            <strong>Stan jest tylko do odczytu.</strong> Kafelki pytają Darkstara jednym
+            publicznym GET-em o zdrowie Headscale, Darkstar i prywatny listener Headplane.
+            Nie wysyłają tokenu ani żadnego żądania zmieniającego stan.
           </p>
         </section>
       </main>
