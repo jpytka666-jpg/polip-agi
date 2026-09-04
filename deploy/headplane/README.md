@@ -214,14 +214,14 @@ Kroki 14.1 i 14.2 sa zamkniete. Stan pozostalych, zmierzony na zywym hoscie:
   ten pomiar jest tez kontrola, ze 3000 nie zostal przy okazji otwarty. Dowod i dokladne
   pokrycie siedmiu wierszy checklisty: `docs/operations/evidence/2026-09-04-headplane-private-listen.md`.
   Automatyczny skrypt opisany w rozdziale powyzej wciaz nie istnieje - to pomiar reczny.
-- **14.4 i 14.5 — ZYWE (czesciowo).** Sekrety, `config.yaml` i start panelu sa zrobione i zmierzone:
-  `docker ps` pokazuje `darkstar-headplane` jako `Up ... (healthy)`, `cookie_secret` ma 32 bajty
-  z prawami `0600` i wlascicielem `root:root`, a `127.0.0.1:3000/admin` odpowiada `302`.
-  Dowod: `docs/operations/evidence/2026-09-04-network-done.md`, sekcja
-  "Headplane — petla live 2026-09-04T13:28:40+01:00". Regula zapory dla `192.168.2.0/24`
-  NIE zostala domknieta — to swiadomy wybor, nie zaleglosc: `192.168.2.1:3000` odpowiada `000`,
-  wiec panel zostaje dostepny wylacznie z petli zwrotnej hosta, tak jak Control Room, dopoki
-  ktos jawnie nie zdecyduje inaczej.
+- **14.4 i 14.5 — DONE.** Sekrety sa na hoscie w `/etc/darkstar/headplane/*`, `config.yaml` jest
+  zlozony, panel jest live na `127.0.0.1:3000`: `docker ps` pokazuje `darkstar-headplane` jako
+  `Up ... (healthy)`, `cookie_secret` ma 32 bajty z prawami `0600` i wlascicielem `root:root`,
+  a `127.0.0.1:3000/admin` odpowiada `302`. Dowod: `docs/operations/evidence/2026-09-04-network-done.md`,
+  sekcja "Headplane — petla live 2026-09-04T13:28:40+01:00". Krok 14.5 nie oznacza LAN bind -
+  petla zwrotna JEST docelowym stanem, tak jak Control Room. `192.168.2.1:3000` ma zostac `000`;
+  to jest warunek PASS dla 14.3, nie zaleglosc do domkniecia. `192.168.2.1:3000` i `0.0.0.0` sa
+  poza zakresem tego zadania.
 - **14.6 — CZESCIOWO.** `deploy/systemd/darkstar-headplane.service` istnieje (wzorowany na
   `darkstar-headscale.service`), ale nie jest zainstalowany ani `enable`d na hoscie — panel dziala
   dzis bez niego. Rozszerzenie `verify` o sprawdzenia sensowne dopiero na dzialajacym kontenerze
