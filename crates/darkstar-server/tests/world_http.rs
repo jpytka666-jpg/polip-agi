@@ -6,7 +6,13 @@
 // REASON FOR CREATION: Pin the public, read-only world status contract before implementing live tiles.
 // ==========================================
 
-use std::sync::Arc;
+use std::{
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    },
+    time::{Duration, Instant},
+};
 
 use axum::{
     body::Body,
@@ -33,6 +39,24 @@ impl WorldStatusReader for Fixture {
 
     fn tcp_open(&self, address: &str) -> bool {
         address == "127.0.0.1:3000"
+    }
+}
+
+struct RequiresRuntimeProgress {
+    progressed: Arc<AtomicBool>,
+}
+
+impl WorldStatusReader for RequiresRuntimeProgress {
+    fn http_ok(&self, _url: &str) -> bool {
+        let deadline = Instant::now() + Duration::from_millis(250);
+        while !self.progressed.load(Ordering::SeqCst) && Instant::now() < deadline {
+            std::thread::yield_now();
+        }
+        self.progressed.load(Ordering::SeqCst)
+    }
+
+    fn tcp_open(&self, _address: &str) -> bool {
+        true
     }
 }
 
@@ -71,6 +95,35 @@ async fn public_get_reports_three_fresh_read_only_probes() {
     assert_eq!(json["services"]["headscale"]["state"], "up");
     assert_eq!(json["services"]["headplane"]["state"], "up");
     assert_eq!(json["services"]["headplane"]["target"], "127.0.0.1:3000");
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn blocking_probes_do_not_starve_the_request_executor() {
+    let progressed = Arc::new(AtomicBool::new(false));
+    let signal = Arc::clone(&progressed);
+    tokio::spawn(async move {
+        tokio::time::sleep(Duration::from_millis(20)).await;
+        signal.store(true, Ordering::SeqCst);
+    });
+
+    let response = world_status_router(WorldStatusState::new(
+        Arc::new(RequiresRuntimeProgress { progressed }),
+        "http://127.0.0.1:18080/health",
+        "http://192.168.2.1:8080/health",
+        "127.0.0.1:3000",
+    ))
+    .oneshot(
+        Request::builder()
+            .uri("/v1/world/status")
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await
+    .unwrap();
+
+    let json = body_json(response).await;
+    assert_eq!(json["services"]["darkstar"]["state"], "up");
+    assert_eq!(json["services"]["headscale"]["state"], "up");
 }
 
 #[tokio::test]

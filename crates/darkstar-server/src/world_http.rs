@@ -60,11 +60,32 @@ fn state(up: bool) -> &'static str {
 }
 
 async fn world_status(State(status): State<WorldStatusState>) -> Json<WorldStatusResponse> {
+    // Czytniki korzystaja z blokujacych gniazd std. Self-probe Darkstara nie moze biec
+    // na executorze obslugujacym to samo zadanie HTTP, bo wtedy serwer czeka sam na siebie
+    // az do timeoutu. Pula blocking zostawia executorowi miejsce na odpowiedz `/health`.
+    let darkstar_probe = {
+        let reader = Arc::clone(&status.reader);
+        let target = Arc::clone(&status.darkstar_health_url);
+        tokio::task::spawn_blocking(move || reader.http_ok(target.as_ref()))
+    };
+    let headscale_probe = {
+        let reader = Arc::clone(&status.reader);
+        let target = Arc::clone(&status.headscale_health_url);
+        tokio::task::spawn_blocking(move || reader.http_ok(target.as_ref()))
+    };
+    let headplane_probe = {
+        let reader = Arc::clone(&status.reader);
+        let target = Arc::clone(&status.headplane_address);
+        tokio::task::spawn_blocking(move || reader.tcp_open(target.as_ref()))
+    };
+    let (darkstar_up, headscale_up, headplane_up) =
+        tokio::join!(darkstar_probe, headscale_probe, headplane_probe);
+
     let mut services = BTreeMap::new();
     services.insert(
         "darkstar",
         ServiceStatus {
-            state: state(status.reader.http_ok(&status.darkstar_health_url)),
+            state: state(darkstar_up.unwrap_or(false)),
             probe: "http_get",
             target: status.darkstar_health_url.to_string(),
         },
@@ -72,7 +93,7 @@ async fn world_status(State(status): State<WorldStatusState>) -> Json<WorldStatu
     services.insert(
         "headscale",
         ServiceStatus {
-            state: state(status.reader.http_ok(&status.headscale_health_url)),
+            state: state(headscale_up.unwrap_or(false)),
             probe: "http_get",
             target: status.headscale_health_url.to_string(),
         },
@@ -80,7 +101,7 @@ async fn world_status(State(status): State<WorldStatusState>) -> Json<WorldStatu
     services.insert(
         "headplane",
         ServiceStatus {
-            state: state(status.reader.tcp_open(&status.headplane_address)),
+            state: state(headplane_up.unwrap_or(false)),
             probe: "tcp_connect",
             target: status.headplane_address.to_string(),
         },
