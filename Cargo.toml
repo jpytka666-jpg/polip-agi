@@ -9,6 +9,7 @@ members = [
     "crates/darkstar-core",
     "crates/darkstar-recall",
     "crates/darkstar-server",
+    "crates/darkstar-shadow",
 ]
 
 [workspace.package]
