@@ -88,6 +88,8 @@ integration:
 
   kubernetes:
     enabled: false
+    # Schemat Headplane 0.7.1 wymaga nazwy poda nawet przy wylaczonej integracji.
+    pod_name: "darkstar-headplane"
 
   proc:
     enabled: false

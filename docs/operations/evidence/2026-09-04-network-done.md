@@ -134,3 +134,14 @@ sieci hosta.
 6. Curl Darkstar: `http://127.0.0.1:18080/health` = `200`; `http://192.168.2.1:18080/world/` = `200`.
 7. Curl Headscale `/windows` = `200`; cloudflared = `active`; kontener `darkstar-headscale` = `running`; Headplane nie został uruchomiony.
 8. `deploy/network/verify-world` = `8/8 PASS`, w tym LAN bez tokenu = `401`; nie wykonano `nft`, rebootu ani zmian `DARKSTAR-WiFi`.
+
+## Headplane — pętla live 2026-09-04T13:28:40+01:00
+
+1. Usunięto wyłącznie katalog-widmo `deploy/headplane/config.yaml`; oba mounty konfiguracji są teraz zwykłymi plikami.
+2. `cookie_secret` ma dokładnie 32 bajty, prawa `0600` i właściciela `root:root`; `headscale_api_key` pozostał bez zmiany.
+3. `integration.kubernetes.enabled` pozostaje `false`; wymagane przez Headplane 0.7.1 `pod_name` ma wartość `darkstar-headplane`.
+4. `docker ps`: `darkstar-headplane` = `Up 32 seconds (healthy)`; weryfikacja osiągnęła stan gotowy przy pierwszym pomiarze.
+5. `ss`: jedyny lokalny listener portu 3000 to `127.0.0.1:3000`; `deploy/headplane/verify-private-bind runtime` = PASS.
+6. Curl Headplane: `127.0.0.1:3000/admin` = `302`; `192.168.2.1:3000` = `000`, więc panel nie jest dostępny przez LAN.
+7. Ostatnie 30 linii logu nie zawiera `EISDIR` ani błędu długości sekretu; panel połączył się z Headscale 0.29.3.
+8. Curl Headscale `/windows` = `200`, Darkstar `/world/` = `200`, cloudflared = `active`; nie wykonano operacji `nft` ani zmian sieci hosta.
