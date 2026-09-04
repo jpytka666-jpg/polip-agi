@@ -1,0 +1,69 @@
+# darkstar-header-v1
+# po co: darkstar-headplane.service
+# nie wolno: hotspot, ruszac wlp2s0, wracac do 10.44, gasic DARKSTAR-WiFi, haslo w gicie
+# autor: Marcin
+# powstal: 2026-09-04
+# THIS IS VERY IMPORTANT!!!
+# ==========================================
+# AUTHOR: M. SZUL
+# AI MODEL: Claude Sonnet 5
+# TIMESTAMP: 2026-09-04 16:20:00
+# REASON FOR CREATION: systemd lifecycle dla Headplane 0.7.1, panelu admina Headscale (Task 14, Step 14.6).
+# MECHANICS: Deleguje do docker compose w deploy/headplane/, czeka na Docker, darkstar.service i
+#            darkstar-headscale.service, bounded restart policy - identyczny wzorzec co
+#            darkstar-headscale.service. Nie tworzy zadnej wlasnej sieci dockerowej: compose.yml
+#            uzywa network_mode: host, wiec nie ma tu ExecStartPre z "docker network create".
+# SYSTEM PART: deploy/systemd - warstwa orkestracji uslug Darkstar.
+# ARCHITECTURE FUNCTION: Service lifecycle dla Task 14 Step 14.6; uruchamia/restartuje Headplane
+#            dopiero po Headscale, bo panel montuje jego config.yaml tylko do odczytu i gada z jego API.
+# DEPENDENCIES/LINKS: deploy/headplane/compose.yml, docker.service, darkstar.service,
+#            darkstar-headscale.service, /etc/darkstar/headplane/* (sekrety, poza repozytorium).
+# TECH STACK: systemd unit file - zgodnie z darkstar.service i darkstar-headscale.service.
+# LOCAL WORKSPACE: D:\codex-fresh-2026-08-28\worktrees\polip-agi-darkstar-plan
+# GIT COMMIT: PENDING
+# GITHUB METADATA: jpytka666-jpg/polip-agi, branch docs/darkstar-headscale-hotspot-plan
+# ==========================================
+#
+# Ten plik NIE uruchamia niczego sam z siebie. Instalacja (kopia do /etc/systemd/system/),
+# `daemon-reload`, `enable` i `start` to reczne kroki operatora - tak samo jak przy
+# darkstar-firewall.service i darkstar-headscale.service (patrz deploy/README.md).
+
+[Unit]
+Description=Darkstar Headplane Admin Panel
+Documentation=https://github.com/tale/headplane
+After=docker.service darkstar.service darkstar-firewall.service darkstar-headscale.service
+Requires=docker.service darkstar.service
+PartOf=darkstar.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/darkstar/deploy/headplane
+
+# User/group - root dla dostepu do sieci i zarzadzania kontenerami, tak samo jak Headscale.
+User=root
+Group=root
+
+# Start: uruchom compose. Brak ExecStartPre z "docker network create" - compose.yml uzywa
+# network_mode: host, wiec nie istnieje zadna wlasna siec dockerowa do zalozenia.
+ExecStart=/usr/bin/docker compose up --no-build
+
+# Stop: zatrzymaj compose
+ExecStop=/usr/bin/docker compose down
+
+# Restart policy - identyczna jak Headscale
+Restart=always
+RestartSec=30
+StartLimitInterval=300
+StartLimitBurst=5
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=darkstar-headplane
+
+# Security - read-only root filesystem gdzie mozliwe
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
