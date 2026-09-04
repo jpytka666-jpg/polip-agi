@@ -194,11 +194,48 @@ nodze `remote_e` domyślnie mówiącej v1.
    dowodu odtworzenia.
 6. **Zależność od Pythona** w całym stosie, przy deklarowanym celu Redox (Rust).
 
+## 8a. Uzupełnienie — co naprawdę siedzi w 18,5 GB katalogu `runtime`
+
+Pełny skan (zakończony po głównej analizie) pokazał, że rozmiar jest mylący:
+
+```
+runtime/host   18 449,8 MB / 9 010 plikow  <- artefakty obrazu systemu (Faza 8, qcow2)
+runtime/state       64,3 MB /    30 plikow
+runtime/audit       13,7 MB /    41 plikow
+cala reszta        ~0,5 MB
+```
+
+Czyli **99,7% tego katalogu to jeden artefakt: zbudowany obraz systemu**. Kod runtime jest
+mały. To dobra wiadomość dla migracji — nie ma czego ciągnąć poza artefaktem, który i tak
+da się odtworzyć z przepisu.
+
+**Trzy znaleziska, które skracają drogę Darkstarowi:**
+
+1. **Gotowe jednostki systemd** — `runtime/systemd/` zawiera `templates/`, `user/` oraz
+   `SERVICE_MAP.md` z rozpisanym podziałem na usługi (`aions-api.service`, health timer,
+   `aions-mcp.service` jako adapter stdio). Problem autostartu na Linuksie jest częściowo
+   rozwiązany na papierze — nikt tego tylko nie wdrożył na CBMS.
+
+2. **Skille mają dojrzały kontrakt.** Każdy to `skills_lib/<id>/skill.json` z polami:
+   `id`, `type`, `name`, `description`, `tags`, **`risk`**, **`access_class`** (read/write),
+   **`platform`**, `handler`, `version`. To jest gotowy katalog z bramką ryzyka — dokładnie
+   to, czego potrzebuje produkt.
+   **Podział wg platformy: 24 skille jawnie `linux`, 63 bez pola platform** (do przeglądu).
+   Czyli od razu wiadomo, które umiejętności należą do Darkstara.
+
+3. **Semantyczne wyszukiwanie skilli było już badane i dostrojone.** W `runtime/` leży cała
+   seria prac z lipca 2026: `build_skill_index_v2/v3/v4.py`, zbiory testowe
+   (`skill_retrieval_testset.json`), siatki strojenia, analizy błędów, ewaluacje na zbiorze
+   wstrzymanym i dokument `SEMANTIC_SKILL_RETRIEVAL_PROPOSAL.md` (2026-07-31, napisany po
+   przebiegu wyłącznie odczytowym). To nie jest pomysł do wymyślenia od nowa - to jest praca
+   do dokończenia.
+
 ## 9. Wniosek dla Darkstara
 
 Darkstar nie musi budować AIONS od zera. Dziedziczy: sprawdzony schemat pamięci sesyjnej,
-9,5 miesiąca realnej historii, 87 skilli, 12 receptur, projekt warstwy decyzyjnej,
-działającą pętlę operatora i gotowy przepis na obraz systemu.
+9,5 miesiąca realnej historii, 87 skilli z kontraktem ryzyka i platformy, 12 receptur,
+projekt warstwy decyzyjnej, działającą pętlę operatora, gotowe szablony jednostek systemd,
+dostrojone badania nad semantycznym wyszukiwaniem i gotowy przepis na obraz systemu.
 
 Czego Darkstar musi dołożyć, bo tego nie ma: **trwałości** (autostart, watchdog, dowód
 odtworzenia z kopii), **dostępu z wielu maszyn** (dziś wszystko jest przywiązane do jednego
