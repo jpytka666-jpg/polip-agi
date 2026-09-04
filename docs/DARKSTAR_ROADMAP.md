@@ -7,6 +7,7 @@ TIMESTAMP: 2026-08-29 11:19:11 Europe/London
 REASON FOR CREATION: Utworzenie jednego kanonicznego harmonogramu rozwoju Darkstar od checkpointu fd8099e przez Ghost Gate, Headscale/Headplane, Warlock/Kali i przyszłą infrastrukturę AIONS.
 REVISION: 2026-09-03 17:49 Europe/London — sekcja stanu przepisana na pomiar żywego hosta (Claude Opus 5).
 REVISION: 2026-09-04 12:43 Europe/London — dopisano zmierzony stan dual bind i drogi telefonu do /world/ (GPT-5 Codex).
+REVISION: 2026-09-04 14:05 Europe/London — dopisano stan po uruchomieniu Headplane wyłącznie na pętli (GPT-5 Codex).
 ==========================================
 -->
 
@@ -31,10 +32,24 @@ REVISION: 2026-09-04 12:43 Europe/London — dopisano zmierzony stan dual bind i
 - ŻYWE — działa teraz i ma pomiar z żywego środowiska.
 - NIE — nie działa, nie zostało uruchomione albo nie należy jeszcze do aktywnego zakresu.
 
-## Stan na 2026-09-04 — ZMIERZONE
+## Stan na 2026-09-04 14:05 — ZMIERZONE
 
-To jest prawda dnia 2026-09-04. Sekcja rozdziela działające elementy od plików i planów,
-które jeszcze niczego nie uruchamiają. Dowód dual bind i końcowy pomiar ośmiu bramek jest
+To jest najnowsza prawda dnia. Zastępuje wcześniejsze wiersze dotyczące Headplane i wejścia
+`/world/`, ale nie kasuje pomiaru sprzed uruchomienia panelu. Dowód runtime jest zapisany w
+`docs/operations/evidence/2026-09-04-network-done.md`, commit `c04a161`.
+
+| Obszar | Stan | Dowód zmierzony 2026-09-04 |
+|---|---|---|
+| Headplane | ŻYWE — TYLKO PĘTLA | Kontener jest `healthy` i słucha wyłącznie na `127.0.0.1:3000`; Windows używa tunelu `127.0.0.1:3001 -> 127.0.0.1:3000`, a `/admin` odpowiada HTTP 302. Panel nie jest osadzony ani wystawiony przez `/world/`. |
+| `/world/` | ŻYWE | `http://192.168.2.1:18080/world/` odpowiada HTTP 200 z telefonu przez prywatną drogę. |
+| Kafelki live | NIE | Powłoka działa, ale kafelki nadal nie odczytują żywych stanów usług. |
+| Tailscale SaaS | ŻYWE OBOK — NIE ODCIĘTE | Komercyjny control plane pozostaje fallbackiem obok własnego Headscale; M8 nie zostało wykonane. |
+| Warlock | NIE — ZAKAZANY W TEJ FAZIE | Nie uruchomiono, nie skonfigurowano i nie włączono żadnego hosta ani komponentu Warlock/Kali. |
+
+## Historia — stan na 2026-09-04 przed Headplane — ZMIERZONE
+
+To był wcześniejszy pomiar dnia 2026-09-04. Sekcja rozdzielała działające elementy od plików
+i planów, które jeszcze niczego nie uruchamiały. Dowód dual bind i pomiar ośmiu bramek jest
 w `docs/operations/evidence/2026-09-04-network-done.md`, commit `b318433`.
 
 | Obszar | Stan | Dowód zmierzony 2026-09-04 |
