@@ -1,3 +1,8 @@
+// darkstar-header-v1
+// po co: world_http.rs
+// nie wolno: hotspot, ruszac wlp2s0, wracac do 10.44, gasic DARKSTAR-WiFi, haslo w gicie
+// autor: Marcin
+// powstal: 2026-09-04
 // THIS IS VERY IMPORTANT!!!
 // ==========================================
 // AUTHOR: M. SZUL
@@ -124,6 +129,24 @@ async fn blocking_probes_do_not_starve_the_request_executor() {
     let json = body_json(response).await;
     assert_eq!(json["services"]["darkstar"]["state"], "up");
     assert_eq!(json["services"]["headscale"]["state"], "up");
+}
+
+#[test]
+fn headplane_probe_target_is_pinned_to_loopback_never_all_interfaces() {
+    // Task 14, Step 14.10: bramka uprawnien. main.rs wiaze sonde Headplane na sztywno,
+    // nie ze zmiennej srodowiskowej (w przeciwienstwie do Darkstar i Headscale powyzej
+    // w tym samym pliku) - wiec zaden blad konfiguracji hosta nie moze jej przesunac.
+    // Ten test pilnuje tego samego literalu, ktorego uzywa `state()` powyzej.
+    let main_rs = include_str!("../src/main.rs");
+    assert!(
+        main_rs.contains("\"127.0.0.1:3000\""),
+        "headplane probe target must stay pinned to loopback 127.0.0.1:3000 in main.rs"
+    );
+    assert!(
+        !main_rs.contains("0.0.0.0:3000") && !main_rs.contains("\"0.0.0.0\", \"3000\""),
+        "headplane probe target must never become 0.0.0.0 - that would claim to check \
+         a listener reachable from the upstream Vodafone segment"
+    );
 }
 
 #[tokio::test]
