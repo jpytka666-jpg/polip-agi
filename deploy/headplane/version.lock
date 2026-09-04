@@ -1,0 +1,146 @@
+# darkstar-header-v1
+# po co: version.lock
+# nie wolno: hotspot, ruszac wlp2s0, wracac do 10.44, gasic DARKSTAR-WiFi, haslo w gicie
+# autor: Marcin
+# powstal: 2026-09-04
+# THIS IS VERY IMPORTANT!!!
+# ==========================================
+# AUTHOR: M. SZUL
+# AI MODEL: Claude Opus 5
+# TIMESTAMP: 2026-09-04 00:45:00
+# REASON FOR CREATION: Przypiecie niezmiennej wersji Headplane (panel WWW dla Headscale) - Task 14, Step 14.1 i 14.2.
+# MECHANICS: Zapis tagu wydania, skrotu commita, skrotow obrazu OCI i macierzy zgodnosci z Headscale,
+#            odczytanych 2026-09-04 z GitHub API (tale/headplane) oraz z rejestru ghcr.io.
+#            Nic z tego nie jest instalowane - plik ustala, CO wolno zainstalowac, gdy przyjdzie na to pora.
+# SYSTEM PART: deploy/headplane - panel administracyjny prywatnego mesh.
+# ARCHITECTURE FUNCTION: Headplane to WYLACZNIE interfejs uzytkownika nad Headscale. Nie jest organem
+#            polityki, nie podejmuje decyzji sieciowych i nie moze byc dostepny spoza sieci Darkstar.
+# DEPENDENCIES/LINKS: deploy/headscale/version.lock (Headscale v0.29.3), deploy/headplane/compose.yml,
+#            deploy/headplane/config.yaml.example, deploy/headplane/README.md, brama 192.168.2.1.
+# TECH STACK: plik tekstowy klucz=wartosc - identyczna konwencja jak deploy/headscale/version.lock,
+#            czytelny dla czlowieka i dla skryptu weryfikujacego.
+# LOCAL WORKSPACE: D:\codex-fresh-2026-08-28\worktrees\polip-agi-darkstar-plan
+# GIT COMMIT: PENDING
+# GITHUB METADATA: jpytka666-jpg/polip-agi, branch docs/darkstar-headscale-hotspot-plan
+# ==========================================
+
+upstream_repository = https://github.com/tale/headplane
+upstream_website    = https://headplane.net
+license             = MIT
+license_holder      = Aarnav Tale (Copyright (c) 2024)
+license_verified    = LICENSE @ refs/tags/v0.7.1
+
+release_tag         = v0.7.1
+release_published   = 2026-08-28T00:15:27Z
+tag_object_sha      = dde4395a6bb7a07c38896002781389282f2e0d85
+commit_sha          = 30c842ed8dbf011e78596e3a474133ec4069ba79
+tag_signature       = ssh-ed25519, verified=true, tagger Aarnav Tale
+verified_at         = 2026-09-04
+verified_via        = GitHub API (list_releases + get_tag + get_file_contents) oraz ghcr.io registry v2
+
+# NIGDY "latest". Zmiana wersji to zmiana tych pol i nowy przebieg weryfikacji.
+pinning_policy      = immutable-digest
+
+# ---- Obraz kontenera -----------------------------------------------------
+# UWAGA: tag obrazu NIE ma prefiksu "v". Zmierzone przez API rejestru 2026-09-04:
+#   manifest ghcr.io/tale/headplane:0.7.1  -> HTTP 200
+#   manifest ghcr.io/tale/headplane:v0.7.1 -> HTTP 404
+container_registry       = ghcr.io
+container_image          = ghcr.io/tale/headplane
+container_image_tag      = 0.7.1
+container_image_digest   = sha256:394483fd2336ce6b15df360c3e118ddfd45eb8140fe21df9f2611077f5d79d22
+container_image_mediatype = application/vnd.oci.image.index.v1+json
+
+# To jest jedyna forma, ktora wolno wpisac do compose.yml - tag moze zostac przepiety,
+# digest nie moze. Tag obok digestu sluzy tylko czytelnosci dla czlowieka.
+container_image_ref      = ghcr.io/tale/headplane:0.7.1@sha256:394483fd2336ce6b15df360c3e118ddfd45eb8140fe21df9f2611077f5d79d22
+
+# Skroty poszczegolnych platform z indeksu wieloarchitekturowego.
+# CBMS to Intel i7-6820HQ, czyli linux/amd64 - drugi wpis dla kompletnosci.
+digest_linux_amd64       = sha256:25cc988fc123c1125b7029a351143f7f1d30eb0d4c1891673e1b70c061dd8593
+digest_linux_arm64       = sha256:b2028fa45537c37ddc04dfe1eed513922b8d5236d6d7a2af53bb6fce065dda65
+
+# Dowod, ze obraz pochodzi dokladnie z tego commita - etykiety OCI z konfiguracji
+# obrazu amd64 (blob sha256:7eb0b9b775dad9fc9a95e15139126651a8af6df17b9e0bb8b14b88fa6ca8f2e9):
+image_label_revision     = 30c842ed8dbf011e78596e3a474133ec4069ba79
+image_label_version      = 0.7.1
+image_label_source       = https://github.com/tale/headplane
+image_created            = 2026-08-28T00:11:59Z
+
+# Uzytkownik w obrazie - odczytane z konfiguracji obrazu, nie zgadniete.
+# Obraz koncowy to gcr.io/distroless/nodejs24-debian13, bez dyrektywy USER.
+image_runs_as_uid        = 0
+image_entrypoint         = /app/build/server/index.js (node, distroless)
+image_healthcheck        = /bin/hp_healthcheck (wbudowany w obraz, zero konfiguracji)
+image_has_shell          = no (/bin/sh i /bin/bash to atrapy odsylajace do obrazu debug)
+
+# ---- Zgodnosc z Headscale ------------------------------------------------
+# Cel na hoscie CBMS: Headscale v0.29.3 (deploy/headscale/version.lock, kontener dziala).
+headscale_minimum         = 0.27.0
+headscale_minimum_source  = docs/install/docker.md @ v0.7.1 - "Headscale version 0.27.0 or later"
+headscale_upstream_ci     = 0.27.0, 0.27.1, 0.28.0, 0.29.0, 0.29.1
+headscale_upstream_ci_src = tests/integration/setup/env.ts @ v0.7.1 (stala HS_VERSIONS)
+headscale_upstream_compose = 0.29.2 (compose.yaml w repozytorium upstream)
+headscale_target_host     = 0.29.3
+
+# Werdykt - rozdzielony na fakt i wniosek, bo to nie to samo:
+# FAKT 1: 0.29.3 spelnia minimum 0.27.0 upstreamu.
+# FAKT 2: 0.29.3 NIE wystepuje w macierzy testow integracyjnych upstreamu (konczy sie na 0.29.1).
+# FAKT 3: od 0.7.0 wykrywanie mozliwosci Headscale idzie przez endpoint /version i porownanie
+#         "wieksze lub rowne" (app/server/headscale/api/capabilities.ts), wiec 0.29.3 dostaje
+#         ten sam zestaw mozliwosci co 0.29.0.
+# FAKT 4: przegladarkowe SSH jest zepsute na 0.29.0-beta do 0.29.1 wlacznie; upstream wymaga
+#         0.28.x albo 0.29.2+ (docs/features/ssh.md). 0.29.3 jest po tej poprawce.
+# WNIOSEK: para Headplane 0.7.1 + Headscale 0.29.3 jest zgodna wedlug regul upstreamu.
+# NIEZWERYFIKOWANE: upstream nigdzie nie stwierdza wprost "0.29.3". Potwierdzenie przebiegiem
+#         nastapi dopiero przy Step 14.6, nie wczesniej.
+headscale_0_29_3_status   = zgodne-wedlug-regul-upstreamu / niepotwierdzone-przebiegiem
+
+# ---- Adresy nasluchu - wiazace ------------------------------------------
+# Identyczne z deploy/headscale/README.md. Panel administracyjny nie ma slabszej zasady.
+bind_allowed             = 127.0.0.1, 192.168.2.1
+bind_forbidden           = 0.0.0.0, ::, dowolny adres z 192.168.1.0/24, 10.44.0.0/24
+bind_rationale           = nasluch na adresie nieokreslonym wystawilby panel administracyjny takze
+                           na wlp2s0, czyli do segmentu nadrzednego Vodafone
+
+# ---- Port - zmierzony, nie wybrany z sufitu ------------------------------
+# ssh -o BatchMode=yes owner@100.64.0.2 -> ss -lnt, 2026-09-04 00:33 UTC, host CBMS:
+#   192.168.2.1:8080  -> Headscale (zajete, nie ruszac)
+#   127.0.0.1:18080   -> kontener darkstar (zajete, nie ruszac)
+#   :3000             -> BRAK wpisu, port wolny
+port_headplane           = 3000
+port_measured_free_at    = 2026-09-04T00:33:12Z
+port_conflicts           = brak
+
+# ---- Sekrety -------------------------------------------------------------
+# Zadnego z tych plikow nie ma w repozytorium i nigdy nie bedzie.
+secret_cookie            = /etc/darkstar/headplane/cookie_secret (root:root 0600, 32 znaki)
+secret_headscale_api_key = /etc/darkstar/headplane/headscale_api_key (root:root 0600)
+secret_delivery          = docker compose secrets -> /run/secrets/..., odczyt przez pola *_path
+secret_forbidden         = wartosc w obrazie, wartosc w config.yaml w repo, wartosc w compose
+
+# ---- Procedura aktualizacji ---------------------------------------------
+# 1. Odczytaj nowe wydanie: GitHub API /repos/tale/headplane/releases.
+# 2. Sprawdz w informacjach o wydaniu wymagane minimum Headscale oraz stala HS_VERSIONS
+#    w tests/integration/setup/env.ts nowego tagu. Jesli minimum przekracza wersje Headscale
+#    dzialajaca na hoscie - STOP. Najpierw mesh, dopiero potem panel.
+# 3. Pobierz digest indeksu: token ghcr.io, nastepnie HEAD /v2/tale/headplane/manifests/<tag>
+#    i naglowek docker-content-digest.
+# 4. Potwierdz, ze etykieta org.opencontainers.image.revision obrazu rowna sie commitowi tagu.
+# 5. Zaktualizuj ten plik i compose.yml w jednym commicie. Nigdy tylko jedno z dwojga.
+# 6. Uruchom deploy/headplane/verify przed i po. Zapisz oba wyniki.
+
+# ---- Procedura wycofania -------------------------------------------------
+# 1. Odczytaj poprzedni container_image_ref z historii gita: git log -p deploy/headplane/version.lock
+# 2. Zatrzymaj sam panel: docker compose -f deploy/headplane/compose.yml down
+#    (to nie dotyka kontenera darkstar-headscale ani jego wolumenow)
+# 3. Przywroc compose.yml i version.lock z poprzedniego commita, uruchom panel ponownie.
+# 4. Katalog danych panelu przezywa wycofanie. Jesli nowsza wersja zmigrowala baze panelu,
+#    wycofanie wymaga kopii wolumenu sprzed aktualizacji - zrob ja PRZED krokiem 5 aktualizacji.
+# 5. Headscale nie jest w tej procedurze ruszany w zaden sposob. Panel jest wymienny, mesh nie.
+rollback_touches_headscale = no
+
+# ---- Stan na hoscie CBMS, zmierzony 2026-09-04 --------------------------
+installed_on_host        = no
+container_present        = no
+deployed_by_this_commit  = no

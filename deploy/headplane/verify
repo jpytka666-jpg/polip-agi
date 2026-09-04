@@ -1,0 +1,152 @@
+#!/bin/sh
+# darkstar-header-v1
+# po co: verify
+# nie wolno: hotspot, ruszac wlp2s0, wracac do 10.44, gasic DARKSTAR-WiFi, haslo w gicie
+# autor: Marcin
+# powstal: 2026-09-04
+# THIS IS VERY IMPORTANT!!!
+# ==========================================
+# AUTHOR: M. SZUL
+# AI MODEL: Claude Opus 5
+# TIMESTAMP: 2026-09-04 01:10:00
+# REASON FOR CREATION: Weryfikacja przypiecia Headplane i prywatnosci nasluchu (Task 14, Step 14.2;
+#            rozszerzenie o sprawdzenia dzialajacego kontenera nalezy do Step 14.6).
+# MECHANICS: Wylacznie odczyt. Najpierw sprawdza pliki w repozytorium - digest zamiast "latest",
+#            brak 0.0.0.0, brak sekretu w repo. Potem, jesli kontener istnieje, porownuje digest
+#            obrazu z version.lock i sprawdza adres nasluchu widziany z hosta.
+# SYSTEM PART: deploy/headplane - panel administracyjny prywatnego mesh.
+# ARCHITECTURE FUNCTION: bramka wejscia dla Step 14.5 i 14.6; nigdy nie zmienia stanu.
+# DEPENDENCIES/LINKS: version.lock, compose.yml, config.yaml.example, docker, ss.
+# TECH STACK: POSIX sh - tak samo jak deploy/headscale/verify, zero zaleznosci runtime.
+# LOCAL WORKSPACE: D:\codex-fresh-2026-08-28\worktrees\polip-agi-darkstar-plan
+# GIT COMMIT: PENDING
+# GITHUB METADATA: jpytka666-jpg/polip-agi, branch docs/darkstar-headscale-hotspot-plan
+# ==========================================
+
+set -eu
+
+HEADPLANE_CONTAINER="${HEADPLANE_CONTAINER:-darkstar-headplane}"
+HEADPLANE_PORT="${HEADPLANE_PORT:-3000}"
+DIR="$(cd "$(dirname "$0")" && pwd)"
+
+FAILED=0
+
+emit() {
+    printf '%s: %s\n' "$1" "$2"
+}
+
+note_fail() {
+    emit "FAIL" "$1"
+    FAILED=1
+}
+
+# --- Czesc 1: pliki w repozytorium. Dziala takze wtedy, gdy nic nie jest wdrozone. ---
+
+for f in version.lock compose.yml config.yaml.example README.md; do
+    if [ ! -f "$DIR/$f" ]; then
+        note_fail "Brakuje pliku $f"
+    fi
+done
+
+# 1. Zakaz ruchomego tagu.
+if grep -n ':latest' "$DIR/compose.yml" >/dev/null 2>&1; then
+    note_fail "compose.yml uzywa taga latest - przypiecie ma byc niezmienne"
+else
+    emit "PASS" "compose.yml nie uzywa taga latest"
+fi
+
+# 2. Obraz przypiety digestem, zgodnym z version.lock.
+LOCK_DIGEST=$(sed -n 's/^container_image_digest *= *//p' "$DIR/version.lock" | tr -d ' \r')
+if [ -z "$LOCK_DIGEST" ]; then
+    note_fail "version.lock nie podaje container_image_digest"
+elif grep -F "$LOCK_DIGEST" "$DIR/compose.yml" >/dev/null 2>&1; then
+    emit "PASS" "compose.yml wskazuje obraz digestem z version.lock ($LOCK_DIGEST)"
+else
+    note_fail "compose.yml nie wskazuje digestu z version.lock"
+fi
+
+# 3. Adres nasluchu. Zakazane jest 0.0.0.0 i adres nieokreslony w IPv6.
+if grep -n '0\.0\.0\.0' "$DIR/compose.yml" "$DIR/config.yaml.example" 2>/dev/null | grep -v '^[^:]*:[0-9]*: *#' >/dev/null 2>&1; then
+    note_fail "0.0.0.0 wystepuje poza komentarzem - panel nie moze byc publiczny"
+else
+    emit "PASS" "brak 0.0.0.0 w konfiguracji panelu (poza komentarzami wyjasniajacymi zakaz)"
+fi
+
+for f in compose.yml config.yaml.example; do
+    if grep -nE '(HEADPLANE_SERVER__HOST|^ *host):.*"?(127\.0\.0\.1|192\.168\.2\.1)"?' "$DIR/$f" >/dev/null 2>&1; then
+        emit "PASS" "$f wiaze nasluch z adresem prywatnym"
+    else
+        note_fail "$f nie ustawia nasluchu na 127.0.0.1 ani 192.168.2.1"
+    fi
+done
+
+# 4. Sekrety wylacznie przez sciezki. Zadnej wartosci w repozytorium.
+if grep -nE '^[^#]*(cookie_secret|api_key|client_secret) *:' "$DIR/config.yaml.example" >/dev/null 2>&1; then
+    note_fail "config.yaml.example zawiera pole sekretu z wartoscia zamiast sciezki *_path"
+else
+    emit "PASS" "config.yaml.example podaje sekrety wylacznie jako sciezki"
+fi
+
+if [ -f "$DIR/config.yaml" ]; then
+    emit "WARN" "istnieje config.yaml - to plik hosta, upewnij sie ze NIE jest sledzony przez gita"
+fi
+
+# --- Czesc 2: stan na hoscie. Brak kontenera to jeszcze nie blad. ---
+
+if ! command -v docker >/dev/null 2>&1; then
+    emit "WARN" "brak polecenia docker - pomijam sprawdzenia kontenera"
+    printf '\n%s\n' "darkstar-headplane: weryfikacja plikow zakonczona"
+    [ "$FAILED" -eq 0 ] || exit 1
+    exit 0
+fi
+
+if ! docker ps --format '{{.Names}}' 2>/dev/null | grep -q "^${HEADPLANE_CONTAINER}\$"; then
+    emit "INFO" "kontener $HEADPLANE_CONTAINER nie dziala - Step 14.5 jeszcze przed nami"
+    printf '\n%s\n' "darkstar-headplane: weryfikacja plikow zakonczona"
+    [ "$FAILED" -eq 0 ] || exit 1
+    exit 0
+fi
+
+emit "PASS" "kontener $HEADPLANE_CONTAINER dziala"
+
+# 5. Czy dziala dokladnie ten obraz, ktory jest przypiety.
+RUNNING_DIGEST=$(docker inspect "$HEADPLANE_CONTAINER" --format '{{index .Image}}' 2>/dev/null || echo '')
+RUNNING_REF=$(docker inspect "$HEADPLANE_CONTAINER" --format '{{range .RepoDigests}}{{.}} {{end}}' 2>/dev/null || echo '')
+if [ -n "$LOCK_DIGEST" ] && printf '%s %s' "$RUNNING_DIGEST" "$RUNNING_REF" | grep -F "$LOCK_DIGEST" >/dev/null 2>&1; then
+    emit "PASS" "dzialajacy obraz zgadza sie z digestem z version.lock"
+else
+    emit "WARN" "nie potwierdzono digestu dzialajacego obrazu - sprawdz recznie: docker inspect $HEADPLANE_CONTAINER"
+fi
+
+# 6. Adres nasluchu widziany z hosta. Kontener jest distroless - nie ma w nim ss ani powloki,
+#    wiec patrzymy wylacznie z hosta.
+if command -v ss >/dev/null 2>&1; then
+    LISTEN=$(ss -lnt 2>/dev/null | awk -v p=":$HEADPLANE_PORT" '$4 ~ p"$" {print $4}')
+    if [ -z "$LISTEN" ]; then
+        emit "WARN" "nikt nie nasluchuje na porcie $HEADPLANE_PORT"
+    else
+        for addr in $LISTEN; do
+            case "$addr" in
+                127.0.0.1:*|192.168.2.1:*)
+                    emit "PASS" "nasluch na adresie prywatnym: $addr"
+                    ;;
+                *)
+                    note_fail "nasluch na niedozwolonym adresie: $addr"
+                    ;;
+            esac
+        done
+    fi
+else
+    emit "WARN" "brak polecenia ss - nie moge sprawdzic adresu nasluchu"
+fi
+
+# 7. Sekret nie moze wyciekac do logow kontenera.
+if docker logs --tail 500 "$HEADPLANE_CONTAINER" 2>&1 | grep -qE 'hskey-|api_key["=: ]+[A-Za-z0-9_-]{16,}'; then
+    note_fail "w logach kontenera widac cos, co wyglada na klucz - zbadaj to zanim pojdziesz dalej"
+else
+    emit "PASS" "brak sladu klucza w ostatnich 500 wierszach logow"
+fi
+
+printf '\n%s\n' "darkstar-headplane: weryfikacja zakonczona (wylacznie odczyt)"
+[ "$FAILED" -eq 0 ] || exit 1
+exit 0

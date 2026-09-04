@@ -1,0 +1,115 @@
+# darkstar-header-v1
+# po co: config.yaml.example
+# nie wolno: hotspot, ruszac wlp2s0, wracac do 10.44, gasic DARKSTAR-WiFi, haslo w gicie
+# autor: Marcin
+# powstal: 2026-09-04
+# THIS IS VERY IMPORTANT!!!
+# ==========================================
+# AUTHOR: M. SZUL
+# AI MODEL: Claude Opus 5
+# TIMESTAMP: 2026-09-04 00:55:00
+# REASON FOR CREATION: Wzorzec konfiguracji Headplane 0.7.1 dla prywatnego mesh Darkstar (Task 14, Step 14.2).
+#            Rzeczywisty config.yaml powstaje z tego pliku na hoscie i NIE wchodzi do repozytorium.
+# MECHANICS: Ustawia adres nasluchu, adres Headscale, sciezki do sekretow i wylacza wszystkie
+#            integracje podnoszace uprawnienia. Klucze zgodne z config.example.yaml @ tag v0.7.1.
+# SYSTEM PART: deploy/headplane - panel administracyjny prywatnego mesh.
+# ARCHITECTURE FUNCTION: najmniejszy zestaw uprawnien, ktory pozwala panelowi czytac Headscale
+#            i pokazywac stan mesh. Zadnej wladzy nad polityka, zadnego gniazda dockera.
+# DEPENDENCIES/LINKS: compose.yml, version.lock, kontener darkstar-headscale na 192.168.2.1:8080,
+#            /etc/darkstar/headplane/cookie_secret, /etc/darkstar/headplane/headscale_api_key.
+# TECH STACK: YAML - format wymagany przez Headplane; sciezka w kontenerze /etc/headplane/config.yaml.
+# LOCAL WORKSPACE: D:\codex-fresh-2026-08-28\worktrees\polip-agi-darkstar-plan
+# GIT COMMIT: PENDING
+# GITHUB METADATA: jpytka666-jpg/polip-agi, branch docs/darkstar-headscale-hotspot-plan
+# ==========================================
+#
+# W TYM PLIKU SA WYLACZNIE ATRAPY. Zadnej prawdziwej wartosci sekretu tu nie ma i nie bedzie.
+
+server:
+  # ---- ADRES NASLUCHU ----------------------------------------------------
+  # Dozwolone dokladnie dwie wartosci:
+  #   127.0.0.1   - panel wylacznie z samego hosta CBMS (domyslna, najostrzejsza)
+  #   192.168.2.1 - panel takze dla klientow sieci Darkstar 192.168.2.0/24
+  # ZAKAZANE: 0.0.0.0, ::, dowolny adres z 192.168.1.0/24 (segment nadrzedny Vodafone).
+  # Uwaga: compose.yml wymusza ten sam adres zmienna HEADPLANE_SERVER__HOST, a zmienne maja
+  # pierwszenstwo nad tym plikiem. Obie wartosci trzymaj zgodne, zeby nikt sie nie pogubil.
+  host: "127.0.0.1"
+
+  # Port zmierzony jako wolny na CBMS 2026-09-04 (ss -lnt: brak wpisu :3000).
+  port: 3000
+
+  # Adres bazowy panelu. Musi odpowiadac temu, pod czym panel jest realnie otwierany,
+  # bez koncowki /admin. Przy nasluchu na 192.168.2.1 zmien na http://192.168.2.1:3000
+  base_url: "http://127.0.0.1:3000"
+
+  # Sekret sesji WWW. NIGDY wartosc w tym pliku - wylacznie sciezka do pliku.
+  # compose.yml podstawia tu docker secret z /etc/darkstar/headplane/cookie_secret.
+  cookie_secret_path: "/run/secrets/headplane_cookie_secret"
+
+  # Ruch idzie po HTTP w obrebie sieci prywatnej, bez TLS - ciasteczko z flaga Secure
+  # nie zostaloby odeslane i logowanie by nie dzialalo. Gdy przy Step 14.5 stanie TLS
+  # (server.tls_cert_path + server.tls_key_path), ta flaga i tak zostanie wymuszona na true.
+  cookie_secure: false
+
+  cookie_max_age: 86400
+
+  # Katalog danych panelu - montowany jako wolumen headplane_data w compose.yml.
+  data_path: "/var/lib/headplane"
+
+  # info_secret celowo NIE jest ustawiony. Bez niego endpoint /api/info jest wylaczony,
+  # a to on wystawia wersje Headplane i Headscale. Mniej informacji dla nieproszonego gościa.
+
+headscale:
+  # Zmierzone 2026-09-04: kontener darkstar-headscale nasluchuje na 192.168.2.1:8080.
+  # To jest endpoint HTTP, nie gRPC.
+  url: "http://192.168.2.1:8080"
+
+  # Konfiguracja Headscale montowana TYLKO DO ODCZYTU (compose.yml). Panel pokaze ustawienia
+  # mesh, ale nie bedzie mogl ich zmienic - i o to chodzi.
+  config_path: "/etc/headscale/config.yaml"
+
+  # Klucz API Headscale. NIGDY wartosc w tym pliku - wylacznie sciezka.
+  # Klucz wytwarza sie na hoscie:
+  #   docker exec darkstar-headscale headscale apikeys create --expiration 90d
+  # i zapisuje do /etc/darkstar/headplane/headscale_api_key (root:root 0600).
+  api_key_path: "/run/secrets/headplane_headscale_api_key"
+
+integration:
+  # Agent panelu doklada informacje o wezlach, ale zeby to zrobic, sam wchodzi do mesh
+  # jako dodatkowy wezel i tworzy klucze rejestracyjne. Przy pierwszym uruchomieniu: WYLACZONY.
+  agent:
+    enabled: false
+
+  # WYLACZONE SWIADOMIE. Ta integracja wymaga /var/run/docker.sock, czyli rownowaznika
+  # roota na hoscie bramy. Panel WWW osiagalny z sieci klienckiej go nie dostanie.
+  # Kosztem jest brak edycji DNS i ustawien Headscale z UI. To wybor, nie przeoczenie.
+  docker:
+    enabled: false
+
+  kubernetes:
+    enabled: false
+
+  proc:
+    enabled: false
+
+# ---- Logowanie do panelu -------------------------------------------------
+# Model uwierzytelniania Headplane 0.7.1 ma trzy drogi:
+#   1) klucz API Headscale wklejany w formularzu logowania - dziala bez zadnej dodatkowej
+#      konfiguracji i jest droga na pierwsze uruchomienie;
+#   2) OIDC (sekcja ponizej) - dopiero gdy w sieci Darkstar stanie wlasny dostawca tozsamosci;
+#   3) server.proxy_auth - uwierzytelnianie przed panelem, na zaufanym posredniku.
+# Pierwszy zalogowany uzytkownik dostaje role wlasciciela.
+#
+# OIDC jest tu zostawione jako komentarz z atrapami. Wlaczac dopiero przy Step 14.5,
+# i wtedy sekret podac WYLACZNIE przez client_secret_path.
+#
+# oidc:
+#   enabled: true
+#   issuer: "https://idp.example.invalid"
+#   client_id: "PLACEHOLDER_CLIENT_ID"
+#   client_secret_path: "/run/secrets/headplane_oidc_client_secret"
+#   use_pkce: true
+#   default_role: "viewer"
+#   # Odcina logowanie kluczem API, gdy OIDC juz dziala. Nie wlaczaj, zanim OIDC nie zadziala,
+#   # bo zostaniesz bez jakiejkolwiek drogi do panelu.
+#   disable_api_key_login: false

@@ -1,0 +1,124 @@
+#!/usr/bin/env docker-compose
+# darkstar-header-v1
+# po co: compose.yml
+# nie wolno: hotspot, ruszac wlp2s0, wracac do 10.44, gasic DARKSTAR-WiFi, haslo w gicie
+# autor: Marcin
+# powstal: 2026-09-04
+# THIS IS VERY IMPORTANT!!!
+# ==========================================
+# AUTHOR: M. SZUL
+# AI MODEL: Claude Opus 5
+# TIMESTAMP: 2026-09-04 00:50:00
+# REASON FOR CREATION: Definicja kontenera Headplane 0.7.1 - panelu WWW dla Headscale (Task 14, Step 14.2).
+#            Plik JEST przypieciem wykonawczym: obraz wskazany przez digest z version.lock.
+# MECHANICS: Kontener w sieci hosta, nasluch wymuszony na 127.0.0.1:3000 przez zmienne srodowiskowe,
+#            konfiguracja i konfiguracja Headscale montowane tylko do odczytu, sekrety wstrzykiwane
+#            jako docker secrets z plikow czytelnych wylacznie dla roota.
+# SYSTEM PART: deploy/headplane - panel administracyjny prywatnego mesh.
+# ARCHITECTURE FUNCTION: interfejs uzytkownika nad Headscale. Nie jest organem polityki i nie ma
+#            prawa byc widoczny poza 127.0.0.1 oraz 192.168.2.0/24.
+# DEPENDENCIES/LINKS: version.lock (tag 0.7.1, commit 30c842ed8dbf011e78596e3a474133ec4069ba79),
+#            config.yaml.example, kontener darkstar-headscale na 192.168.2.1:8080,
+#            /etc/darkstar/headplane/* (sekrety, poza repozytorium), darkstar_host_guard.
+# TECH STACK: Docker Compose YAML - identyczna konwencja jak deploy/headscale/compose.yml.
+# LOCAL WORKSPACE: D:\codex-fresh-2026-08-28\worktrees\polip-agi-darkstar-plan
+# GIT COMMIT: PENDING
+# GITHUB METADATA: jpytka666-jpg/polip-agi, branch docs/darkstar-headscale-hotspot-plan
+# ==========================================
+#
+# NIC TU JESZCZE NIE ZOSTALO URUCHOMIONE. Ten plik opisuje, co wolno uruchomic przy Step 14.5.
+
+services:
+  headplane:
+    # Przypiecie przez digest, nie przez tag. Tag stoi obok wylacznie dla czytelnosci -
+    # gdyby ktos przepial 0.7.1 na inna zawartosc, docker odmowi startu, bo digest sie nie zgodzi.
+    # Zrodlo: deploy/headplane/version.lock, pole container_image_ref.
+    image: ghcr.io/tale/headplane:0.7.1@sha256:394483fd2336ce6b15df360c3e118ddfd45eb8140fe21df9f2611077f5d79d22
+    container_name: darkstar-headplane
+    restart: unless-stopped
+
+    # Siec hosta, dokladnie z tego samego powodu co w deploy/headscale/compose.yml:
+    # ten host jest brama domowa. Wlasna siec dockerowa dolozylaby mostek i reguly
+    # przekierowania do zywej maszyny routujacej. network_mode: host nie dodaje ANI
+    # JEDNEJ reguly - o nasluchu decyduje wylacznie adres ustawiony ponizej.
+    network_mode: host
+
+    environment:
+      # ---- NASLUCH - to jest miejsce, w ktorym zapada decyzja o ekspozycji ----
+      # Zmienne srodowiskowe sa scalane PO pliku konfiguracyjnym i maja nad nim pierwszenstwo
+      # (docs/configuration/index.md @ v0.7.1), wiec adres nasluchu jest tu wymuszony nawet
+      # wtedy, gdy ktos podmieni config.yaml na hoscie.
+      #
+      # 0.0.0.0 JEST ZAKAZANE. Przy sieci hosta wystawiloby panel administracyjny takze na
+      # wlp2s0, czyli do segmentu nadrzednego Vodafone. Dozwolone sa dokladnie dwie wartosci:
+      #   127.0.0.1   - panel tylko z samego hosta (wartosc domyslna, najostrzejsza)
+      #   192.168.2.1 - panel takze dla klientow sieci Darkstar 192.168.2.0/24
+      HEADPLANE_LOAD_ENV_OVERRIDES: "true"
+      HEADPLANE_SERVER__HOST: "127.0.0.1"
+      HEADPLANE_SERVER__PORT: "3000"
+
+      # Uwaga: wlaczenie nadpisan sprawia, ze Headplane wczytuje takze plik .env obok
+      # katalogu roboczego. W tym katalogu .env NIE ISTNIEJE i nie wolno go tworzyc -
+      # sekrety ida wylacznie sciezka /run/secrets ponizej.
+
+    volumes:
+      # Konfiguracja panelu - tylko do odczytu. Powstaje na hoscie z config.yaml.example.
+      - ./config.yaml:/etc/headplane/config.yaml:ro
+
+      # Konfiguracja Headscale - tylko do odczytu. Dzieki temu panel POKAZUJE ustawienia mesh,
+      # ale nie moze ich zmienic. To jest celowe: Headplane nie jest organem polityki (Step 14.7).
+      - ../headscale/config.yaml:/etc/headscale/config.yaml:ro
+
+      # Dane wlasne panelu (baza sesji, cache). Musi byc trwale i zapisywalne.
+      - headplane_data:/var/lib/headplane
+
+      # CELOWO BRAK /var/run/docker.sock. Gniazdo dockera to rownowaznik roota na hoscie;
+      # panel WWW dostepny z sieci klienckiej nie moze go dostac. Kosztem jest brak edycji
+      # DNS i ustawien Headscale z poziomu UI - to swiadomy wybor, nie przeoczenie.
+
+    secrets:
+      - headplane_cookie_secret
+      - headplane_headscale_api_key
+
+    # Sekrety trafiaja do /run/secrets/<nazwa> wewnatrz kontenera. Konfiguracja czyta je
+    # polami cookie_secret_path i headscale.api_key_path - wartosc nigdy nie wchodzi do obrazu,
+    # do repozytorium ani do odpowiedzi HTTP wysylanej do przegladarki.
+
+    # Obraz jest distroless i startuje jako uid 0 (zmierzone: konfiguracja obrazu, pole User).
+    # Skoro i tak nie ma powloki, warto odebrac mu wszystko, czego nie potrzebuje.
+    read_only: true
+    tmpfs:
+      # Headplane zapisuje tu adres nasluchu dla wbudowanego healthchecku
+      # (zmienna HEADPLANE_LISTEN_FILE=/tmp/headplane-listen ustawiona w obrazie).
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+    # Healthcheck wbudowany w obraz, zero konfiguracji - sam odczytuje adres nasluchu.
+    healthcheck:
+      test: ["CMD", "/bin/hp_healthcheck"]
+      interval: 30s
+      timeout: 5s
+      start_period: 5s
+      retries: 3
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+# Sekrety z plikow na hoscie. Pliki maja nalezec do roota i miec prawa 0600.
+# NIE MA ICH W REPOZYTORIUM i nigdy nie bedzie. Sposob wytworzenia: README.md.
+secrets:
+  headplane_cookie_secret:
+    file: /etc/darkstar/headplane/cookie_secret
+  headplane_headscale_api_key:
+    file: /etc/darkstar/headplane/headscale_api_key
+
+# Zwykly wolumen dockerowy zamiast katalogu hosta - ten sam powod co przy Headscale:
+# zalozenie katalogu pod /var/lib wymagaloby roota, a docker robi to sam i przezywa restart.
+volumes:
+  headplane_data:
