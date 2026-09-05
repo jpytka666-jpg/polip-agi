@@ -39,3 +39,8 @@ path = "src/bin/recall_find.rs"
 [[bin]]
 name = "reflex-store"
 path = "src/bin/reflex_store.rs"
+
+# Wszczepia rdzeniowi zrozumienie znaczen - wektory znakow z modelu, ktory je zna.
+[[bin]]
+name = "implant"
+path = "src/bin/implant.rs"
