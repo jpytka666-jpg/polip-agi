@@ -22,3 +22,8 @@ path = "src/main.rs"
 [[bin]]
 name = "noworodek-embed"
 path = "src/bin/noworodek_embed.rs"
+
+# Pokazuje, czego warstwy nauczyly sie same - domyka petle wpisywania.
+[[bin]]
+name = "nwrd-diff"
+path = "src/bin/nwrd_diff.rs"
