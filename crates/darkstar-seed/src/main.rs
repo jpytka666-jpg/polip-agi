@@ -48,6 +48,11 @@ use std::{
 
 const MAGIC: &[u8; 4] = b"NWRD";
 const TARGET: &str = "model.lm_head.weight";
+/// Nazwa rubryki wyjsciowej. Musi zgadzac sie co do znaku z tym, czego szuka model -
+/// literowka nie da bledu, tylko ciche zignorowanie calej wpisanej wiedzy.
+const BIAS_NAME: &str = "model.lm_head.bias";
+/// Tablica wektorow wejsciowych - po jednym na symbol.
+const EMBED_NAME: &str = "model.embeddings.token.weight";
 
 /// Najwiekszy dopuszczalny mnoznik wiersza (i najmniejszy, jako jego odwrotnosc).
 ///
@@ -94,6 +99,44 @@ fn main() {
     };
     println!("wczytano {} log-czestosci", log_freq.len());
 
+    // Tryb wlasciwy: tabelka wchodzi jako osobna rubryka, dodawana do kazdego wyniku.
+    // Skalowanie wierszy (ponizej) bylo namiastka z czasow, gdy model tej rubryki nie mial.
+    if args.iter().any(|a| a == "--bias") {
+        seed_as_bias(&mut tensors, &log_freq);
+
+        // Pary wchodza razem z rubryka, bo to dwie warstwy tej samej wiedzy: rubryka mowi,
+        // co jest czeste, a pary - co po czym idzie. Osobno kazda z nich jest polowa odpowiedzi.
+        if let Some(pos) = args.iter().position(|a| a == "--pairs") {
+            match args.get(pos + 1) {
+                Some(corpus_path) => match read_corpus(corpus_path) {
+                    Ok(corpus) => {
+                        println!("\nkorpus              : {} symboli", corpus.len());
+                        if let Err(e) = seed_pairs(&mut tensors, &corpus, log_freq.len(), strength) {
+                            eprintln!("FAIL: pary: {e}");
+                            std::process::exit(1);
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("FAIL: nie moge odczytac korpusu {corpus_path}: {e}");
+                        std::process::exit(1);
+                    }
+                },
+                None => {
+                    eprintln!("FAIL: --pairs wymaga sciezki do korpusu .u16");
+                    std::process::exit(2);
+                }
+            }
+        }
+
+        if let Err(e) = write_nwrd(&args[2], &tensors) {
+            eprintln!("FAIL: nie moge zapisac: {e}");
+            std::process::exit(1);
+        }
+        println!("\nzapisano: {}", args[2]);
+        println!("zrodlo NIETKNIETE: {}", args[0]);
+        return;
+    }
+
     let Some(head) = tensors.iter_mut().find(|t| t.name == TARGET) else {
         eprintln!("FAIL: brak tensora {TARGET} w pliku wag");
         std::process::exit(1);
@@ -139,6 +182,160 @@ fn row_scales(log_freq: &[f32], strength: f32) -> Vec<f32> {
         .iter()
         .map(|v| ((strength * (v - mean) / sd).exp()).clamp(1.0 / MAX_SCALE, MAX_SCALE))
         .collect()
+}
+
+/// Wpisuje tabelke czestosci jako osobna rubryke wyjsciowa (`model.lm_head.bias`).
+///
+/// To jest droga wlasciwa, w odroznieniu od skalowania wierszy. Model liczy wynik jako
+/// `logit[i] = <ukryte, glowica[i]> + rubryka[i]`, a `softmax` zamienia to na rozklad. Jesli
+/// w rubryce siedzi `log p(i)`, model bez zadnej nauki startuje od rozkladu czestosci -
+/// dokladnie tego, do czego piec przebiegow treningu nie doszlo.
+///
+/// Odejmujemy srednia, bo `softmax` i tak ignoruje stala dodana do wszystkich pozycji -
+/// bez tego rubryka niosla by wielka stala, ktora niczego nie zmienia, za to psuje skale
+/// gradientow reszty sieci.
+fn seed_as_bias(tensors: &mut Vec<Tensor>, log_freq: &[f32]) {
+    let mean = log_freq.iter().sum::<f32>() / log_freq.len() as f32;
+    let values: Vec<f32> = log_freq.iter().map(|v| v - mean).collect();
+
+    let min = values.iter().copied().fold(f32::MAX, f32::min);
+    let max = values.iter().copied().fold(f32::MIN, f32::max);
+    println!("\nrubryka wyjsciowa   : {} liczb", values.len());
+    println!("zakres od/do        : {min:.4} .. {max:.4}");
+    println!("srednia po odjeciu  : {:.6}", values.iter().sum::<f32>() / values.len() as f32);
+
+    // Podmiana, nie dopisanie: powtorne uruchomienie na tym samym pliku ma dawac ten sam
+    // wynik, a nie dwie rubryki, z ktorych model zobaczylby tylko jedna.
+    if let Some(existing) = tensors.iter_mut().find(|t| t.name == BIAS_NAME) {
+        println!("(rubryka juz byla - podmieniam)");
+        existing.values = values;
+    } else {
+        tensors.push(Tensor {
+            name: BIAS_NAME.to_string(),
+            values,
+        });
+        println!("(rubryka dodana jako nowy tensor)");
+    }
+}
+
+/// Wpisuje w wagi wiedze o tym, CO PO CZYM NASTEPUJE.
+///
+/// Czestosc to jedna liczba na symbol i miesci sie w rubryce wyjsciowej. Para to zwiazek
+/// miedzy dwoma symbolami i osobnego miejsca na nia nie ma - ale jest lepsze. Model
+/// przewiduje B po A wtedy, gdy wektor WEJSCIOWY symbolu A pasuje do wektora WYJSCIOWEGO
+/// symbolu B. Wystarczy wiec dobrac wektory tak, zeby pasowaly dokladnie tam, gdzie pary
+/// wystepuja w korpusie.
+///
+/// Robimy to rzutem losowym: kazdy symbol dostaje staly, losowy kierunek, a wektor symbolu
+/// A powstaje jako suma kierunkow wszystkich jego nastepnikow. Dwa symbole o podobnych
+/// nastepnikach dostaja wtedy podobne wektory - a o to wlasnie chodzi. Lemat
+/// Johnsona-Lindenstraussa mowi, ze taki rzut zachowuje odleglosci z dokladnoscia zalezna
+/// od liczby wymiarow, wiec 128 wymiarow niesie sensowne przyblizenie zwiazkow miedzy
+/// tysiacami symboli.
+///
+/// Kierunki sa liczone z numeru symbolu, nie losowane i pamietane: ten sam symbol zawsze
+/// dostaje ten sam kierunek, wiec caly zasiew jest powtarzalny co do bitu.
+fn seed_pairs(tensors: &mut [Tensor], corpus: &[usize], vocab: usize, strength: f32) -> Result<(), String> {
+    let hidden = tensors
+        .iter()
+        .find(|t| t.name == EMBED_NAME)
+        .map(|t| t.values.len() / vocab)
+        .ok_or_else(|| format!("brak tensora {EMBED_NAME}"))?;
+
+    // Wektor wejsciowy symbolu = suma kierunkow jego NASTEPNIKOW.
+    // Wektor wyjsciowy symbolu = suma kierunkow jego POPRZEDNIKOW.
+    // Dzieki temu iloczyn <wejscie[A], wyjscie[B]> rosnie dokladnie dla par, ktore
+    // naprawde wystepuja - a to jest liczba, ktora model porownuje przy przewidywaniu.
+    let mut input = vec![0.0f32; vocab * hidden];
+    let mut output = vec![0.0f32; vocab * hidden];
+    let mut pairs = 0usize;
+
+    for window in corpus.windows(2) {
+        let (a, b) = (window[0], window[1]);
+        if a >= vocab || b >= vocab {
+            continue;
+        }
+        for dim in 0..hidden {
+            input[a * hidden + dim] += direction(b, dim);
+            output[b * hidden + dim] += direction(a, dim);
+        }
+        pairs += 1;
+    }
+    println!("par przetworzonych  : {pairs}");
+
+    let touched_in = normalize_rows(&mut input, hidden, strength);
+    let touched_out = normalize_rows(&mut output, hidden, strength);
+    println!("symboli z historia  : wejscie {touched_in}, wyjscie {touched_out} z {vocab}");
+
+    // Symbole nieobecne w korpusie maja same zera - dla nich zostawiamy dotychczasowe wagi.
+    // Podmiana ich na zera skasowalaby jedyne, co model o nich wie.
+    write_rows(tensors, EMBED_NAME, &input, hidden);
+    write_rows(tensors, TARGET, &output, hidden);
+    Ok(())
+}
+
+/// Staly, powtarzalny kierunek dla symbolu w danym wymiarze: +1 albo -1.
+///
+/// Liczony z numeru symbolu przez mieszanie bitow (splitmix64), a nie losowany i zapisywany:
+/// tablica 53746 x 128 kierunkow zajelaby tyle, co same wagi, a i tak jest w pelni okreslona
+/// przez numer.
+fn direction(symbol: usize, dim: usize) -> f32 {
+    let mut h = (symbol as u64)
+        .wrapping_mul(0x9E37_79B9_7F4A_7C15)
+        ^ (dim as u64).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+    h ^= h >> 30;
+    h = h.wrapping_mul(0xBF58_476D_1CE4_E5B9);
+    h ^= h >> 27;
+    h = h.wrapping_mul(0x94D0_49BB_1331_11EB);
+    h ^= h >> 31;
+    if h & 1 == 0 { 1.0 } else { -1.0 }
+}
+
+/// Sprowadza kazdy niepusty wiersz do zadanej dlugosci. Zwraca liczbe takich wierszy.
+///
+/// Bez tego symbol wystepujacy tysiac razy mialby wektor tysiac razy dluzszy niz symbol
+/// wystepujacy raz - i zdominowalby kazde porownanie niezaleznie od tresci. Liczy sie
+/// KIERUNEK, w ktorym symbol wskazuje, nie to, jak czesto wystapil; czestosc siedzi juz
+/// w rubryce wyjsciowej.
+fn normalize_rows(values: &mut [f32], hidden: usize, target_len: f32) -> usize {
+    let mut touched = 0;
+    for row in values.chunks_mut(hidden) {
+        let norm = row.iter().map(|v| v * v).sum::<f32>().sqrt();
+        if norm <= f32::EPSILON {
+            continue;
+        }
+        let factor = target_len / norm;
+        for v in row.iter_mut() {
+            *v *= factor;
+        }
+        touched += 1;
+    }
+    touched
+}
+
+/// Wpisuje policzone wiersze do tensora, pomijajac wiersze puste.
+fn write_rows(tensors: &mut [Tensor], name: &str, rows: &[f32], hidden: usize) {
+    let Some(tensor) = tensors.iter_mut().find(|t| t.name == name) else {
+        return;
+    };
+    for (row_index, row) in rows.chunks(hidden).enumerate() {
+        if row.iter().all(|v| *v == 0.0) {
+            continue;
+        }
+        let start = row_index * hidden;
+        let Some(slot) = tensor.values.get_mut(start..start + hidden) else {
+            break;
+        };
+        slot.copy_from_slice(row);
+    }
+}
+
+fn read_corpus(path: &str) -> std::io::Result<Vec<usize>> {
+    let bytes = std::fs::read(path)?;
+    Ok(bytes
+        .chunks_exact(2)
+        .map(|c| u16::from_le_bytes([c[0], c[1]]) as usize)
+        .collect())
 }
 
 fn apply_row_scales(values: &mut [f32], scales: &[f32], hidden: usize) {

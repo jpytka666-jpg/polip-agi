@@ -155,6 +155,7 @@ dependencies = [
 name = "darkstar-embed"
 version = "0.1.0"
 dependencies = [
+ "darkstar-recall",
  "darkstar-shadow",
  "ort",
  "serde_json",
