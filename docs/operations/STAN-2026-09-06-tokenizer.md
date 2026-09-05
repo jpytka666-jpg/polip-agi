@@ -158,6 +158,115 @@ Wybór znaczenia zostaje **osobnym stopniem**, tak jak `lexical selection` w Ape
 Słownik trzyma wszystkich kandydatów z gramatyką i źródłem; stopień wyboru czyta kontekst.
 Żadne słowo wieloznaczne nie dostaje jednego zamrożonego tłumaczenia.
 
+---
+
+# BAK_PAK_MAP_OF_BAK_FILES — mapa kopii zapasowych
+
+## Decyzja Marcina, aktualna
+
+**Pliki `.bak` zostają.** Nie kasować. Powód: historia projektu zapisuje tylko stany
+zatwierdzone, a kopie trzymają to, co działo się **pomiędzy** nimi — pięć kopii jednego pliku
+powstało w ciągu dwóch minut, gdy poprawiana była ta sama reguła. Gdy za miesiąc coś przestanie
+działać, to jedyne miejsce, w którym widać tamte dwie minuty.
+
+## Gdzie te kopie fizycznie leżą
+
+| miejsce | ile | stan |
+|---|---|---|
+| dysk **D:** w kopii roboczej na Windows | **26 plików, 416 KB** | oryginał |
+| gałąź **`bak-pak`** na GitHubie | **26 plików** | zabezpieczenie poza jednym dyskiem |
+| Darkstar | **0** | kopie tam nie powstają — praca nad kodem idzie z Windows |
+
+**Tak, są zabezpieczone poza jednym dyskiem** — od zapisu `d79713bc` na gałęzi `bak-pak`.
+Gałąź nie ma wspólnej historii z projektem, więc nie pojawia się w gałęzi roboczej ani przy
+łączeniu zmian.
+
+Poza zasięgiem zostają kopie w `C:/Users/User/.claude/hooks/` (`kapral.py.*.bak`) — automat
+patrzy dziś tylko na katalog projektu.
+
+## Sekrety — sprawdzone, i sprawdzanie jest teraz częścią wysyłania
+
+**Repozytorium `jpytka666-jpg/polip-agi` jest PUBLICZNE.** Wysłanie jest nieodwracalne:
+skasowanie gałęzi nie cofa tego, co ktoś już pobrał albo zaindeksował.
+
+Przeszukane **366 960 bajtów w 26 plikach — zero kluczy, haseł i podpisów.** Jedyne trafienia
+na słowo „hasło" to nagłówkowa zasada zakazująca haseł w zapisie oraz polskie komentarze,
+gdzie „hasło" znaczy wpis słownikowy.
+
+Od zapisu `c1bcb44` sprawdzenie jest **wbudowane w wysyłkę** i wstrzymuje ją przy trafieniu.
+Wykrywacz celowo myli się w stronę wstrzymania, ale **nie blokuje poprawnego kodu**, który
+czyta klucz z pliku albo ze środowiska — bo narzędzie blokujące poprawne zachowanie zostanie
+w końcu obejściem i wtedy nie chroni już niczego. To ma najbardziej wyraźny test w pliku.
+
+## Czas w nazwie ≠ kolejność zmian treści
+
+To rozróżnienie jest ważne i narzędzie mówi je wprost przy każdym wypisie.
+
+- Liczba w nazwie to **moment zrobienia kopii**, czyli chwila tuż **przed** nadpisaniem pliku.
+  Kopia trzyma stan **sprzed** tej edycji.
+- **Plik żywy stoi na końcu listy, bo jest stanem bieżącym — nie dlatego, że jest najnowszy
+  treściowo.** Ktoś mógł przywrócić starszą wersję.
+- Ten przypadek jest wykrywany: jeśli plik żywy jest co do znaku taki sam jak któraś starsza
+  kopia, `historia` wypisuje ostrzeżenie, że to przywrócenie, a nie rozwój.
+
+## Jak uruchomić
+
+```
+bak-pak-map-of-bak-files map                        co w ogole jest, pogrupowane
+bak-pak-map-of-bak-files historia <plik> [katalog]   os czasu jednego pliku
+bak-pak-map-of-bak-files roznica <plik> <a> <b>      tresc zmiany miedzy wersjami
+bak-pak-map-of-bak-files szukaj "<tekst>"            kiedy to weszlo i kiedy zniklo
+bak-pak-map-of-bak-files wypchnij [katalog]          odloz na GitHub (sprawdza sekrety)
+bak-pak-map-of-bak-files wypchnij . --na-sucho       pokaz, co by poszlo, nic nie zapisuj
+```
+
+Gotowe narzędzie: `C:/Users/User/.claude/hooks/bak_pak_map_of_bak_files.exe` (342 KB).
+Działa z **dowolnego** katalogu — wszystkie polecenia zapisu idą przez `-C <katalog>`.
+
+## Uruchomienie automatyczne — NIEZROBIONE
+
+Wpięcie w automat kończący turę zostało **zablokowane** (odmowa zgody na zmianę
+`C:/Users/User/.claude/settings.json`). Do wklejenia ręcznie, jako trzeci wpis w `"Stop"`:
+
+```json
+          {
+            "type": "command",
+            "command": "\"C:/Users/User/.claude/hooks/bak_pak_map_of_bak_files.exe\" wypchnij \"D:/codex-fresh-2026-08-28/worktrees/polip-agi-darkstar-plan\"",
+            "timeout": 45
+          }
+```
+
+Do czasu wklejenia **wysyłka nie jest automatyczna** — trzeba ją uruchomić ręcznie.
+
+## Wyniki sprawdzeń
+
+```
+11/11 testow, clippy --all-targets -D warnings czysto
+
+Przyklad na PRAWDZIWYCH kopiach — os czasu lathe.rs:
+  nr  kiedy                  linii   bajtow   zmiana
+   1  2026-09-05 20:42:28      401    15526  (najstarsza)
+   2  2026-09-05 20:43:01      415    16048  -0 +14
+   3  2026-09-05 20:43:07      415    16046  -1 +1
+   4  2026-09-05 20:44:51      415    16034  -4 +4
+   5  2026-09-05 20:45:15      412    16144  -16 +13
+   6  TERAZ (plik zywy)        417    16550  -4 +9
+  Szesc wersji w trzy minuty; w historii projektu widac z tego DWIE.
+
+Proba nieingerencji, przy celowo zostawionej niezapisanej zmianie:
+  galaz / praca / przygotowane zmiany / plik na dysku  —  wszystkie CZTERY bez zmian
+
+Proba z innego katalogu (C:/Windows/System32, jak startuje automat):
+  znalazlo 26, wyslalo; drugi przebieg: "Bez zmian od ostatniego razu"
+
+Odzysk z GitHuba: spine.rs.1788631365.bak  —  231 linii, cale
+  (odrzucona pierwsza wersja rdzenia, ktorej nie ma nigdzie indziej)
+
+Falszywy alarm zlapany na zywych danych: pierwsza wersja wykrywacza sekretow
+zablokowala WLASNY plik zrodlowy, biorac wlasna liste wzorcow za klucz.
+Wysylka stanela — czyli pomylila sie w bezpieczna strone. Naprawione, test pilnuje.
+```
+
 ## Ślad w repozytorium
 
 ```
@@ -170,3 +279,20 @@ dba8e3a  most jest tabelka obok ksiegi, nie w srodku
 e30ea59  petla zwrotna + poprawka 32-bitowa
 a58b566  rdzen kregowy: decyduje, nie wyszukuje
 ```
+
+## Stan końcowy — obie kopie robocze
+
+```
+                  sciezka                                            galaz                                zapis     niezapisane  kopii .bak
+Windows   D:\codex-fresh-2026-08-28\worktrees\polip-agi-darkstar-plan  docs/darkstar-headscale-hotspot-plan  c1bcb44        0          26
+Darkstar  /home/owner/polip-agi                                        docs/darkstar-headscale-hotspot-plan  c1bcb44        0           0
+GitHub    jpytka666-jpg/polip-agi (PUBLICZNE)                          docs/darkstar-headscale-hotspot-plan  c1bcb44        —           —
+GitHub    jpytka666-jpg/polip-agi                                      bak-pak                               d79713bc       —          26
+```
+
+Trzy miejsca na tym samym zapisie, zero różnic, zero niezapisanych zmian.
+Kopie `.bak` istnieją tylko na Windows i na gałęzi `bak-pak` — na Darkstarze ich nie ma
+i nie powstają, bo praca nad kodem idzie z Windows.
+
+Ostatni zapis dnia: **`c1bcb44`** — sprawdzanie sekretów przed publikacją oraz wykrywanie
+przywróconej starszej wersji.
