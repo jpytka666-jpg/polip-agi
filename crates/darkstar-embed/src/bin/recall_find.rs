@@ -206,8 +206,12 @@ fn main() {
     let parsed: Value = match serde_json::from_str(&response) {
         Ok(v) => v,
         Err(e) => {
-            eprintln!("FAIL: magazyn wysLal zla odpowiedz: {e}");
-            eprintln!("Raw response:\n{}", response);
+            eprintln!("FAIL: magazyn wyslal zla odpowiedz: {e}");
+            // Tylko poczatek, nie calosc. Wyjscie bledow bywa zbierane do logow, a odpowiedz
+            // przy bledzie potrafi zawierac odbicie zapytania albo naglowkow. Do rozpoznania,
+            // CO przyszlo, kilkaset znakow wystarcza; reszta to juz tylko ryzyko.
+            let preview: String = response.chars().take(300).collect();
+            eprintln!("poczatek odpowiedzi: {preview}");
             std::process::exit(1);
         }
     };
