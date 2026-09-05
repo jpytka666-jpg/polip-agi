@@ -27,3 +27,8 @@ path = "src/bin/noworodek_embed.rs"
 [[bin]]
 name = "nwrd-diff"
 path = "src/bin/nwrd_diff.rs"
+
+# BAK_PAK_MAP_OF_BAK_FILES: mapa kopii zapasowych i porownywarka wersji.
+[[bin]]
+name = "bak-pak-map-of-bak-files"
+path = "src/bin/bak_pak_map_of_bak_files.rs"
