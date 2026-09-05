@@ -1,0 +1,281 @@
+<!-- darkstar-header-v1 -->
+<!-- po co: STAN-2026-09-06-tokenizer.md -->
+<!-- nie wolno: hotspot, ruszac wlp2s0, wracac do 10.44, gasic DARKSTAR-WiFi, haslo w gicie -->
+<!-- autor: Marcin -->
+<!-- powstal: 2026-09-06 -->
+<!--
+THIS IS VERY IMPORTANT!!!
+==========================================
+AUTHOR: M. SZUL
+AI MODEL: Claude Sonnet 5
+TIMESTAMP: 2026-09-06 00:45:00 Europe/London
+REASON FOR CREATION: Marcin: "Zapisz stan do przejecia." Ten plik ma wystarczyc komus,
+kto siada do tego bez zadnej wiedzy z poprzedniej rozmowy - i mnie samemu po skroceniu
+kontekstu. Zawiera to, co ZMIERZONE, oddzielone od tego, co tylko przypuszczane.
+==========================================
+-->
+
+# Stan do przejęcia — warstwa językowa Darkstara, 2026-09-06
+
+## Zasady, które obowiązują. Przeczytaj przed pierwszą komendą
+
+| Zasada | Skąd |
+|---|---|
+| **Praca powstaje na Darkstarze** (`owner@100.64.0.2`), nie na Windows | Marcin, 2026-09-05 |
+| **Księga i wagi nietknięte.** Stary układ zostaje jako droga zapasowa i przełącznik języka | Marcin |
+| **Nie zamrażaj jednego tłumaczenia** dla słowa wieloznacznego. Zachowaj znaczenia, gramatykę i źródła; wybór ma zależeć od konkretnego użycia | Marcin |
+| **MiniLM zostaje** tam, gdzie działa, ale **nie wolno nim zatwierdzać nowych znaczeń** przy obecnej jakości (45–50%) | Marcin |
+| **Morfemy to struktura wejścia, nie dowód rozumienia.** Nie opisuj składania znaczeń jako działającego, dopóki nie zmierzone | Marcin |
+| Zanim nazwiesz zmianę poprawą — **porównaj obie metody na tych samych przypadkach**, potem sprawdź na przykładach **odłożonych** | Marcin |
+| Zero „gotowe" bez bloku DOWÓD albo NIEZWERYFIKOWANE | stała |
+| Nic destrukcyjnego bez zgody. Bez `git add -A` | stała |
+
+## Gdzie co jest
+
+**Darkstar** `owner@100.64.0.2` — Ubuntu, 4 rdzenie, 7 GB RAM, 46 GB wolnego.
+
+```
+~/polip-agi/                      repo, gałąź docs/darkstar-headscale-hotspot-plan
+~/darkstar-artefakty-2026-09-05/  wszystkie dane robocze
+~/darkstar-embed.env              ORT_DYLIB_PATH + katalog modelu; wczytaj przed uzyciem
+~/models/all-MiniLM-L6-v2/        model osadzen
+~/models/qwen2.5-0.5b/            maly model wielojezyczny, NIEUZYWANY
+~/tools/cbms/                     zrodlo cbms; MINT_RANGES [(u32,u32); 9]
+```
+
+Rust nie jest widoczny przez `which` po nieinteraktywnym ssh — dodaj `~/.cargo/bin` do PATH.
+`sudo` wymaga hasła, więc **niczego nie instalujemy w systemie**. `sqlite3` leży rozpakowany
+w `~/darkstar-artefakty-2026-09-05/narzedzia/root/usr/bin/sqlite3`; przed użyciem ustaw
+`LD_LIBRARY_PATH` na `.../narzedzia/root/usr/lib/x86_64-linux-gnu`.
+
+## Dane, które zdobyliśmy 2026-09-05
+
+| plik | co to | rozmiar |
+|---|---|---|
+| `espdic.txt` | słownik esperanto→angielski, **63 894 hasła**, licencja wolna | 1,9 MB |
+| `most-pl-eo.tsv` | **51 775 par polski→esperanto**, 35 474 różnych słów polskich | 1,0 MB |
+| `pl-eo/eo_morf.dic` | **morfologia esperanta, 29 571 wpisów**, format Hunspell | 407 KB |
+| `pl-eo/eo_morf.aff` | reguły sklejania klocków | 20 KB |
+| `pl-eo/pl.dict` | automat skończony dla polskiego | 654 KB |
+| `pl-eo/evortaro-*.sql` | słowniki dla 10 języków (de, en, fr, ru, pl, be, hu, nl, pt, sv) | 24 MB razem |
+| `kandydaci-en.tsv` | odwrócony ESPDIC: `angielskie<TAB>rdzeń1\|rdzeń2\|...` | 1,6 MB |
+
+Wszystko z paczki **Esperantilo** (GPL) i **ESPDIC** (CC-BY). Polski słownik jest drugi
+co do wielkości po niemieckim — Zamenhof był z Białegostoku i to widać w zasobach.
+
+## Co zmierzone — liczby, nie wrażenia
+
+### Pokrycie listy 3000 słów
+
+```
+na starcie (nasz most + regula)          8%
+ESPDIC angielski                        29%
+ESPDIC + slownik polski             1137/3000  = 37%
+   oba slowniki       50
+   tylko polski      263
+   tylko angielski   824
+   zaden            1863
+```
+
+### Wieloznaczność wśród znanych
+
+```
+polski    : 183 z 313 ma wiecej niz jednego kandydata
+angielski : 679 z 874 ma wiecej niz jednego kandydata  (srednio 3,76)
+```
+
+### Wybór znaczenia — MiniLM, zbiór zapisany w commicie `563fcf4` PRZED pomiarem
+
+| | część A: pojedyncze słowa | część B: całe zdania |
+|---|---|---|
+| poprawny **wśród kandydatów** (mierzy słownik) | 20/20 (100%) | 11/12 (91%) |
+| poprawny **wybrany** (mierzy model) | 9/20 (45%) | 6/12 (50%) |
+| branie pierwszego, bez modelu | 5/20 (25%) | — |
+
+**Model używa kontekstu**: w 5 parach na 6 dał różne rdzenie dla różnych znaczeń;
+dla `code` (kodo/ĉifro) i `time` (horo/fojo) trafił obie strony.
+
+**Wada metody z części A**: 12 przypadków dostało ocenę równo `1.0000`, bo definicja
+kandydata jest dosłownie tym samym słowem co zapytanie. Przez to terminy rzadkie o
+jednowyrazowej definicji biją słowa podstawowe o definicji długiej
+(`memorkapablo : memory` bije `memoro : memory, recollection, storage`).
+**Część B tej wady nie ma**, bo zapytaniem jest zdanie.
+
+### Wszczep do wag — układ stary, zapasowy
+
+Policzony na Darkstarze na **kompletnym** moście (12 213 rdzeni, 116 łączących języki).
+Wcześniejszy przebieg na Windows czytał most w trakcie zapisu i widział 9 235 / 95.
+
+```
+przed wszczepem  ->  po wszczepie
+pl-podobienstwo <-> en-similarity   0.6566  ->  0.5957
+pl-blad         <-> en-error        0.8196  ->  0.5756
+pl-blad         <-> pl-ciasto       0.8403  ->  0.6935   <- PRZEPIS NA CIASTO
+```
+
+Kolejność odwrócona przed i po. **Wszczep nie poprawił rozróżniania znaczeń.**
+Przyczyna zmierzona: most jest tabelką obok księgi, nie w środku niej —
+`błąd` → znak 1910, `error` → znak 2862, `eraro` bez własnego znaku.
+
+## Co zbudowane i działa
+
+| program | co robi | testy |
+|---|---|---|
+| `spine` | zadanie → decyzja (odruch albo oddanie mózgowi) + zapis do dziennika | 4 |
+| `spine-loop` | różnica bloku wobec pamięci, dopisanie wyniku, dziennik → materiał | 9 |
+| `espdic` | ESPDIC jako **kandydaci**; tryby index / report / check / sense | 6 |
+| `lathe` | obrabiarka, warstwy słownik + reguła; **bez pieczątki** | 12 |
+| `tokenize` | tokenizer przez wyszukiwanie: próg **i** odstęp | 3 |
+| `implant` | wszczepianie znaczeń do wag | — |
+| `reflex-store`, `recall-find`, `nwrd-diff` | z wcześniejszych dni, działają | — |
+
+Wszystko przechodzi `clippy --all-targets -- -D warnings`.
+
+## Czego NIE wolno powiedzieć, że działa
+
+- **Noworodek składający znaczenie z morfemów** — nigdy nie mierzone.
+- **Porównywanie po rdzeniach zamiast po słowach** — wzorzec zaobserwowany
+  (memorkapablo/memoro, sciado/scio, vorta/vorto), **nie zmierzony**. Obcięcie samej
+  końcówki tego nie da: `memorkapablo` bez końcówki to `memorkapabl`, nie `memor`.
+- **Prognoza 110k → 17k znaków** — 110 354 to WPISY obecnej księgi (formy powierzchniowe),
+  17 000 to RDZENIE esperanta z cudzej publikacji. **Inne jednostki, u nas niezmierzone.**
+- **Polski po stronie modelu** — MiniLM jest angielski, nie sprawdzany na polskim.
+
+## Następne kroki, w kolejności, z rygorem
+
+1. **Porównać metodę A i B na tych samych przypadkach.** Część B już porównuje zdania
+   z definicjami i daje 6/12. Zmiana metody jest poprawą dopiero wtedy, gdy wygra na
+   identycznym zbiorze — nie na innym.
+2. **Odłożyć nowe przykłady** i sprawdzić na nich po każdym strojeniu. Zbiór, na którym
+   się stroi, przestaje mierzyć.
+3. **Wpiąć `eo_morf.dic`** jako rozbiór wejścia — i zmierzyć, ile znaków naprawdę wychodzi.
+   To zastąpi prognozę liczbą.
+4. **Zdjęcie odmiany polskiej** — w liście siedzą `wykonanej`, `pokazaniu`, `modyfikowane`,
+   których nie ma w żadnym słowniku.
+5. Dopiero po 1–4: rozważyć wybicie księgi na nowo. **Nie wcześniej.**
+
+Wybór znaczenia zostaje **osobnym stopniem**, tak jak `lexical selection` w Apertium.
+Słownik trzyma wszystkich kandydatów z gramatyką i źródłem; stopień wyboru czyta kontekst.
+Żadne słowo wieloznaczne nie dostaje jednego zamrożonego tłumaczenia.
+
+---
+
+# BAK_PAK_MAP_OF_BAK_FILES — mapa kopii zapasowych
+
+## Decyzja Marcina, aktualna
+
+**Pliki `.bak` zostają.** Nie kasować. Powód: historia projektu zapisuje tylko stany
+zatwierdzone, a kopie trzymają to, co działo się **pomiędzy** nimi — pięć kopii jednego pliku
+powstało w ciągu dwóch minut, gdy poprawiana była ta sama reguła. Gdy za miesiąc coś przestanie
+działać, to jedyne miejsce, w którym widać tamte dwie minuty.
+
+## Gdzie te kopie fizycznie leżą
+
+| miejsce | ile | stan |
+|---|---|---|
+| dysk **D:** w kopii roboczej na Windows | **26 plików, 416 KB** | oryginał |
+| gałąź **`bak-pak`** na GitHubie | **26 plików** | zabezpieczenie poza jednym dyskiem |
+| Darkstar | **0** | kopie tam nie powstają — praca nad kodem idzie z Windows |
+
+**Tak, są zabezpieczone poza jednym dyskiem** — od zapisu `d79713bc` na gałęzi `bak-pak`.
+Gałąź nie ma wspólnej historii z projektem, więc nie pojawia się w gałęzi roboczej ani przy
+łączeniu zmian.
+
+Poza zasięgiem zostają kopie w `C:/Users/User/.claude/hooks/` (`kapral.py.*.bak`) — automat
+patrzy dziś tylko na katalog projektu.
+
+## Sekrety — sprawdzone, i sprawdzanie jest teraz częścią wysyłania
+
+**Repozytorium `jpytka666-jpg/polip-agi` jest PUBLICZNE.** Wysłanie jest nieodwracalne:
+skasowanie gałęzi nie cofa tego, co ktoś już pobrał albo zaindeksował.
+
+Przeszukane **366 960 bajtów w 26 plikach — zero kluczy, haseł i podpisów.** Jedyne trafienia
+na słowo „hasło" to nagłówkowa zasada zakazująca haseł w zapisie oraz polskie komentarze,
+gdzie „hasło" znaczy wpis słownikowy.
+
+Od zapisu `c1bcb44` sprawdzenie jest **wbudowane w wysyłkę** i wstrzymuje ją przy trafieniu.
+Wykrywacz celowo myli się w stronę wstrzymania, ale **nie blokuje poprawnego kodu**, który
+czyta klucz z pliku albo ze środowiska — bo narzędzie blokujące poprawne zachowanie zostanie
+w końcu obejściem i wtedy nie chroni już niczego. To ma najbardziej wyraźny test w pliku.
+
+## Czas w nazwie ≠ kolejność zmian treści
+
+To rozróżnienie jest ważne i narzędzie mówi je wprost przy każdym wypisie.
+
+- Liczba w nazwie to **moment zrobienia kopii**, czyli chwila tuż **przed** nadpisaniem pliku.
+  Kopia trzyma stan **sprzed** tej edycji.
+- **Plik żywy stoi na końcu listy, bo jest stanem bieżącym — nie dlatego, że jest najnowszy
+  treściowo.** Ktoś mógł przywrócić starszą wersję.
+- Ten przypadek jest wykrywany: jeśli plik żywy jest co do znaku taki sam jak któraś starsza
+  kopia, `historia` wypisuje ostrzeżenie, że to przywrócenie, a nie rozwój.
+
+## Jak uruchomić
+
+```
+bak-pak-map-of-bak-files map                        co w ogole jest, pogrupowane
+bak-pak-map-of-bak-files historia <plik> [katalog]   os czasu jednego pliku
+bak-pak-map-of-bak-files roznica <plik> <a> <b>      tresc zmiany miedzy wersjami
+bak-pak-map-of-bak-files szukaj "<tekst>"            kiedy to weszlo i kiedy zniklo
+bak-pak-map-of-bak-files wypchnij [katalog]          odloz na GitHub (sprawdza sekrety)
+bak-pak-map-of-bak-files wypchnij . --na-sucho       pokaz, co by poszlo, nic nie zapisuj
+```
+
+Gotowe narzędzie: `C:/Users/User/.claude/hooks/bak_pak_map_of_bak_files.exe` (342 KB).
+Działa z **dowolnego** katalogu — wszystkie polecenia zapisu idą przez `-C <katalog>`.
+
+## Uruchomienie automatyczne — NIEZROBIONE
+
+Wpięcie w automat kończący turę zostało **zablokowane** (odmowa zgody na zmianę
+`C:/Users/User/.claude/settings.json`). Do wklejenia ręcznie, jako trzeci wpis w `"Stop"`:
+
+```json
+          {
+            "type": "command",
+            "command": "\"C:/Users/User/.claude/hooks/bak_pak_map_of_bak_files.exe\" wypchnij \"D:/codex-fresh-2026-08-28/worktrees/polip-agi-darkstar-plan\"",
+            "timeout": 45
+          }
+```
+
+Do czasu wklejenia **wysyłka nie jest automatyczna** — trzeba ją uruchomić ręcznie.
+
+## Wyniki sprawdzeń
+
+```
+11/11 testow, clippy --all-targets -D warnings czysto
+
+Przyklad na PRAWDZIWYCH kopiach — os czasu lathe.rs:
+  nr  kiedy                  linii   bajtow   zmiana
+   1  2026-09-05 20:42:28      401    15526  (najstarsza)
+   2  2026-09-05 20:43:01      415    16048  -0 +14
+   3  2026-09-05 20:43:07      415    16046  -1 +1
+   4  2026-09-05 20:44:51      415    16034  -4 +4
+   5  2026-09-05 20:45:15      412    16144  -16 +13
+   6  TERAZ (plik zywy)        417    16550  -4 +9
+  Szesc wersji w trzy minuty; w historii projektu widac z tego DWIE.
+
+Proba nieingerencji, przy celowo zostawionej niezapisanej zmianie:
+  galaz / praca / przygotowane zmiany / plik na dysku  —  wszystkie CZTERY bez zmian
+
+Proba z innego katalogu (C:/Windows/System32, jak startuje automat):
+  znalazlo 26, wyslalo; drugi przebieg: "Bez zmian od ostatniego razu"
+
+Odzysk z GitHuba: spine.rs.1788631365.bak  —  231 linii, cale
+  (odrzucona pierwsza wersja rdzenia, ktorej nie ma nigdzie indziej)
+
+Falszywy alarm zlapany na zywych danych: pierwsza wersja wykrywacza sekretow
+zablokowala WLASNY plik zrodlowy, biorac wlasna liste wzorcow za klucz.
+Wysylka stanela — czyli pomylila sie w bezpieczna strone. Naprawione, test pilnuje.
+```
+
+## Ślad w repozytorium
+
+```
+563fcf4  zbior testowy zapisany PRZED pomiarem
+7be98b9  wynik: MiniLM 9/20 i 6/12, uzywa kontekstu
+af7d907  ESPDIC: poprawny rdzen 20/20 wsrod kandydatow, 5/20 pierwszy
+35770a7  projekt hybrydy z analizy Apertium / ESPDIC / Morfologik / morfologii eo
+5949b1a  wyrzucenie pieczatki, ktora stemplowala 94% slow
+dba8e3a  most jest tabelka obok ksiegi, nie w srodku
+e30ea59  petla zwrotna + poprawka 32-bitowa
+a58b566  rdzen kregowy: decyduje, nie wyszukuje
+```
