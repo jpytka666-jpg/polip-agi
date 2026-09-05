@@ -160,7 +160,7 @@ fn wypchnij(root: &str, na_sucho: bool) -> i32 {
         return 0;
     }
 
-    let korzen = match git(&["rev-parse", "--show-toplevel"], None) {
+    let korzen = match git(root, &["rev-parse", "--show-toplevel"], None) {
         Ok(s) => s.trim().to_string(),
         Err(e) => {
             eprintln!("FAIL: to nie jest kopia robocza projektu: {e}");
@@ -176,12 +176,12 @@ fn wypchnij(root: &str, na_sucho: bool) -> i32 {
 
     // Jesli galaz juz jest, zaczynamy od jej zawartosci - kopie maja sie GROMADZIC,
     // a nie zastepowac poprzednie.
-    let rodzic = git(&["rev-parse", "--verify", &format!("refs/heads/{GALAZ}")], None)
+    let rodzic = git(&korzen, &["rev-parse", "--verify", &format!("refs/heads/{GALAZ}")], None)
         .ok()
         .map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty());
     if let Some(r) = &rodzic
-        && let Err(e) = git(&["read-tree", r], env.clone())
+        && let Err(e) = git(&korzen, &["read-tree", r], env.clone())
     {
         eprintln!("FAIL: nie moge odczytac poprzedniej zawartosci galezi: {e}");
         let _ = fs::remove_file(&spis);
@@ -198,7 +198,7 @@ fn wypchnij(root: &str, na_sucho: bool) -> i32 {
             .replace('\\', "/");
         // `--force`, bo kopie moga byc wykluczone z projektu regula pomijania - a tutaj
         // wlasnie o nie chodzi.
-        match git(&["add", "--force", &wzgledna], env.clone()) {
+        match git(&korzen, &["add", "--force", &wzgledna], env.clone()) {
             Ok(_) => dodanych += 1,
             Err(e) => eprintln!("  pomijam {wzgledna}: {e}"),
         }
@@ -209,7 +209,7 @@ fn wypchnij(root: &str, na_sucho: bool) -> i32 {
         return 1;
     }
 
-    let drzewo = match git(&["write-tree"], env.clone()) {
+    let drzewo = match git(&korzen, &["write-tree"], env.clone()) {
         Ok(s) => s.trim().to_string(),
         Err(e) => {
             eprintln!("FAIL: {e}");
@@ -221,7 +221,7 @@ fn wypchnij(root: &str, na_sucho: bool) -> i32 {
 
     // Nic nie przybylo - konczymy bez zapisu.
     if let Some(r) = &rodzic
-        && let Ok(poprzednie) = git(&["rev-parse", &format!("{r}^{{tree}}")], None)
+        && let Ok(poprzednie) = git(&korzen, &["rev-parse", &format!("{r}^{{tree}}")], None)
         && poprzednie.trim() == drzewo
     {
         println!("Bez zmian od ostatniego razu — nic nie zapisuje.");
@@ -238,20 +238,20 @@ fn wypchnij(root: &str, na_sucho: bool) -> i32 {
         arg.push("-p");
         arg.push(r);
     }
-    let zapis = match git(&arg, None) {
+    let zapis = match git(&korzen, &arg, None) {
         Ok(s) => s.trim().to_string(),
         Err(e) => {
             eprintln!("FAIL: {e}");
             return 1;
         }
     };
-    if let Err(e) = git(&["update-ref", &format!("refs/heads/{GALAZ}"), &zapis], None) {
+    if let Err(e) = git(&korzen, &["update-ref", &format!("refs/heads/{GALAZ}"), &zapis], None) {
         eprintln!("FAIL: {e}");
         return 1;
     }
     println!("zapisane lokalnie: {} na galezi {GALAZ}", &zapis[..8.min(zapis.len())]);
 
-    match git(&["push", "-q", "origin", &format!("{GALAZ}:{GALAZ}")], None) {
+    match git(&korzen, &["push", "-q", "origin", &format!("{GALAZ}:{GALAZ}")], None) {
         Ok(_) => {
             println!("wyslane na GitHub: galaz {GALAZ}");
             0
@@ -266,9 +266,14 @@ fn wypchnij(root: &str, na_sucho: bool) -> i32 {
     }
 }
 
-fn git(args: &[&str], env: Option<(&str, String)>) -> Result<String, String> {
+/// Uruchamia polecenie zapisu wersji ZAWSZE we wskazanym katalogu, przez `-C`.
+///
+/// Bez tego program dzialalby w katalogu, z ktorego go wywolano - a ma chodzic z automatu
+/// po kazdej turze, gdy katalogiem biezacym jest cos zupelnie innego. Wtedy nie znalazlby
+/// ani projektu, ani kopii, i konczylby cicho, niczego nie odkladajac.
+fn git(dir: &str, args: &[&str], env: Option<(&str, String)>) -> Result<String, String> {
     let mut cmd = std::process::Command::new("git");
-    cmd.args(args);
+    cmd.arg("-C").arg(dir).args(args);
     if let Some((k, v)) = env {
         cmd.env(k, v);
     }
