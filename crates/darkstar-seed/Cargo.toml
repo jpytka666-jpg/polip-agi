@@ -12,3 +12,13 @@ license.workspace = true
 # Zero zaleznosci: format NWRD to naglowek i ciag liczb, a Noworodek zyje w innym
 # repozytorium, ktorego nie wolno dotykac.
 [dependencies]
+
+# Glowne narzedzie: zasiew wag.
+[[bin]]
+name = "darkstar-seed"
+path = "src/main.rs"
+
+# Sprawdzenie, czy wpisane wektory znakow skladaja sie w sensowny opis calego zdania.
+[[bin]]
+name = "noworodek-embed"
+path = "src/bin/noworodek_embed.rs"
