@@ -53,6 +53,12 @@ const TARGET: &str = "model.lm_head.weight";
 const BIAS_NAME: &str = "model.lm_head.bias";
 /// Tablica wektorow wejsciowych - po jednym na symbol.
 const EMBED_NAME: &str = "model.embeddings.token.weight";
+/// Tablica pozycji - po jednym wektorze na miejsce w zdaniu.
+const POSITION_NAME: &str = "model.embeddings.position.weight";
+/// Warstwa o dlugosci rownej wymiarowi ukrytemu - stad go odczytujemy, zamiast zgadywac.
+const NORM_NAME: &str = "model.final_norm.weight";
+/// Ile miejsc obejmuje tablica pozycji. Musi zgadzac sie z MAX_POSITIONS w modelu.
+const MAX_POSITIONS: usize = 64;
 
 /// Najwiekszy dopuszczalny mnoznik wiersza (i najmniejszy, jako jego odwrotnosc).
 ///
@@ -125,6 +131,35 @@ fn main() {
                 None => {
                     eprintln!("FAIL: --pairs wymaga sciezki do korpusu .u16");
                     std::process::exit(2);
+                }
+            }
+        }
+
+        // Zmysl kolejnosci. Tablica pozycji nie istnieje w wagach sprzed tej zmiany, wiec
+        // trzeba ja zalozyc; wymiar bierzemy z warstwy, ktora go okresla jednoznacznie.
+        if args.iter().any(|a| a == "--positions") {
+            match tensors
+                .iter()
+                .find(|t| t.name == NORM_NAME)
+                .map(|t| t.values.len())
+                .filter(|len| *len > 0)
+            {
+                Some(hidden) => {
+                    if !tensors.iter().any(|t| t.name == POSITION_NAME) {
+                        tensors.push(Tensor {
+                            name: POSITION_NAME.to_string(),
+                            values: vec![0.0; MAX_POSITIONS * hidden],
+                        });
+                        println!("\n(tablica pozycji zalozona - wagi jej nie mialy)");
+                    }
+                    if !seed_positions(&mut tensors, hidden, strength) {
+                        eprintln!("FAIL: nie moge wpisac tablicy pozycji");
+                        std::process::exit(1);
+                    }
+                }
+                None => {
+                    eprintln!("FAIL: brak {NORM_NAME} - nie ustale wymiaru bez zgadywania");
+                    std::process::exit(1);
                 }
             }
         }
@@ -287,6 +322,78 @@ fn seed_pairs(tensors: &mut [Tensor], corpus: &[usize], vocab: usize, strength: 
     write_rows(tensors, EMBED_NAME, &input, hidden);
     write_rows(tensors, TARGET, &output, hidden);
     Ok(())
+}
+
+/// Wpisuje tablice pozycji - zmysl kolejnosci, ktorego model nie mial.
+///
+/// ZNALEZIONE PRZY PRZEGLADANIU KODU: uwaga w tym modelu porownuje wylacznie wektory
+/// symboli (`dot(q[i], k[j])`) i nigdzie nie wchodzi informacja o tym, GDZIE stoi i oraz j.
+/// Maska przyczynowa nie pozwala patrzec w przod, ale nie odroznia symbolu tuz obok od
+/// oddalonego o piec miejsc. Model czytal wiec WOREK symboli, nie zdanie - a powtarzany
+/// werdykt trenera, ze "nie uzywa kontekstu", byl doslownie prawdziwy: nie mial czym.
+///
+/// Widac to bylo w pomiarach, tylko nie umialem tego wtedy nazwac: poszerzenie okna
+/// zasiewu z 1 do 5 pomoglo (+0.652 -> +0.869), ale z 5 do 12 juz ZASZKODZILO (+0.813).
+/// Dokladnie tak zachowuje sie model, ktory nie umie reprezentowac odleglosci - dalsi
+/// sasiedzi tylko rozmywaja kierunek symbolu.
+///
+/// Wpisujemy klasyczne kodowanie sinusoidalne z pierwszej pracy o transformerach: dla
+/// pozycji `p` i wymiaru `i` wartosc to `sin(p / 10000^(2i/d))` na parzystych i `cos(...)`
+/// na nieparzystych. Nie wymaga nauki, bo NIE JEST wiedza o danych - jest wiedza o tym, jak
+/// zapisac odleglosc tak, zeby dala sie odczytac przez iloczyn skalarny. Kazda para
+/// sasiadujacych wymiarow obraca sie z inna predkoscia, wiec caly wektor koduje pozycje
+/// jednoznacznie, a roznice pozycji daja sie z niego wyliczyc liniowo.
+/// `symbol_len` to dlugosc wektora symbolu - pozycja jest do niej skalowana.
+///
+/// SKALA JEST TU NAJWAZNIEJSZA I ZMIERZONA NA WLASNYM BLEDZIE. Pierwsza wersja wpisywala
+/// czyste sinusoidy, czyli wektory o dlugosci `sqrt(hidden/2)` = 8 przy 128 wymiarach.
+/// Wektory symboli mialy dlugosc 0.5, wiec pozycja byla **16 razy silniejsza od tresci**:
+/// model widzial "to jest trzecie slowo" zamiast "to jest slowo pamiec". Wynik spadl
+/// z 4.7913 do 5.3906, a przewaga nad tablica czestosci z 0.869 do 0.004 - czyli dodanie
+/// zmyslu kolejnosci skasowalo prawie caly zysk z dwoch poprzednich zasiewow.
+///
+/// Pozycja ma byc PRZYPRAWA, nie danim glownym: dodatkiem, ktory rozroznia zdania o tych
+/// samych slowach, a nie sygnalem zagluszajacym slowa.
+const POSITION_STRENGTH: f32 = 0.25;
+
+fn seed_positions(tensors: &mut [Tensor], hidden: usize, symbol_len: f32) -> bool {
+    let Some(table) = tensors.iter_mut().find(|t| t.name == POSITION_NAME) else {
+        return false;
+    };
+    if hidden == 0 || table.values.len() % hidden != 0 {
+        return false;
+    }
+    let positions = table.values.len() / hidden;
+
+    // Czysta sinusoida daje wektor o dlugosci sqrt(hidden/2) - kazdy wymiar ma wartosc
+    // rzedu jednosci. Sprowadzamy go do ulamka dlugosci wektora symbolu.
+    let raw_len = (hidden as f32 / 2.0).sqrt();
+    let scale = (symbol_len * POSITION_STRENGTH) / raw_len.max(f32::EPSILON);
+
+    for pos in 0..positions {
+        for dim in 0..hidden {
+            // Pary wymiarow (2i, 2i+1) dziela ten sam okres; predkosc maleje wykladniczo
+            // z numerem pary, wiec pierwsze wymiary rozrozniaja sasiadow, a dalsze - odlegle
+            // czesci zdania.
+            let pair = (dim / 2) * 2;
+            let angle = pos as f32 / 10000f32.powf(pair as f32 / hidden as f32);
+            let value = if dim % 2 == 0 { angle.sin() } else { angle.cos() };
+            table.values[pos * hidden + dim] = value * scale;
+        }
+    }
+
+    let got_len = table.values[hidden..2 * hidden]
+        .iter()
+        .map(|v| v * v)
+        .sum::<f32>()
+        .sqrt();
+    println!("\ntablica pozycji     : {positions} miejsc x {hidden} liczb");
+    println!("kodowanie           : sinusoidalne, wpisane wprost - bez nauki");
+    println!(
+        "sila wobec symbolu  : {got_len:.4} wobec {symbol_len:.4} = {:.0}%",
+        100.0 * got_len / symbol_len.max(f32::EPSILON)
+    );
+    true
 }
 
 /// Staly, powtarzalny kierunek dla symbolu w danym wymiarze: +1 albo -1.
