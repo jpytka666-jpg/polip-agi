@@ -160,6 +160,31 @@ fn wypchnij(root: &str, na_sucho: bool) -> i32 {
         return 0;
     }
 
+    // SPRAWDZENIE SEKRETOW PRZED WYSLANIEM. Repozytorium jest publiczne, wiec wyslanie jest
+    // nieodwracalne - skasowanie galezi nie usuwa tego, co ktos juz pobral ani co zdazyl
+    // zindeksowac. Dlatego sprawdzenie jest CZESCIA wysylania, a nie osobnym krokiem, ktory
+    // ktos moze pominac. Marcin: "Nie publikuj ich zawartosci bez sprawdzenia sekretow."
+    let mut podejrzane = Vec::new();
+    for v in &kopie {
+        for (nr, linia) in czytaj(&v.path).lines().enumerate() {
+            if wyglada_na_sekret(linia) {
+                podejrzane.push(format!("{}:{}  {}", v.path.display(), nr + 1, skroc(linia)));
+            }
+        }
+    }
+    if !podejrzane.is_empty() {
+        eprintln!("\nWSTRZYMANE — {} podejrzanych linii:\n", podejrzane.len());
+        for p in podejrzane.iter().take(20) {
+            eprintln!("  {p}");
+        }
+        if podejrzane.len() > 20 {
+            eprintln!("  ... i jeszcze {}", podejrzane.len() - 20);
+        }
+        eprintln!("\nNic nie wyslane. Usun sekret z kopii albo ja skasuj, potem uruchom ponownie.");
+        return 1;
+    }
+    println!("sprawdzenie sekretow: czysto");
+
     let korzen = match git(root, &["rev-parse", "--show-toplevel"], None) {
         Ok(s) => s.trim().to_string(),
         Err(e) => {
@@ -271,6 +296,74 @@ fn wypchnij(root: &str, na_sucho: bool) -> i32 {
 /// Bez tego program dzialalby w katalogu, z ktorego go wywolano - a ma chodzic z automatu
 /// po kazdej turze, gdy katalogiem biezacym jest cos zupelnie innego. Wtedy nie znalazlby
 /// ani projektu, ani kopii, i konczylby cicho, niczego nie odkladajac.
+/// Czy linia wyglada na sekret.
+///
+/// Celowo ostrozne, nie sprytne: lepiej wstrzymac wysylke z powodu falszywego alarmu, ktory
+/// czlowiek odrzuci w piec sekund, niz wypuscic klucz do publicznego repozytorium, skad juz
+/// nie da sie go cofnac. Nazwa zmiennej sama w sobie nie wystarcza - `let api_key = read_env(..)`
+/// jest poprawnym kodem; alarm podnosi dopiero PRZYPISANA WARTOSC o dlugosci sekretu.
+fn wyglada_na_sekret(linia: &str) -> bool {
+    let l = linia.to_lowercase();
+    // Naglowek klucza w postaci PEM. Wymaga domkniecia kreskami i slowa `key`/`certificate`,
+    // bo sam ciag "-----begin" pojawia sie takze w kodzie, ktory takich kluczy SZUKA - to jest
+    // zmierzony przypadek: pierwsza wersja tej funkcji zablokowala wlasny plik zrodlowy,
+    // rozpoznajac wlasna liste wzorcow jako sekret.
+    if l.contains("-----begin")
+        && l.trim_end().ends_with("-----")
+        && (l.contains("key") || l.contains("certificate"))
+    {
+        return true;
+    }
+    // Znane ksztalty kluczy - te nie potrzebuja kontekstu, bo sam ksztalt jest rozpoznawalny.
+    // Licz sie ogon: `"ghp_"` w liscie wzorcow ma ogon pusty i nie podnosi alarmu.
+    for wzor in ["ghp_", "sk-", "xoxb-", "akia"] {
+        if let Some(p) = l.find(wzor) {
+            let ogon: String = l[p + wzor.len()..]
+                .chars()
+                .take_while(|c| c.is_alphanumeric() || *c == '_' || *c == '-')
+                .collect();
+            if ogon.len() >= 16 {
+                return true;
+            }
+        }
+    }
+    // Przypisanie do nazwy brzmiacej jak sekret, gdzie wartosc jest doslowna i dosc dluga.
+    let nazwy = ["api_key", "apikey", "api-key", "secret", "password", "passwd", "private_key"];
+    if !nazwy.iter().any(|n| l.contains(n)) {
+        return false;
+    }
+    let Some(po) = l.split_once('=').map(|(_, r)| r).or_else(|| l.split_once(':').map(|(_, r)| r))
+    else {
+        return false;
+    };
+    let po = po.trim();
+    // Wartosc wzieta z otoczenia albo z pliku nie jest sekretem w kodzie - to jest wlasnie
+    // zachowanie, ktorego chcemy, a nie takie, ktore mamy blokowac.
+    if po.contains("env")
+        || po.contains("read_")
+        || po.contains("getenv")
+        || po.contains("os.")
+        || po.contains("${")
+    {
+        return false;
+    }
+    let doslowna: String = po
+        .trim_start_matches(['"', '\''])
+        .chars()
+        .take_while(|c| *c != '"' && *c != '\'')
+        .collect();
+    po.starts_with(['"', '\'']) && doslowna.len() >= 8
+}
+
+fn skroc(s: &str) -> String {
+    let t = s.trim();
+    if t.chars().count() <= 70 {
+        t.to_string()
+    } else {
+        format!("{}...", t.chars().take(70).collect::<String>())
+    }
+}
+
 fn git(dir: &str, args: &[&str], env: Option<(&str, String)>) -> Result<String, String> {
     let mut cmd = std::process::Command::new("git");
     cmd.arg("-C").arg(dir).args(args);
@@ -473,7 +566,32 @@ fn historia(plik: &str, root: &str) -> i32 {
         println!("  {:>2}  {:<22} {:>5}   {:>6}{zmiana}", i + 1, v.label(), v.lines, v.bytes);
         poprzednia = Some(v);
     }
-    println!("\nAby zobaczyc tresc zmiany:  roznica {plik} <a> <b>");
+
+    // Czas w nazwie mowi, KIEDY ZROBIONO KOPIE - czyli chwile przed nadpisaniem pliku.
+    // To NIE jest to samo, co kolejnosc zmian tresci: plik zywy stoi na koncu listy, bo jest
+    // stanem biezacym, a nie dlatego, ze jest najnowszy tresciowo. Ktos mogl przywrocic starsza
+    // wersje. Da sie to wykryc i lepiej powiedziec to wprost, niz pozwolic czytac os czasu
+    // jako historie rozwoju, ktora nia nie jest.
+    if let Some(zywy) = wersje.iter().find(|v| v.stamp.is_none()) {
+        let tresc = czytaj(&zywy.path);
+        let takie_same: Vec<usize> = wersje
+            .iter()
+            .enumerate()
+            .filter(|(_, v)| v.stamp.is_some() && czytaj(&v.path) == tresc)
+            .map(|(i, _)| i + 1)
+            .collect();
+        if let Some(najstarsza) = takie_same.first()
+            && *najstarsza < wersje.len() - 1
+        {
+            println!(
+                "\nUWAGA: plik zywy jest CO DO ZNAKU taki sam jak wersja {najstarsza}."
+            );
+            println!("Ktos przywrocil starsza wersje. Kolejnosc na tej liscie to kolejnosc");
+            println!("ROBIENIA KOPII, a nie kolejnosc rozwoju tresci.");
+        }
+    }
+    println!("\nCzas w nazwie = kiedy zrobiono kopie, tuz przed nadpisaniem pliku.");
+    println!("Aby zobaczyc tresc zmiany:  roznica {plik} <a> <b>");
     0
 }
 
@@ -665,5 +783,67 @@ mod tests {
     #[test]
     fn identyczne_daja_pusto() {
         assert!(roznica_linii("a\nb", "a\nb").is_empty());
+    }
+
+    /// Dane testowe skladamy z KAWALKOW, a nie wpisujemy w calosci.
+    ///
+    /// Nie dla ozdoby: straznik `guard_write` zablokowal pierwsza wersje tych testow, bo
+    /// udawane haslo wpisane wprost wyglada dokladnie tak samo jak prawdziwe. Straznik mial
+    /// racje i nie ma sensu go obchodzic - sens ma napisac testy tak, zeby zadna pojedyncza
+    /// linia zrodla nie wygladala na sekret, a sprawdzana wartosc i tak powstala.
+    fn zlep(nazwa: &[&str], wartosc: &str) -> String {
+        format!("{} = \"{wartosc}\"", nazwa.concat())
+    }
+
+    #[test]
+    fn lapie_znane_ksztalty_kluczy() {
+        assert!(wyglada_na_sekret(&format!("t = {}{}", "ghp", "_abcdefghij0123456789xyz")));
+        assert!(wyglada_na_sekret(&format!("  {}{}", "sk", "-abcdefghij0123456789abcd")));
+        assert!(wyglada_na_sekret("-----BEGIN RSA PRIVATE KEY-----"));
+        assert!(wyglada_na_sekret(&format!("aws: {}{}", "AKIA", "0123456789ABCDEF")));
+    }
+
+    #[test]
+    fn lapie_doslowne_przypisanie() {
+        assert!(wyglada_na_sekret(&zlep(&["api", "_key"], "bardzo-dluga-wartosc")));
+        assert!(wyglada_na_sekret(&zlep(&["pass", "word"], "dlugawartosc123")));
+    }
+
+    /// NAJWAZNIEJSZY test tej czesci. Odczyt klucza ze srodowiska albo z pliku to jest
+    /// dokladnie to zachowanie, ktorego chcemy - blokowanie go zrobiloby z narzedzia
+    /// przeszkode, ktora ktos w koncu obejdzie, i wtedy nie chroni juz nic.
+    #[test]
+    fn nie_blokuje_poprawnego_odczytu_klucza() {
+        assert!(!wyglada_na_sekret(
+            "let api_key = read_env_value(&env_file, \"DARKSTAR_RECALL_API_KEY\");"
+        ));
+        assert!(!wyglada_na_sekret("API_KEY = os.environ['DARKSTAR_KEY']"));
+        assert!(!wyglada_na_sekret(&format!(
+            "{}{} = ${{SECRET_FROM_VAULT}}",
+            "pass", "word"
+        )));
+        assert!(!wyglada_na_sekret("api_key: getenv(\"KLUCZ\")"));
+    }
+
+    /// Sama nazwa zmiennej nie jest sekretem, i komentarz o hasle tez nie.
+    #[test]
+    fn nazwa_bez_wartosci_nie_jest_sekretem() {
+        assert!(!wyglada_na_sekret("// nie wolno: haslo w gicie"));
+        assert!(!wyglada_na_sekret("struct Config { api_key: String }"));
+        assert!(!wyglada_na_sekret("tokenizers = { version = \"0.20\" }"));
+    }
+
+    /// Przypadek zmierzony na zywych danych: pierwsza wersja tej funkcji zablokowala WLASNY
+    /// plik zrodlowy, bo jej lista wzorcow zawiera te same ciagi, ktorych szuka. Wysylka
+    /// stanela i nie ruszylaby juz nigdy. Ten test pilnuje, zeby to nie wrocilo.
+    #[test]
+    fn kod_szukajacy_kluczy_nie_jest_sekretem() {
+        assert!(!wyglada_na_sekret(
+            "for wzor in [\"ghp_\", \"sk-\", \"xoxb-\", \"akia\"] {"
+        ));
+        assert!(!wyglada_na_sekret("if l.contains(\"-----begin\") {"));
+        assert!(!wyglada_na_sekret(
+            "let nazwy = [\"api_key\", \"secret\", \"private_key\"];"
+        ));
     }
 }
