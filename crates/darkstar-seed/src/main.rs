@@ -111,7 +111,8 @@ fn main() {
                 Some(corpus_path) => match read_corpus(corpus_path) {
                     Ok(corpus) => {
                         println!("\nkorpus              : {} symboli", corpus.len());
-                        if let Err(e) = seed_pairs(&mut tensors, &corpus, log_freq.len(), strength) {
+                        let window = args.iter().position(|a| a == "--window").and_then(|p| args.get(p + 1)).and_then(|v| v.parse().ok()).filter(|w: &usize| *w > 0).unwrap_or(1);
+                        if let Err(e) = seed_pairs(&mut tensors, &corpus, log_freq.len(), strength, window) {
                             eprintln!("FAIL: pary: {e}");
                             std::process::exit(1);
                         }
@@ -235,7 +236,7 @@ fn seed_as_bias(tensors: &mut Vec<Tensor>, log_freq: &[f32]) {
 ///
 /// Kierunki sa liczone z numeru symbolu, nie losowane i pamietane: ten sam symbol zawsze
 /// dostaje ten sam kierunek, wiec caly zasiew jest powtarzalny co do bitu.
-fn seed_pairs(tensors: &mut [Tensor], corpus: &[usize], vocab: usize, strength: f32) -> Result<(), String> {
+fn seed_pairs(tensors: &mut [Tensor], corpus: &[usize], vocab: usize, strength: f32, window: usize) -> Result<(), String> {
     let hidden = tensors
         .iter()
         .find(|t| t.name == EMBED_NAME)
@@ -250,18 +251,32 @@ fn seed_pairs(tensors: &mut [Tensor], corpus: &[usize], vocab: usize, strength: 
     let mut output = vec![0.0f32; vocab * hidden];
     let mut pairs = 0usize;
 
-    for window in corpus.windows(2) {
-        let (a, b) = (window[0], window[1]);
-        if a >= vocab || b >= vocab {
+    // Okno: ile symboli w przod bierzemy pod uwage, nie tylko bezposredniego nastepnika.
+    // Wklad maleje jak 1/odleglosc - sasiad tuz obok mowi o symbolu wiecej niz ten piec
+    // miejsc dalej, ale ten dalszy nadal cos mowi. Wybor 1/d zamiast czegos ostrzejszego
+    // jest celowy: przy zbyt szybkim spadku okno przestaje sie roznic od samych par.
+    for start in 0..corpus.len() {
+        let a = corpus[start];
+        if a >= vocab {
             continue;
         }
-        for dim in 0..hidden {
-            input[a * hidden + dim] += direction(b, dim);
-            output[b * hidden + dim] += direction(a, dim);
+        for distance in 1..=window {
+            let Some(&b) = corpus.get(start + distance) else {
+                break;
+            };
+            if b >= vocab {
+                continue;
+            }
+            let weight = 1.0 / distance as f32;
+            for dim in 0..hidden {
+                input[a * hidden + dim] += weight * direction(b, dim);
+                output[b * hidden + dim] += weight * direction(a, dim);
+            }
+            pairs += 1;
         }
-        pairs += 1;
     }
-    println!("par przetworzonych  : {pairs}");
+    println!("okno                : {window} symboli w przod");
+    println!("polaczen zapisanych : {pairs}");
 
     let touched_in = normalize_rows(&mut input, hidden, strength);
     let touched_out = normalize_rows(&mut output, hidden, strength);
