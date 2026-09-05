@@ -1,0 +1,81 @@
+#!/bin/sh
+# darkstar-header-v1
+# po co: collect-corpus
+# nie wolno: hotspot, ruszac wlp2s0, wracac do 10.44, gasic DARKSTAR-WiFi, haslo w gicie
+# autor: Marcin
+# powstal: 2026-09-05
+#
+# THIS IS VERY IMPORTANT!!!
+# ==========================================
+# AUTHOR: M. SZUL
+# AI MODEL: Claude Sonnet 5
+# TIMESTAMP: 2026-09-05 12:10:00
+# REASON FOR CREATION: Noworodek uczyl sie z korpusu, w ktorym ponad polowa symboli
+# wystepowala JEDEN RAZ - z czegos takiego nie da sie nauczyc niczego poza tym, co jest
+# czeste. Material lezal caly czas obok: 4631 wspomnien w magazynie Darkstara. Ten skrypt
+# go stamtad wyciaga.
+# MECHANICS: Przechodzi po wszystkich kolekcjach magazynu przez `points/scroll`, paczkami
+# po 200, i zrzuca pole `document` kazdego punktu. Jedno wspomnienie na wiersz - znaki nowej
+# linii wewnatrz tresci zamieniane na spacje, bo inaczej granice miedzy wspomnieniami
+# rozmylyby sie i model uczylby sie sklejek.
+# SYSTEM PART: Darkstar / narzedzia materialu uczacego.
+# ARCHITECTURE FUNCTION: Jedyne miejsce, ktore wie, jak zamienic zawartosc magazynu
+# w plik nadajacy sie do nauki. Wynik idzie dalej do `cbms ids`, a stamtad do treningu.
+# DEPENDENCIES/LINKS: magazyn na 127.0.0.1:6333, deploy/.env (DARKSTAR_RECALL_API_KEY),
+# curl i jq. Klucz czytany z pliku, NIGDY z argumentu - argumenty widzi kazdy przez `ps`.
+# TECH STACK: POSIX sh. Nie Rust, bo to jednorazowy potok przez dwa narzedzia systemowe;
+# nie Python, bo zasada projektu.
+# LOCAL WORKSPACE: uruchamiany NA CBMS, gdzie mieszka magazyn i klucz
+# GIT COMMIT: PENDING
+# GITHUB METADATA: jpytka666-jpg/polip-agi, branch docs/darkstar-headscale-hotspot-plan
+# ==========================================
+#
+# Zbiera tresc wszystkich wspomnien z magazynu Darkstar do jednego pliku tekstowego.
+# ZRODLO JEST NIETYKALNE: uzywane sa wylacznie metody odczytu.
+#
+# Zmierzone 2026-09-05: 31 kolekcji, 4631 wspomnien, 1358249 bajtow.
+#
+# uzycie: zbierz-teksty.sh <plik-wyjsciowy>
+set -e
+
+OUT="${1:?podaj plik wyjsciowy}"
+ENVFILE="${DARKSTAR_ENV:-$HOME/polip-agi/deploy/.env}"
+RECALL="${DARKSTAR_RECALL:-http://127.0.0.1:6333}"
+BATCH=200
+
+KEY=$(grep "^DARKSTAR_RECALL_API_KEY=" "$ENVFILE" | cut -d= -f2-)
+[ -n "$KEY" ] || { echo "FAIL: brak klucza w $ENVFILE" >&2; exit 1; }
+
+: > "$OUT"
+TOTAL=0
+
+for COLL in $(curl -s "$RECALL/collections" -H "api-key: $KEY" | jq -r '.result.collections[].name'); do
+  OFFSET=null
+  COUNT=0
+  while : ; do
+    if [ "$OFFSET" = "null" ]; then
+      BODY="{\"limit\":$BATCH,\"with_payload\":true,\"with_vector\":false}"
+    else
+      BODY="{\"limit\":$BATCH,\"offset\":$OFFSET,\"with_payload\":true,\"with_vector\":false}"
+    fi
+    PAGE=$(curl -s -X POST "$RECALL/collections/$COLL/points/scroll" \
+      -H "api-key: $KEY" -H "content-type: application/json" -d "$BODY")
+
+    N=$(printf '%s' "$PAGE" | jq -r '.result.points | length')
+    [ "$N" = "0" ] || [ -z "$N" ] && break
+
+    # Jedno wspomnienie na wiersz. Znaki nowej linii wewnatrz tresci zamieniamy na spacje,
+    # zeby wiersz odpowiadal jednemu wspomnieniu - inaczej granice sie rozmyja.
+    printf '%s' "$PAGE" | jq -r '.result.points[].payload.document // empty | gsub("\n"; " ")' >> "$OUT"
+
+    COUNT=$((COUNT + N))
+    OFFSET=$(printf '%s' "$PAGE" | jq -c '.result.next_page_offset')
+    [ "$OFFSET" = "null" ] && break
+  done
+  TOTAL=$((TOTAL + COUNT))
+  printf '%-40s %6d\n' "$COLL" "$COUNT" >&2
+done
+
+echo "" >&2
+echo "RAZEM wspomnien: $TOTAL" >&2
+echo "plik: $OUT ($(wc -c < "$OUT") bajtow, $(wc -l < "$OUT") wierszy)" >&2
