@@ -218,22 +218,19 @@ fn strip_known_suffix(word: &str) -> Option<String> {
             return Some(format!("{head}{to}"));
         }
     }
-    if !word.chars().all(|c| c.is_alphabetic()) {
-        // Slowo z cyfra albo znakiem nie jest slowem - regula ma je przepuscic dalej,
-        // a nie sklejac z niego formy.
-        return None;
-    }
-    // Angielskie nieme `e` na koncu: `code` -> `kod` -> `kodo`. Bez tego wychodzi `kodeo`,
-    // a polskie `kod` daje `kodo` - znowu dwa rdzenie na jedno pojecie. Zdejmujemy tylko po
-    // spolglosce, bo `e` po samoglosce jest zwykle wymawiane i nalezy do rdzenia.
-    let chars: Vec<char> = word.chars().collect();
-    if chars.len() >= 4
-        && chars[chars.len() - 1] == 'e'
-        && !"aeiou".contains(chars[chars.len() - 2])
-    {
-        return Some(chars[..chars.len() - 1].iter().collect());
-    }
-    Some(word.to_string())
+    // I to wszystko. Zadnego wyjscia awaryjnego.
+    //
+    // Pierwsza wersja miala tu "jak nic nie pasuje, wez cale slowo i doklej -o". Pomiar na
+    // 3000 slow (Darkstar, 2026-09-05) pokazal, ze taka regula "obrabia" 94% - produkujac
+    // `count -> kounto`, `wiedzy -> viedzio`, `doc -> doko` (co znaczy dok), `ttl -> tlo`.
+    // To nie byla regula, tylko pieczatka: stemplowala wszystko, co ma litery. Slowo, ktore
+    // dostalo zmyslony rdzen, weszloby do ksiegi na stale i nikt by sie juz nie dowiedzial,
+    // ze `count` i `nombro` to to samo pojecie.
+    //
+    // Regula wolno odpalic TYLKO tam, gdzie ma podstawe: przy koncowce, ktora esperanto
+    // przejelo z tego samego zrodla, co polski i angielski. Reszta idzie do warstwy "nie wiem"
+    // i czeka na tlumacza - bo brak odpowiedzi da sie uzupelnic, a cicha bzdura nie.
+    None
 }
 
 /// Zamiana liter na esperanckie. Obejmuje polski i angielski zapis tych samych dzwiekow.
@@ -344,11 +341,16 @@ mod tests {
         assert_eq!(by_rule("information").as_deref(), Some("informacio"));
     }
 
-    /// Angielskie nieme `e` musi zniknac, inaczej `code` daje `kodeo`, a polskie `kod` `kodo`.
+    /// Slowo bez rozpoznanej koncowki NIE dostaje rdzenia z reguly, choc "kodo" byloby
+    /// poprawne. To jest swiadoma strata: pomiar pokazal, ze wyjscie awaryjne "wez cale
+    /// slowo i doklej -o" stemplowalo 94% slow, w tym `count -> kounto` i `doc -> doko`.
+    /// Brak odpowiedzi uzupelni tlumacz. Cichej bzdury nikt juz nie odkreci.
     #[test]
-    fn kod_i_code_daja_to_samo() {
-        assert_eq!(by_rule("kod").as_deref(), Some("kodo"));
-        assert_eq!(by_rule("code").as_deref(), Some("kodo"));
+    fn slowo_bez_rozpoznanej_koncowki_idzie_do_niewiadomych() {
+        assert_eq!(by_rule("kod"), None);
+        assert_eq!(by_rule("count"), None, "kounto bylo bzdura");
+        assert_eq!(by_rule("doc"), None, "doko znaczy dok, nie dokument");
+        assert_eq!(by_rule("wiedzy"), None, "viedzio bylo bzdura");
     }
 
     /// `c` przed `e i y` zostaje `c`; wszedzie indziej staje sie `k`.
