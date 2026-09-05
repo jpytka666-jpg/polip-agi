@@ -1,0 +1,415 @@
+// darkstar-header-v1
+// po co: lathe.rs
+// nie wolno: hotspot, ruszac wlp2s0, wracac do 10.44, gasic DARKSTAR-WiFi, haslo w gicie
+// autor: Marcin
+// powstal: 2026-09-05
+//! Obrabiarka: dowolne slowo z dowolnego jezyka -> czysta forma esperancka.
+//!
+//! THIS IS VERY IMPORTANT!!!
+//! ==========================================
+//! AUTHOR: M. SZUL
+//! AI MODEL: Claude Sonnet 5
+//! TIMESTAMP: 2026-09-05 21:40:00
+//! REASON FOR CREATION: Marcin poprawil moje rozumienie ukladu i mial racje.
+//! Esperanto nie jest tabelka lezaca obok ksiegi - jest STOPNIEM, przez ktory przechodzi
+//! kazde wejscie, zanim cokolwiek zobaczy rdzen. Zadne slowo polskie ani angielskie nie ma
+//! prawa dostac wlasnego znaczka; znaczek nalezy do POJECIA, a jezyki sa tylko wejsciem do
+//! obrobki. Sprawdzone i potwierdzone: ksiega deklaruje sie jako esperancka
+//! (CODEBOOK_CBMS_ES), a trzyma surowe `memory` 303 razy i `pamięć` 5 razy, podczas gdy
+//! `memoro`, `eraro` i `scio` nie ma w niej ani razu. Stopien obrobki nigdy nie powstal.
+//! MECHANICS: Trzy warstwy, kazda tansza od nastepnej, kazda podpisana w wyniku.
+//! Slownik - dokladne trafienie w moscie. Regula - mechaniczna zamiana liter i koncowek,
+//! dzialajaca dla slownictwa miedzynarodowego, bo esperanto jest jezykiem UKLADANYM
+//! z regularnych klockow. Nie wiem - slowo zostaje surowe i jest OZNACZONE, nigdy zgadniete;
+//! zgadniety rdzen wchodzi do ksiegi na stale i psuje wszystko, co sie na nim oprze.
+//! Warstwa trzecia (model dobiera) celowo NIE jest tutaj: najpierw pomiar, ile zostaje.
+//! SYSTEM PART: Darkstar / warstwa esperanto - obrobka wejscia.
+//! ARCHITECTURE FUNCTION: Stoi PRZED ksiega i przed rdzeniem. Wszystko, co wchodzi do
+//! systemu - material do nauki i pytania zadawane pozniej - przechodzi tedy. Dzieki temu
+//! nowy jezyk nie kosztuje ani jednego nowego znaczka, a caly material na dane pojecie
+//! trafia w jeden znaczek zamiast rozkladac sie na trzy.
+//! DEPENDENCIES/LINKS: most (TSV: slowo, rdzen, zrodlo) - to samo wejscie, ktore czyta
+//! implant. Wyjscie w tym samym formacie, wiec doklada sie do mostu bez przerabiania.
+//! TECH STACK: Rust 2024, bez zaleznosci zewnetrznych - warstwy 1 i 2 to czysty tekst.
+//! LOCAL WORKSPACE: D:\codex-fresh-2026-08-28\worktrees\polip-agi-darkstar-plan
+//! GIT COMMIT: PENDING
+//! GITHUB METADATA: jpytka666-jpg/polip-agi, branch docs/darkstar-headscale-hotspot-plan
+//! ==========================================
+//!
+//! Uzycie:
+//! ```text
+//! lathe --bridge most.tsv --words slowa.txt [--out nowe.tsv] [--lang pl|en|auto]
+//! ```
+
+use std::collections::HashMap;
+use std::fs;
+
+/// Litery, ktore w esperancie istnieja. Wszystko poza nimi znaczy, ze obrobka sie nie udala.
+/// `q w x y` NIE naleza do alfabetu esperanckiego - forma, ktora je zawiera, nie jest
+/// esperantem, choc by nawet konczyla sie poprawnie.
+const ESPERANTO_LETTERS: &str = "abcĉdefgĝhĥijĵklmnoprsŝtuŭvz";
+
+/// Koncowki gramatyczne. Forma bez zadnej z nich nie jest slowem, tylko rdzeniem w powietrzu.
+const ENDINGS: [&str; 5] = ["o", "a", "e", "i", "as"];
+
+#[derive(Debug, PartialEq, Clone, Copy)]
+enum Source {
+    /// Dokladne trafienie w moscie - pewne.
+    Dictionary,
+    /// Zlozone regula. To jest UZASADNIONY DOMYSL, nie pewnik, i dlatego ma wlasna nazwe
+    /// w wyniku: gdy cos pozniej pojdzie nie tak, wiadomo, ktore wpisy podejrzewac.
+    Rule,
+    /// Nie wiadomo. Slowo zostaje surowe i idzie do warstwy, ktorej jeszcze nie ma.
+    Unknown,
+}
+
+impl Source {
+    fn label(self) -> &'static str {
+        match self {
+            Source::Dictionary => "slownik",
+            Source::Rule => "regula",
+            Source::Unknown => "niewiadome",
+        }
+    }
+}
+
+fn main() {
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    let opt = |name: &str| -> Option<String> {
+        args.iter()
+            .position(|a| a == name)
+            .and_then(|i| args.get(i + 1))
+            .cloned()
+    };
+    let (Some(bridge_path), Some(words_path)) = (opt("--bridge"), opt("--words")) else {
+        eprintln!("uzycie: lathe --bridge most.tsv --words slowa.txt [--out nowe.tsv]");
+        std::process::exit(2);
+    };
+
+    let bridge = match load_bridge(&bridge_path) {
+        Ok(b) => b,
+        Err(e) => {
+            eprintln!("FAIL: most {bridge_path}: {e}");
+            std::process::exit(1);
+        }
+    };
+    let words = match fs::read_to_string(&words_path) {
+        Ok(t) => t,
+        Err(e) => {
+            eprintln!("FAIL: slowa {words_path}: {e}");
+            std::process::exit(1);
+        }
+    };
+    println!("most: {} wpisow z prawdziwym rdzeniem", bridge.len());
+
+    let mut counts: HashMap<&str, usize> = HashMap::new();
+    let mut rows = Vec::new();
+    let mut total = 0usize;
+    for word in words.lines().map(str::trim).filter(|w| !w.is_empty()) {
+        total += 1;
+        let (root, source) = grind(word, &bridge);
+        *counts.entry(source.label()).or_default() += 1;
+        rows.push(format!("{word}\t{root}\t{}", source.label()));
+    }
+
+    println!("slow przerobionych: {total}");
+    for key in ["slownik", "regula", "niewiadome"] {
+        let n = counts.get(key).copied().unwrap_or(0);
+        let pct = (n * 100).checked_div(total).unwrap_or(0);
+        println!("  {key:<12} {n:>6}  ({pct}%)");
+    }
+
+    if let Some(out) = opt("--out") {
+        let body = rows.join("\n") + "\n";
+        match fs::write(&out, body) {
+            Ok(()) => println!("zapisano: {out}"),
+            Err(e) => {
+                eprintln!("FAIL: zapis {out}: {e}");
+                std::process::exit(1);
+            }
+        }
+    } else {
+        println!("\n(bez --out nic nie zapisuje - to jest przebieg pomiarowy)");
+        for r in rows.iter().filter(|r| r.contains("\tregula")).take(15) {
+            println!("  {r}");
+        }
+    }
+}
+
+/// Wczytuje most i zostawia TYLKO wpisy z prawdziwym rdzeniem.
+///
+/// Wiersz `pamięć -> pamięć` znaczy "nie znalazlem", a nie "rdzeniem jest pamięć". Wpuszczenie
+/// go tutaj jako trafienia zamieniloby brak wiedzy w falszywa pewnosc i obrabiarka
+/// przepuszczalaby surowe slowa, myslac, ze je obrobila.
+fn load_bridge(path: &str) -> std::io::Result<HashMap<String, String>> {
+    let text = fs::read_to_string(path)?;
+    Ok(text
+        .lines()
+        .filter_map(|l| {
+            let mut it = l.split('\t');
+            let word = it.next()?.trim();
+            let root = it.next()?.trim();
+            if word.is_empty() || root.is_empty() || word.eq_ignore_ascii_case(root) {
+                return None;
+            }
+            Some((word.to_lowercase(), root.to_string()))
+        })
+        .collect())
+}
+
+/// Obrabia jedno slowo: slownik, potem regula, potem przyznanie sie do niewiedzy.
+fn grind(word: &str, bridge: &HashMap<String, String>) -> (String, Source) {
+    let lower = word.to_lowercase();
+    if let Some(root) = bridge.get(&lower) {
+        return (root.clone(), Source::Dictionary);
+    }
+    if let Some(root) = by_rule(&lower) {
+        return (root, Source::Rule);
+    }
+    (word.to_string(), Source::Unknown)
+}
+
+/// Sklada forme esperancka z regularnych klockow.
+///
+/// Dziala dla slownictwa MIEDZYNARODOWEGO - `wektor`/`vector` -> `vektoro`, `funkcja`/
+/// `function` -> `funkcio` - bo takie slowa esperanto bierze z tego samego zrodla, co polski
+/// i angielski. NIE zadziala dla slow rodzimych: `podobieństwo` to po esperancku `simileco`,
+/// gdzie zmienia sie caly rdzen, a to jest tlumaczenie, nie przeksztalcenie. Ta granica jest
+/// wlasnie tym, co ma zmierzyc przebieg bez `--out`.
+fn by_rule(word: &str) -> Option<String> {
+    if word.chars().count() < 3 {
+        return None;
+    }
+    let stem = strip_known_suffix(word)?;
+    let mapped = map_letters(&stem);
+    let candidate = format!("{mapped}o");
+    if is_valid_esperanto(&candidate) {
+        Some(candidate)
+    } else {
+        None
+    }
+}
+
+/// Zdejmuje koncowke, ktora ma regularny odpowiednik, i zwraca rdzen do zlozenia.
+///
+/// Kolejnosc ma znaczenie: dluzsze koncowki musza byc sprawdzane przed krotszymi, bo
+/// `-ation` konczy sie na `-tion` i sprawdzone odwrotnie zjadloby za malo.
+fn strip_known_suffix(word: &str) -> Option<String> {
+    // Koncowki, ktore w esperancie maja staly odpowiednik. Para: co zdjac, co dokleic
+    // (bez ostatniej litery `o`, ktora dokleja `by_rule`).
+    const SUFFIXES: [(&str, &str); 12] = [
+        ("ation", "aci"),  // information -> informacio
+        ("ition", "ici"),  // definition -> definicio
+        ("ution", "uci"),  // solution -> solucio
+        ("ction", "kci"),  // function -> funkcio
+        ("ssion", "si"),   // session -> sesio
+        ("acja", "aci"),   // informacja -> informacio
+        ("ycja", "ici"),   // definicja -> definicio
+        ("kcja", "kci"),   // funkcja -> funkcio
+        ("sja", "si"),     // sesja -> sesio
+        ("ent", "ent"),    // element -> elemento
+        ("or", "or"),      // vector/wektor -> vektoro
+        ("um", "um"),      // forum -> forumo
+    ];
+    for (from, to) in SUFFIXES {
+        if let Some(head) = word.strip_suffix(from)
+            && head.chars().count() >= 2
+        {
+            return Some(format!("{head}{to}"));
+        }
+    }
+    if !word.chars().all(|c| c.is_alphabetic()) {
+        // Slowo z cyfra albo znakiem nie jest slowem - regula ma je przepuscic dalej,
+        // a nie sklejac z niego formy.
+        return None;
+    }
+    // Angielskie nieme `e` na koncu: `code` -> `kod` -> `kodo`. Bez tego wychodzi `kodeo`,
+    // a polskie `kod` daje `kodo` - znowu dwa rdzenie na jedno pojecie. Zdejmujemy tylko po
+    // spolglosce, bo `e` po samoglosce jest zwykle wymawiane i nalezy do rdzenia.
+    let chars: Vec<char> = word.chars().collect();
+    if chars.len() >= 4
+        && chars[chars.len() - 1] == 'e'
+        && !"aeiou".contains(chars[chars.len() - 2])
+    {
+        return Some(chars[..chars.len() - 1].iter().collect());
+    }
+    Some(word.to_string())
+}
+
+/// Zamiana liter na esperanckie. Obejmuje polski i angielski zapis tych samych dzwiekow.
+fn map_letters(stem: &str) -> String {
+    let mut out = String::with_capacity(stem.len());
+    let chars: Vec<char> = stem.chars().collect();
+    let mut i = 0;
+    while i < chars.len() {
+        let two: String = chars[i..(i + 2).min(chars.len())].iter().collect();
+        let pair: Option<&str> = match two.as_str() {
+            "ch" => Some("h"),
+            "cz" => Some("ĉ"),
+            "sz" => Some("ŝ"),
+            "rz" => Some("ĵ"),
+            "ck" => Some("k"),
+            "ph" => Some("f"),
+            "th" => Some("t"),
+            "qu" => Some("kv"),
+            _ => None,
+        };
+        if let Some(rep) = pair {
+            out.push_str(rep);
+            i += 2;
+            continue;
+        }
+        // Angielskie `c` czyta sie dwojako i esperanto oddaje to dwoma literami: przed `e i y`
+        // brzmi jak `s`/`ts` i zostaje `c`, wszedzie indziej brzmi jak `k`. Bez tego `vector`
+        // wychodzi jako `vectoro`, a `wektor` jako `vektoro` - czyli dwa rdzenie na jedno
+        // pojecie, czego cala obrabiarka ma nie dopuscic.
+        if chars[i] == 'c' {
+            let soft = matches!(chars.get(i + 1), Some('e') | Some('i') | Some('y'));
+            out.push(if soft { 'c' } else { 'k' });
+            i += 1;
+            continue;
+        }
+        let one = match chars[i] {
+            'w' => "v",
+            'x' => "ks",
+            'y' => "i",
+            'q' => "k",
+            'ó' => "u",
+            'ą' => "a",
+            'ę' => "e",
+            'ł' => "l",
+            'ń' => "n",
+            'ś' => "s",
+            'ź' | 'ż' => "z",
+            'ć' => "c",
+            c => {
+                out.push(c);
+                i += 1;
+                continue;
+            }
+        };
+        out.push_str(one);
+        i += 1;
+    }
+    // Podwojone spolgloski nie istnieja w esperancie: `programm` -> `program`.
+    let mut squeezed = String::with_capacity(out.len());
+    let mut prev: Option<char> = None;
+    for c in out.chars() {
+        if Some(c) != prev || "aeiou".contains(c) {
+            squeezed.push(c);
+        }
+        prev = Some(c);
+    }
+    squeezed
+}
+
+/// Czy to w ogole jest esperanto. Sprawdza alfabet i koncowke gramatyczna.
+fn is_valid_esperanto(word: &str) -> bool {
+    if word.chars().count() < 3 {
+        return false;
+    }
+    if !word.chars().all(|c| ESPERANTO_LETTERS.contains(c)) {
+        return false;
+    }
+    ENDINGS.iter().any(|e| word.ends_with(e))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn empty() -> HashMap<String, String> {
+        HashMap::new()
+    }
+
+    /// Slowo miedzynarodowe: polski i angielski musza wyjsc na TO SAMO. To jest cel calej
+    /// obrabiarki w jednym tescie.
+    #[test]
+    fn wektor_i_vector_daja_to_samo() {
+        let a = by_rule("wektor").expect("wektor");
+        let b = by_rule("vector").expect("vector");
+        assert_eq!(a, "vektoro");
+        assert_eq!(a, b, "polski i angielski musza trafic w jeden rdzen");
+    }
+
+    #[test]
+    fn funkcja_i_function_daja_to_samo() {
+        assert_eq!(by_rule("funkcja").as_deref(), Some("funkcio"));
+        assert_eq!(by_rule("function").as_deref(), Some("funkcio"));
+    }
+
+    #[test]
+    fn informacja_i_information_daja_to_samo() {
+        assert_eq!(by_rule("informacja").as_deref(), Some("informacio"));
+        assert_eq!(by_rule("information").as_deref(), Some("informacio"));
+    }
+
+    /// Angielskie nieme `e` musi zniknac, inaczej `code` daje `kodeo`, a polskie `kod` `kodo`.
+    #[test]
+    fn kod_i_code_daja_to_samo() {
+        assert_eq!(by_rule("kod").as_deref(), Some("kodo"));
+        assert_eq!(by_rule("code").as_deref(), Some("kodo"));
+    }
+
+    /// `c` przed `e i y` zostaje `c`; wszedzie indziej staje sie `k`.
+    #[test]
+    fn c_zamienia_sie_zaleznie_od_nastepnej_litery() {
+        assert_eq!(map_letters("vector"), "vektor");
+        assert_eq!(map_letters("centr"), "centr");
+    }
+
+    /// Slownik ma pierwszenstwo przed regula - trafienie pewne bije uzasadniony domysl.
+    #[test]
+    fn slownik_bije_regule() {
+        let mut b = empty();
+        b.insert("wektor".into(), "cxioalia".into());
+        let (root, src) = grind("wektor", &b);
+        assert_eq!(root, "cxioalia");
+        assert_eq!(src, Source::Dictionary);
+    }
+
+    /// Wpis wskazujacy sam na siebie znaczy "nie znalazlem" i nie moze udawac trafienia.
+    #[test]
+    fn wpis_na_siebie_to_nie_trafienie() {
+        let tmp = std::env::temp_dir().join("lathe-test-most.tsv");
+        std::fs::write(&tmp, "pamięć\tpamięć\twlasne\nbłąd\teraro\tslownik-pl\n").unwrap();
+        let b = load_bridge(tmp.to_str().unwrap()).unwrap();
+        assert!(!b.contains_key("pamięć"), "wpis na siebie nie jest rdzeniem");
+        assert_eq!(b.get("błąd").map(String::as_str), Some("eraro"));
+        let _ = std::fs::remove_file(&tmp);
+    }
+
+    /// Forma z litera spoza alfabetu esperanckiego nie jest esperantem, choc konczy sie dobrze.
+    #[test]
+    fn odrzuca_litery_spoza_alfabetu() {
+        assert!(!is_valid_esperanto("wxyzo"));
+        assert!(is_valid_esperanto("vektoro"));
+    }
+
+    #[test]
+    fn forma_bez_koncowki_nie_przechodzi() {
+        assert!(!is_valid_esperanto("vektor"));
+    }
+
+    /// Granica reguly, nazwana wprost: slowa rodzimego nie da sie przeksztalcic, bo tam
+    /// zmienia sie caly rdzen. Regula MUSI to przepuscic dalej, a nie zmyslic.
+    #[test]
+    fn slowo_rodzime_wychodzi_bledne_i_to_jest_znane() {
+        // podobieństwo -> po esperancku simileco, czego zadna zamiana liter nie da.
+        let got = by_rule("podobieństwo");
+        assert_ne!(got.as_deref(), Some("simileco"));
+    }
+
+    #[test]
+    fn nieznane_zostaje_surowe_i_oznaczone() {
+        let (root, src) = grind("!!", &empty());
+        assert_eq!(root, "!!");
+        assert_eq!(src, Source::Unknown);
+    }
+
+    #[test]
+    fn podwojone_spolgloski_znikaja() {
+        assert_eq!(map_letters("programm"), "program");
+        assert_eq!(map_letters("aa"), "aa", "samogloski zostaja");
+    }
+}

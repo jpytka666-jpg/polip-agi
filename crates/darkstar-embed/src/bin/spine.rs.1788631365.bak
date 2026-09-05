@@ -1,0 +1,231 @@
+// darkstar-header-v1
+// po co: spine.rs
+// nie wolno: hotspot, ruszac wlp2s0, wracac do 10.44, gasic DARKSTAR-WiFi, haslo w gicie
+// autor: Marcin
+// powstal: 2026-09-05
+//! Rdzen kregowy: jedno zadanie -> jeden wektor -> cztery odpowiedzi -> gotowa diagnoza.
+//!
+//! THIS IS VERY IMPORTANT!!!
+//! ==========================================
+//! AUTHOR: M. SZUL
+//! AI MODEL: Claude Sonnet 5
+//! TIMESTAMP: 2026-09-05 21:30:00
+//! REASON FOR CREATION: Marcin postawil to tak: zamiast mielic - bach wektor, bach narzedzie,
+//! bach funkcja w kodzie, bach porownanie z blokiem pamieci, i juz widac, co sie rozni.
+//! Duzy model (Qwen 30B) dostaje od rdzenia GOTOWA DIAGNOZE, tak jak ja dostaje wynik od
+//! podagenta - wniosek, nie sterte do przeczytania.
+//! MECHANICS: Opis zadania idzie raz przez silnik osadzen, a powstaly wektor odpytuje kilka
+//! kolekcji magazynu naraz: narzedzia, bloki kodu, wspomnienia. Kazde pytanie to jedno
+//! porownanie wektorow - milisekundy, nie sekundy. Wynik wychodzi jako zwiezly raport albo
+//! jako JSON, zeby mogl go zjesc drugi program.
+//! SYSTEM PART: Darkstar / rdzen kregowy.
+//! ARCHITECTURE FUNCTION: Mozg (Qwen albo agent) - RDZEN (ten program) - CIALO (narzedzia
+//! AIONS i Darkstar). Rdzen nie mysli i nie generuje: dopasowuje. Jest szybki nie dlatego,
+//! ze jest madry, tylko dlatego, ze nie mysli.
+//! DEPENDENCIES/LINKS: darkstar-embed (silniki osadzen), darkstar-recall (magazyn).
+//! Kolekcje: reflex_minilm (bloki kodu), session_* (wspomnienia), dowolne przez --lane.
+//! TECH STACK: Rust 2024.
+//! LOCAL WORKSPACE: D:\codex-fresh-2026-08-28\worktrees\polip-agi-darkstar-plan
+//! GIT COMMIT: PENDING
+//! GITHUB METADATA: jpytka666-jpg/polip-agi, branch docs/darkstar-headscale-hotspot-plan
+//! ==========================================
+//!
+//! Uzycie:
+//! ```text
+//! spine "<opis zadania>" [--lane <nazwa>:<kolekcja>]... [--limit N] [--json] [--core]
+//! ```
+//! Bez `--lane` pyta domyslnych torow. `--json` wypisuje wynik w formacie do zjedzenia
+//! przez inny program - bo odbiorca rdzenia jest zwykle maszyna, nie czlowiek.
+
+use std::time::Instant;
+
+use darkstar_embed::MiniLmEmbedder;
+use darkstar_embed::noworodek::NoworodekEmbedder;
+use darkstar_recall::{HttpClient, read_env_value};
+use darkstar_shadow::{EmbedError, Embedder};
+use serde_json::{Value, json};
+
+const DEFAULT_RECALL: &str = "http://127.0.0.1:6333";
+const DEFAULT_ENV: &str = "/home/owner/polip-agi/deploy/.env";
+
+/// Tory pytane domyslnie. Kazdy to inna kolekcja, ale to samo pytanie i ten sam wektor -
+/// stad bierze sie szybkosc: jedno liczenie osadzenia, kilka porownan.
+const DEFAULT_LANES: [(&str, &str); 2] = [
+    ("blok kodu", "reflex_minilm"),
+    ("wspomnienie", "session_claude_marcin_main"),
+];
+
+struct Hit {
+    lane: String,
+    score: f64,
+    label: String,
+    detail: String,
+}
+
+fn main() {
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    let Some(task) = args.first().filter(|t| !t.trim().is_empty()) else {
+        eprintln!("uzycie: spine \"<opis zadania>\" [--lane <nazwa>:<kolekcja>]... [--limit N] [--json] [--core]");
+        eprintln!();
+        eprintln!("Domyslne tory:");
+        for (name, coll) in DEFAULT_LANES {
+            eprintln!("  {name:<14} -> {coll}");
+        }
+        std::process::exit(2);
+    };
+
+    let opt = |name: &str, default: &str| -> String {
+        args.iter()
+            .position(|a| a == name)
+            .and_then(|i| args.get(i + 1))
+            .cloned()
+            .unwrap_or_else(|| default.to_string())
+    };
+    let recall_url = opt("--recall", DEFAULT_RECALL);
+    let env_file = opt("--env-file", DEFAULT_ENV);
+    let as_json = args.iter().any(|a| a == "--json");
+    let limit: usize = opt("--limit", "3").parse().unwrap_or(3);
+
+    // Tory podane z linii polecen zastepuja domyslne. Format nazwa:kolekcja, bo nazwa jest
+    // dla czlowieka, a kolekcja dla magazynu i mylenie ich konczy sie pustym wynikiem.
+    let mut lanes: Vec<(String, String)> = args
+        .iter()
+        .enumerate()
+        .filter(|(_, a)| a.as_str() == "--lane")
+        .filter_map(|(i, _)| args.get(i + 1))
+        .filter_map(|spec| spec.split_once(':'))
+        .map(|(n, c)| (n.to_string(), c.to_string()))
+        .collect();
+    if lanes.is_empty() {
+        lanes = DEFAULT_LANES
+            .iter()
+            .map(|(n, c)| (n.to_string(), c.to_string()))
+            .collect();
+    }
+
+    let started = Instant::now();
+    let engine = match pick_engine(args.iter().any(|a| a == "--core")) {
+        Ok(e) => e,
+        Err(e) => {
+            eprintln!("FAIL: silnik: {e}");
+            std::process::exit(1);
+        }
+    };
+    let vector = match engine.embed(task) {
+        Ok(v) => v,
+        Err(e) => {
+            eprintln!("FAIL: nie moge opisac zadania: {e}");
+            std::process::exit(1);
+        }
+    };
+    let embed_ms = started.elapsed().as_millis();
+
+    let Some(key) = read_env_value(&env_file, "DARKSTAR_RECALL_API_KEY") else {
+        eprintln!("FAIL: brak DARKSTAR_RECALL_API_KEY w {env_file}");
+        std::process::exit(1);
+    };
+    let store = HttpClient::new(&recall_url, Some(key));
+
+    // Jeden wektor, kilka torow. Tor, ktory nie odpowie, nie zatrzymuje reszty: brak bloku
+    // kodu nadal pozwala pokazac wspomnienie, a diagnoza czesciowa jest warta wiecej niz
+    // blad calosci.
+    let mut hits = Vec::new();
+    let mut failed = Vec::new();
+    let query_started = Instant::now();
+    for (name, collection) in &lanes {
+        let body = json!({ "vector": vector, "limit": limit, "with_payload": true }).to_string();
+        match store.post(&format!("/collections/{collection}/points/search"), &body) {
+            Ok(text) => {
+                let parsed: Value = serde_json::from_str(&text).unwrap_or(Value::Null);
+                let empty = vec![];
+                for hit in parsed["result"].as_array().unwrap_or(&empty) {
+                    hits.push(Hit {
+                        lane: name.clone(),
+                        score: hit["score"].as_f64().unwrap_or(0.0),
+                        label: label_of(&hit["payload"]),
+                        detail: detail_of(&hit["payload"]),
+                    });
+                }
+            }
+            Err(e) => failed.push(format!("{name} ({collection}): {e}")),
+        }
+    }
+    let query_ms = query_started.elapsed().as_millis();
+
+    if as_json {
+        let out = json!({
+            "task": task,
+            "engine": engine.name(),
+            "dimensions": engine.dimensions(),
+            "embed_ms": embed_ms,
+            "query_ms": query_ms,
+            "lanes_failed": failed,
+            "hits": hits.iter().map(|h| json!({
+                "lane": h.lane, "score": h.score, "label": h.label, "detail": h.detail
+            })).collect::<Vec<_>>(),
+        });
+        println!("{}", serde_json::to_string_pretty(&out).unwrap_or_default());
+        return;
+    }
+
+    println!("zadanie : {task}");
+    println!("silnik  : {} ({} liczb)", engine.name(), engine.dimensions());
+    println!("czas    : opis {embed_ms} ms + pytania {query_ms} ms\n");
+
+    for (name, _) in &lanes {
+        let lane_hits: Vec<&Hit> = hits.iter().filter(|h| &h.lane == name).collect();
+        if lane_hits.is_empty() {
+            continue;
+        }
+        println!("[{name}]");
+        for h in lane_hits {
+            println!("  {:.4}  {}", h.score, h.label);
+            if !h.detail.is_empty() {
+                println!("          {}", h.detail.chars().take(90).collect::<String>());
+            }
+        }
+        println!();
+    }
+
+    // Tor, ktory zawiodl, jest wypisywany, a nie przemilczany: brak wyniku z powodu bledu
+    // wyglada tak samo jak brak wyniku z powodu braku dopasowania, a to sa rozne rzeczy.
+    if !failed.is_empty() {
+        println!("tory bez odpowiedzi:");
+        for f in &failed {
+            println!("  {f}");
+        }
+    }
+}
+
+fn pick_engine(use_core: bool) -> Result<Box<dyn Embedder>, EmbedError> {
+    if use_core {
+        Ok(Box::new(NoworodekEmbedder::from_env()?))
+    } else {
+        Ok(Box::new(MiniLmEmbedder::from_env()?))
+    }
+}
+
+/// Nazwa trafienia. Kazdy tor trzyma co innego, wiec bierzemy pierwsze pole, ktore niesie
+/// nazwe - inaczej trzeba by osobnego programu na kazda kolekcje.
+fn label_of(payload: &Value) -> String {
+    for field in ["name", "title", "collection"] {
+        if let Some(v) = payload.get(field).and_then(Value::as_str) {
+            let file = payload.get("file").and_then(Value::as_str).unwrap_or("");
+            return if file.is_empty() {
+                v.to_string()
+            } else {
+                format!("{v} ({file})")
+            };
+        }
+    }
+    "(bez nazwy)".to_string()
+}
+
+fn detail_of(payload: &Value) -> String {
+    for field in ["doc", "document", "summary"] {
+        if let Some(v) = payload.get(field).and_then(Value::as_str) {
+            return v.replace('\n', " ");
+        }
+    }
+    String::new()
+}

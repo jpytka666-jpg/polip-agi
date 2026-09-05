@@ -1,0 +1,498 @@
+// darkstar-header-v1
+// po co: spine_loop.rs
+// nie wolno: hotspot, ruszac wlp2s0, wracac do 10.44, gasic DARKSTAR-WiFi, haslo w gicie
+// autor: Marcin
+// powstal: 2026-09-05
+//! Petla zwrotna rdzenia: co z decyzji wyszlo, czym sie rozni od pamieci, czego sie z tego nauczyc.
+//!
+//! THIS IS VERY IMPORTANT!!!
+//! ==========================================
+//! AUTHOR: M. SZUL
+//! AI MODEL: Claude Sonnet 5
+//! TIMESTAMP: 2026-09-05 19:15:00
+//! REASON FOR CREATION: `spine` podejmuje decyzje i ja zapisuje, ale w tabeli stanu cztery
+//! ogniwa lancucha stały puste: uruchomic blok i zlapac wynik, dopisac po fakcie "udalo sie",
+//! zamienic dziennik w material do wag, podac wszystko mozgowi. Marcin: "FIX IT".
+//! Bez tych czterech rdzen jest szybkim dopasowaniem, a nie czyms, co sie uczy - czyli
+//! dokladnie tym RAGiem, ktorego mial nie byc.
+//! MECHANICS: Trzy tryby. `diff` sciaga z magazynu tresc bloku zapamietana w chwili zapisu
+//! i porownuje ja z tym, co jest w pliku TERAZ - to jest "widac, co sie rozni". `outcome`
+//! dopisuje do dziennika, czy decyzja okazala sie trafna, bo w chwili jej podejmowania nikt
+//! tego nie wiedzial. `learn` czyta dziennik i robi z potwierdzonych decyzji material w tej
+//! samej postaci, ktora przyjmuje zasiewacz wag - tu petla sie domyka.
+//! SYSTEM PART: Darkstar / rdzen kregowy - droga powrotna.
+//! ARCHITECTURE FUNCTION: To jest roznica miedzy wyszukiwarka a rdzeniem. Wyszukiwarka po
+//! tysiacu zapytan wie tyle samo, co przed pierwszym. Rdzen z ta petla po tysiacu decyzji ma
+//! tysiac potwierdzonych lub obalonych przykladow i moze je sobie wpisac do glowy.
+//! DEPENDENCIES/LINKS: darkstar-recall (magazyn, tresc blokow), darkstar-shadow (dziennik),
+//! darkstar-seed (zasiewacz - odbiorca materialu z trybu `learn`).
+//! TECH STACK: Rust 2024.
+//! LOCAL WORKSPACE: D:\codex-fresh-2026-08-28\worktrees\polip-agi-darkstar-plan
+//! GIT COMMIT: PENDING
+//! GITHUB METADATA: jpytka666-jpg/polip-agi, branch docs/darkstar-headscale-hotspot-plan
+//! ==========================================
+//!
+//! Uzycie:
+//! ```text
+//! spine-loop diff <nazwa-bloku> [--collection reflex_minilm]
+//! spine-loop outcome <success|failure> --task "<zadanie>" [--note "<co wyszlo>"]
+//! spine-loop learn [--out material.txt] [--min-confirmed 1]
+//! ```
+
+use std::collections::HashMap;
+use std::fs;
+use std::time::{SystemTime, UNIX_EPOCH};
+
+use darkstar_recall::{HttpClient, read_env_value};
+use darkstar_shadow::{ActionOutcome, Observation, ShadowJournal, ShadowRecord};
+use serde_json::{Value, json};
+
+const DEFAULT_RECALL: &str = "http://127.0.0.1:6333";
+const DEFAULT_ENV: &str = "/home/owner/polip-agi/deploy/.env";
+const DEFAULT_JOURNAL: &str = "/home/owner/polip-agi/var/spine-journal.jsonl";
+const DEFAULT_COLLECTION: &str = "reflex_minilm";
+
+fn main() {
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    let mode = args.first().map(String::as_str).unwrap_or("");
+    let opt = |name: &str, default: &str| -> String {
+        args.iter()
+            .position(|a| a == name)
+            .and_then(|i| args.get(i + 1))
+            .cloned()
+            .unwrap_or_else(|| default.to_string())
+    };
+
+    let code = match mode {
+        "diff" => run_diff(&args, &opt),
+        "outcome" => run_outcome(&args, &opt),
+        "learn" => run_learn(&opt),
+        _ => {
+            eprintln!("uzycie:");
+            eprintln!("  spine-loop diff <nazwa-bloku> [--collection {DEFAULT_COLLECTION}]");
+            eprintln!("  spine-loop outcome <success|failure> --task \"<zadanie>\" [--note \"...\"]");
+            eprintln!("  spine-loop learn [--out material.txt] [--min-confirmed 1]");
+            2
+        }
+    };
+    std::process::exit(code);
+}
+
+// ---------------------------------------------------------------------------
+// diff: czym rozni sie blok w pliku od tego, co pamieta magazyn
+// ---------------------------------------------------------------------------
+
+fn run_diff(args: &[String], opt: &dyn Fn(&str, &str) -> String) -> i32 {
+    let Some(name) = args.get(1).filter(|n| !n.starts_with("--")) else {
+        eprintln!("FAIL: podaj nazwe bloku");
+        return 2;
+    };
+    let collection = opt("--collection", DEFAULT_COLLECTION);
+    let env_file = opt("--env-file", DEFAULT_ENV);
+    let Some(key) = read_env_value(&env_file, "DARKSTAR_RECALL_API_KEY") else {
+        eprintln!("FAIL: brak DARKSTAR_RECALL_API_KEY w {env_file}");
+        return 1;
+    };
+    let store = HttpClient::new(&opt("--recall", DEFAULT_RECALL), Some(key));
+
+    // Szukamy po nazwie, nie po wektorze: tu juz wiemy, o ktory blok chodzi - wybral go
+    // `spine`. Wektor sluzy do znalezienia bloku, filtr do jego pobrania.
+    let body = json!({
+        "filter": { "must": [{ "key": "name", "match": { "value": name } }] },
+        "limit": 1, "with_payload": true
+    })
+    .to_string();
+    let text = match store.post(&format!("/collections/{collection}/points/scroll"), &body) {
+        Ok(t) => t,
+        Err(e) => {
+            eprintln!("FAIL: magazyn nie odpowiedzial: {e}");
+            return 1;
+        }
+    };
+    let parsed: Value = serde_json::from_str(&text).unwrap_or(Value::Null);
+    let Some(point) = parsed["result"]["points"].as_array().and_then(|a| a.first()) else {
+        eprintln!("FAIL: magazyn nie zna bloku '{name}'");
+        return 1;
+    };
+    let p = &point["payload"];
+    let remembered = p["body"].as_str().unwrap_or("");
+    let file = p["file"].as_str().unwrap_or("");
+
+    println!("blok    : {name}");
+    println!("plik    : {file}");
+
+    // Brak pliku nie jest bledem tego programu - blok mogl zostac przeniesiony albo
+    // usuniety, i to samo w sobie jest odpowiedzia na pytanie "czym sie rozni".
+    let current = match fs::read_to_string(file) {
+        Ok(c) => c,
+        Err(e) => {
+            println!("\nROZNICA : pliku nie da sie odczytac ({e})");
+            println!("          pamiec trzyma {} linii, na dysku nic", remembered.lines().count());
+            return 0;
+        }
+    };
+    let Some(now_body) = extract_block(&current, name) else {
+        println!("\nROZNICA : bloku '{name}' NIE MA juz w pliku");
+        println!("          pamiec trzyma {} linii", remembered.lines().count());
+        return 0;
+    };
+
+    let changes = diff_lines(remembered, &now_body);
+    if changes.is_empty() {
+        println!("\nZGODNE  : blok jest dokladnie taki, jak zapamietany ({} linii)", now_body.lines().count());
+        return 0;
+    }
+    let removed = changes.iter().filter(|c| matches!(c, Change::Removed(_))).count();
+    let added = changes.iter().filter(|c| matches!(c, Change::Added(_))).count();
+    println!("\nROZNICA : -{removed} linii z pamieci, +{added} linii na dysku\n");
+    for c in &changes {
+        match c {
+            Change::Removed(l) => println!("  - {l}"),
+            Change::Added(l) => println!("  + {l}"),
+        }
+    }
+    0
+}
+
+#[derive(Debug, PartialEq)]
+enum Change {
+    Removed(String),
+    Added(String),
+}
+
+/// Roznica miedzy dwoma tekstami, linia po linii.
+///
+/// Najdluzszy wspolny podciag, nie porownanie pozycjami: wstawienie jednej linii na gorze
+/// przesuwa cala reszte i porownanie pozycjami oglosiloby, ze zmienil sie caly blok. Bloki
+/// sa krotkie (jedna funkcja), wiec tablica n*m jest tu zupelnie w porzadku.
+fn diff_lines(old: &str, new: &str) -> Vec<Change> {
+    let a: Vec<&str> = old.lines().collect();
+    let b: Vec<&str> = new.lines().collect();
+    let (n, m) = (a.len(), b.len());
+
+    let mut lcs = vec![vec![0usize; m + 1]; n + 1];
+    for i in (0..n).rev() {
+        for j in (0..m).rev() {
+            lcs[i][j] = if a[i] == b[j] {
+                lcs[i + 1][j + 1] + 1
+            } else {
+                lcs[i + 1][j].max(lcs[i][j + 1])
+            };
+        }
+    }
+
+    let mut out = Vec::new();
+    let (mut i, mut j) = (0, 0);
+    while i < n && j < m {
+        if a[i] == b[j] {
+            i += 1;
+            j += 1;
+        } else if lcs[i + 1][j] >= lcs[i][j + 1] {
+            out.push(Change::Removed(a[i].to_string()));
+            i += 1;
+        } else {
+            out.push(Change::Added(b[j].to_string()));
+            j += 1;
+        }
+    }
+    while i < n {
+        out.push(Change::Removed(a[i].to_string()));
+        i += 1;
+    }
+    while j < m {
+        out.push(Change::Added(b[j].to_string()));
+        j += 1;
+    }
+    out
+}
+
+/// Wyciaga z pliku cialo bloku o danej nazwie, liczac klamry.
+///
+/// Zwraca `None`, gdy nazwy nie ma albo klamry sie nie domykaja. Zgadywanie konca funkcji po
+/// wcieciu byloby szybsze, ale w kodzie z makrami i lancuchami wywolan myli sie na tyle czesto,
+/// ze roznica pokazywalaby zmiany, ktorych nie ma.
+fn extract_block(source: &str, name: &str) -> Option<String> {
+    let needle_fn = format!("fn {name}");
+    let start = source.lines().position(|l| l.contains(&needle_fn))?;
+    let mut depth = 0i32;
+    let mut seen_open = false;
+    let mut out = Vec::new();
+    for line in source.lines().skip(start) {
+        out.push(line);
+        for ch in line.chars() {
+            match ch {
+                '{' => {
+                    depth += 1;
+                    seen_open = true;
+                }
+                '}' => depth -= 1,
+                _ => {}
+            }
+        }
+        if seen_open && depth == 0 {
+            return Some(out.join("\n"));
+        }
+    }
+    None
+}
+
+// ---------------------------------------------------------------------------
+// outcome: dopisanie tego, czego w chwili decyzji nikt nie wiedzial
+// ---------------------------------------------------------------------------
+
+fn run_outcome(args: &[String], opt: &dyn Fn(&str, &str) -> String) -> i32 {
+    let verdict = match args.get(1).map(String::as_str) {
+        Some("success") => ActionOutcome::Success,
+        Some("failure") => ActionOutcome::Failure,
+        _ => {
+            eprintln!("FAIL: podaj 'success' albo 'failure'");
+            return 2;
+        }
+    };
+    let task = opt("--task", "");
+    if task.is_empty() {
+        eprintln!("FAIL: --task jest wymagane - inaczej nie wiadomo, ktorej decyzji dotyczy wynik");
+        return 2;
+    }
+    let note = opt("--note", "");
+    let journal_path = opt("--journal", DEFAULT_JOURNAL);
+
+    let journal = match ShadowJournal::open(&journal_path) {
+        Ok(j) => j,
+        Err(e) => {
+            eprintln!("FAIL: dziennik {journal_path}: {e}");
+            return 1;
+        }
+    };
+
+    // Wpis decyzji zostaje nietkniety, a wynik dopisuje sie jako NOWA linia. Dziennik jest
+    // tylko-dopisywalny i ma taki zostac: przepisanie starej linii skasowaloby slad, ze rdzen
+    // w chwili decyzji NIE WIEDZIAL - a to jest czesc materialu, nie usterka zapisu.
+    let earlier = match count_decisions_for(&journal_path, &task) {
+        Ok(n) => n,
+        Err(e) => {
+            eprintln!("FAIL: nie moge odczytac dziennika: {e}");
+            return 1;
+        }
+    };
+    if earlier == 0 {
+        eprintln!("UWAGA: w dzienniku nie ma decyzji o tresci \"{task}\"");
+        eprintln!("       wynik zostanie zapisany, ale nie bedzie mial sie z czym polaczyc");
+    }
+
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_millis() as i64)
+        .unwrap_or(0);
+    let record = ShadowRecord::new(
+        now,
+        Some("spine".to_string()),
+        Observation::Action {
+            actor: "spine-loop".to_string(),
+            task: task.clone(),
+            tool: None,
+            input: json!({ "verdict_for_decisions": earlier }),
+            outcome: verdict,
+            summary: if note.is_empty() {
+                format!("wynik decyzji: {verdict:?}")
+            } else {
+                note
+            },
+        },
+    );
+    if journal.append(&record) {
+        println!("zapisano wynik {verdict:?} dla zadania \"{task}\" ({earlier} pasujacych decyzji)");
+        0
+    } else {
+        eprintln!("FAIL: zapis odrzucony");
+        1
+    }
+}
+
+fn count_decisions_for(path: &str, task: &str) -> std::io::Result<usize> {
+    let text = match fs::read_to_string(path) {
+        Ok(t) => t,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(0),
+        Err(e) => return Err(e),
+    };
+    Ok(count_decisions_in(&text, task))
+}
+
+fn count_decisions_in(text: &str, task: &str) -> usize {
+    text.lines()
+        .filter_map(|l| serde_json::from_str::<Value>(l).ok())
+        .filter(|v| {
+            v["observation"]["actor"] == "spine" && v["observation"]["task"].as_str() == Some(task)
+        })
+        .count()
+}
+
+// ---------------------------------------------------------------------------
+// learn: dziennik -> material do wpisania w wagi
+// ---------------------------------------------------------------------------
+
+fn run_learn(opt: &dyn Fn(&str, &str) -> String) -> i32 {
+    let journal_path = opt("--journal", DEFAULT_JOURNAL);
+    let out_path = opt("--out", "");
+    let min_confirmed: usize = opt("--min-confirmed", "1").parse().unwrap_or(1);
+
+    let text = match fs::read_to_string(&journal_path) {
+        Ok(t) => t,
+        Err(e) => {
+            eprintln!("FAIL: dziennik {journal_path}: {e}");
+            return 1;
+        }
+    };
+    let material = build_material(&text, min_confirmed);
+    if material.is_empty() {
+        println!("brak materialu: zadna decyzja nie ma jeszcze potwierdzonego wyniku");
+        println!("(dopisz je przez `spine-loop outcome success --task \"...\"`)");
+        return 0;
+    }
+    let body = material.join("\n") + "\n";
+    if out_path.is_empty() {
+        print!("{body}");
+    } else if let Err(e) = fs::write(&out_path, &body) {
+        eprintln!("FAIL: zapis {out_path}: {e}");
+        return 1;
+    } else {
+        println!("{} linii materialu -> {out_path}", material.len());
+        println!("dalej ta sama droga, co korpus: `cbms ids` -> `darkstar-seed`");
+    }
+    0
+}
+
+/// Robi z dziennika material w postaci, ktora przyjmuje zasiewacz: jedno zdanie na linie.
+///
+/// Bierze tylko te zadania, ktorych wynik POTWIERDZONO jako udany. Decyzje bez wyniku sa
+/// pomijane celowo - wpisanie do wag czegos, o czym nie wiadomo, czy zadzialalo, nauczyloby
+/// rdzen pewnosci tam, gdzie jej nie ma, i to jest dokladnie ten blad, ktory tablica czestosci
+/// mialaby wzmocnic zamiast poprawic.
+fn build_material(journal: &str, min_confirmed: usize) -> Vec<String> {
+    let records: Vec<Value> = journal
+        .lines()
+        .filter_map(|l| serde_json::from_str::<Value>(l).ok())
+        .collect();
+
+    // Ile razy dane zadanie potwierdzono jako udane. Failure liczy sie na minus: blok, ktory
+    // raz zadzialal i dwa razy nie, nie jest materialem na odruch.
+    let mut score: HashMap<&str, i64> = HashMap::new();
+    for r in &records {
+        let o = &r["observation"];
+        if o["actor"] != "spine-loop" {
+            continue;
+        }
+        let Some(task) = o["task"].as_str() else { continue };
+        match o["outcome"].as_str() {
+            Some("success") => *score.entry(task).or_default() += 1,
+            Some("failure") => *score.entry(task).or_default() -= 1,
+            _ => {}
+        }
+    }
+
+    // Do materialu idzie zadanie razem z nazwa bloku, ktory sie sprawdzil - to jest para,
+    // ktorej rdzen ma sie nauczyc: ten bodziec, ten odruch.
+    let mut out = Vec::new();
+    for r in &records {
+        let o = &r["observation"];
+        if o["actor"] != "spine" {
+            continue;
+        }
+        let (Some(task), Some(tool)) = (o["task"].as_str(), o["tool"].as_str()) else {
+            continue;
+        };
+        if score.get(task).copied().unwrap_or(0) < min_confirmed as i64 {
+            continue;
+        }
+        let line = format!("{task} {tool}");
+        if !out.contains(&line) {
+            out.push(line);
+        }
+    }
+    out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn identyczne_bloki_nie_daja_roznicy() {
+        assert!(diff_lines("a\nb\nc", "a\nb\nc").is_empty());
+    }
+
+    /// Wstawienie linii na gorze nie moze oglaszac, ze zmienil sie caly blok - to jest
+    /// powod, dla ktorego roznica liczy najdluzszy wspolny podciag, a nie pozycje.
+    #[test]
+    fn wstawienie_na_gorze_to_jedna_zmiana() {
+        let d = diff_lines("a\nb\nc", "nowa\na\nb\nc");
+        assert_eq!(d, vec![Change::Added("nowa".into())]);
+    }
+
+    #[test]
+    fn zmiana_linii_to_usuniecie_i_dodanie() {
+        let d = diff_lines("a\nstare\nc", "a\nnowe\nc");
+        assert_eq!(
+            d,
+            vec![Change::Removed("stare".into()), Change::Added("nowe".into())]
+        );
+    }
+
+    #[test]
+    fn wyciaga_blok_liczac_klamry() {
+        let src = "fn inny() { }\nfn cel(x: u8) -> u8 {\n    if x > 0 { x } else { 0 }\n}\nfn po() {}";
+        let got = extract_block(src, "cel").expect("blok istnieje");
+        assert!(got.starts_with("fn cel"));
+        assert!(got.ends_with('}'));
+        assert!(!got.contains("fn po"), "nie moze zjesc nastepnej funkcji");
+    }
+
+    #[test]
+    fn nieznany_blok_to_brak_nie_zgadywanie() {
+        assert!(extract_block("fn a() {}", "b").is_none());
+    }
+
+    /// Decyzja bez potwierdzonego wyniku nie moze trafic do materialu.
+    #[test]
+    fn material_pomija_niepotwierdzone() {
+        let j = r#"{"timestamp_unix_ms":1,"session":"spine","observation":{"kind":"action","actor":"spine","task":"policz podobienstwo","tool":"cosine_similarity","input":{},"outcome":"unknown","summary":"odruch"}}"#;
+        assert!(build_material(j, 1).is_empty());
+    }
+
+    #[test]
+    fn material_bierze_potwierdzone() {
+        let j = concat!(
+            r#"{"timestamp_unix_ms":1,"session":"spine","observation":{"kind":"action","actor":"spine","task":"policz podobienstwo","tool":"cosine_similarity","input":{},"outcome":"unknown","summary":"odruch"}}"#,
+            "\n",
+            r#"{"timestamp_unix_ms":2,"session":"spine","observation":{"kind":"action","actor":"spine-loop","task":"policz podobienstwo","tool":null,"input":{},"outcome":"success","summary":"dzialalo"}}"#
+        );
+        assert_eq!(build_material(j, 1), vec!["policz podobienstwo cosine_similarity"]);
+    }
+
+    /// Blok, ktory raz zadzialal i dwa razy nie, nie jest materialem na odruch.
+    #[test]
+    fn przewaga_porazek_wyklucza_z_materialu() {
+        let mut j = String::from(
+            r#"{"timestamp_unix_ms":1,"session":"spine","observation":{"kind":"action","actor":"spine","task":"t","tool":"blok","input":{},"outcome":"unknown","summary":""}}"#,
+        );
+        for (i, v) in ["success", "failure", "failure"].iter().enumerate() {
+            j.push('\n');
+            j.push_str(&format!(
+                r#"{{"timestamp_unix_ms":{},"session":"spine","observation":{{"kind":"action","actor":"spine-loop","task":"t","tool":null,"input":{{}},"outcome":"{v}","summary":""}}}}"#,
+                i + 2
+            ));
+        }
+        assert!(build_material(&j, 1).is_empty());
+    }
+
+    #[test]
+    fn liczy_decyzje_o_danej_tresci() {
+        let j = concat!(
+            r#"{"timestamp_unix_ms":1,"session":"spine","observation":{"kind":"action","actor":"spine","task":"jedno","tool":null,"input":{},"outcome":"unknown","summary":""}}"#,
+            "\n",
+            r#"{"timestamp_unix_ms":2,"session":"spine","observation":{"kind":"action","actor":"spine","task":"drugie","tool":null,"input":{},"outcome":"unknown","summary":""}}"#
+        );
+        assert_eq!(count_decisions_in(j, "jedno"), 1);
+        assert_eq!(count_decisions_in(j, "trzecie"), 0);
+    }
+}

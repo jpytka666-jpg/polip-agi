@@ -1,0 +1,56 @@
+# darkstar-header-v1
+# po co: Cargo.toml
+# nie wolno: hotspot, ruszac wlp2s0, wracac do 10.44, gasic DARKSTAR-WiFi, haslo w gicie
+# autor: Marcin
+# powstal: 2026-09-05
+[package]
+name = "darkstar-embed"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+darkstar-shadow = { path = "../darkstar-shadow" }
+darkstar-recall = { path = "../darkstar-recall" }
+serde_json.workspace = true
+# load-dynamic zamiast linkowania statycznego: biblioteka wnioskujaca jest ladowana w czasie
+# dzialania ze sciezki w ORT_DYLIB_PATH. Dwa powody, oba wazne:
+#  1. uzywamy DOKLADNIE tej binarki, ktora liczyla wektory w Chromie - zgodnosc zmierzona,
+#     nie zalozona (1.000000000, najwieksza roznica 3e-8)
+#  2. nie wymaga dzialajacego linkera C++ na maszynie budujacej
+ort = { version = "2.0.0-rc.13", default-features = false, features = ["load-dynamic", "ndarray"] }
+tokenizers = { version = "0.20", default-features = false, features = ["onig"] }
+
+# Test integracyjny to osobny program - widzi tylko to, co zadeklarowane tutaj,
+# nawet jesli ta sama biblioteka jest juz wyzej.
+[dev-dependencies]
+darkstar-shadow = { path = "../darkstar-shadow" }
+serde_json.workspace = true
+
+[[bin]]
+name = "recall-ask"
+path = "src/bin/recall_ask.rs"
+
+[[bin]]
+name = "recall-find"
+path = "src/bin/recall_find.rs"
+
+# Slownik odruchow rdzenia: gotowe bloki kodu wyszukiwalne po opisie zadania.
+[[bin]]
+name = "reflex-store"
+path = "src/bin/reflex_store.rs"
+
+# Wszczepia rdzeniowi zrozumienie znaczen - wektory znakow z modelu, ktory je zna.
+[[bin]]
+name = "implant"
+path = "src/bin/implant.rs"
+
+# Rdzen kregowy: zadanie -> decyzja -> dziennik. Rozstrzyga albo oddaje sprawe mozgowi.
+[[bin]]
+name = "spine"
+path = "src/bin/spine.rs"
+
+# Petla zwrotna: czym blok rozni sie od pamieci, czy decyzja byla trafna, co z tego do wag.
+[[bin]]
+name = "spine-loop"
+path = "src/bin/spine_loop.rs"

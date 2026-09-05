@@ -1,0 +1,443 @@
+// darkstar-header-v1
+// po co: espdic.rs
+// nie wolno: hotspot, ruszac wlp2s0, wracac do 10.44, gasic DARKSTAR-WiFi, haslo w gicie
+// autor: Marcin
+// powstal: 2026-09-05
+//! ESPDIC jako zrodlo KANDYDATOW angielski -> esperanto. Zadnego wyboru, zadnej decyzji.
+//!
+//! THIS IS VERY IMPORTANT!!!
+//! ==========================================
+//! AUTHOR: M. SZUL
+//! AI MODEL: Claude Sonnet 5
+//! TIMESTAMP: 2026-09-05 23:05:00
+//! REASON FOR CREATION: Marcin dal zielone swiatlo wylacznie na wciagniecie ESPDIC jako
+//! zrodla kandydatow, z wyraznym warunkiem: ZACHOWAC WSZYSTKIE pasujace znaczenia i NIE
+//! uznawac pierwszego dopasowania za tlumaczenie. Warunek jest sluszny i zmierzony - trzy
+//! rozne reguly mechaniczne probowane 2026-09-05 wybieraly `count -> grafo` (hrabia),
+//! `vector -> vehiklo` (pojazd), `code -> ĉifro` (szyfr). Kandydaci byli za kazdym razem
+//! prawidlowi; blad brał sie z WYBORU, nie ze zrodla.
+//! MECHANICS: Czyta ESPDIC (`rdzen : definicja, definicja, ...`) i odwraca go: dla kazdego
+//! angielskiego haslа zbiera WSZYSTKIE rdzenie, ktore je wymieniaja, wraz z pozycja hasla
+//! w definicji i dlugoscia listy. Te dwie liczby sa PRZESLANKAMI dla przyszlego stopnia
+//! wyboru - nie sa uzywane do wybierania tutaj. Nic nie jest odrzucane poza wpisami pustymi.
+//! SYSTEM PART: Darkstar / warstwa jezyka - stopien 2 (slownik dwujezyczny).
+//! ARCHITECTURE FUNCTION: Dostarcza liste kandydatow. Stopien wyboru znaczenia jest osobny
+//! i jeszcze nie istnieje - tak jak w Apertium, gdzie "lexical selection" jest wlasnym,
+//! nazwanym stopniem potoku, a nie doklejka do slownika.
+//! DEPENDENCIES/LINKS: plik ESPDIC (CC-BY, Paul Denisowski). Wyjscie TSV:
+//! `angielskie<TAB>rdzen1|rdzen2|...` - format do wciagniecia przez kolejny stopien.
+//! TECH STACK: Rust 2024, bez zaleznosci zewnetrznych.
+//! LOCAL WORKSPACE: budowane i uruchamiane na Darkstarze (owner@100.64.0.2)
+//! GIT COMMIT: PENDING
+//! GITHUB METADATA: jpytka666-jpg/polip-agi, branch docs/darkstar-headscale-hotspot-plan
+//! ==========================================
+//!
+//! Uzycie:
+//! ```text
+//! espdic index  --dict espdic.txt [--out kandydaci.tsv]
+//! espdic report --dict espdic.txt --words lista.txt
+//! espdic check  --dict espdic.txt --gold pary.tsv
+//! ```
+
+use std::collections::HashMap;
+use std::fs;
+
+/// Jedno wystapienie: ktory rdzen, na ktorej pozycji definicji, przy jak dlugiej liscie.
+///
+/// Pozycja i dlugosc sa zapisywane, bo przyszly stopien wyboru bedzie ich potrzebowal.
+/// NIE sa tu uzywane do wybierania - probowalem i zmierzylem, ze na tych dwoch liczbach
+/// wybor wychodzi gorzej niz bez nich (`error` spadalo z `eraro` na `prierara`).
+#[derive(Debug, Clone, PartialEq)]
+struct Candidate {
+    root: String,
+    position: usize,
+    of_total: usize,
+    /// Cala angielska definicja rdzenia, taka jak w slowniku. To jest jedyny opis znaczenia,
+    /// jakim dysponujemy - `kodo : code` i `ĉifro : cipher, code` roznia sie wlasnie tym,
+    /// a nie samym rdzeniem.
+    gloss: String,
+}
+
+fn main() {
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    let mode = args.first().map(String::as_str).unwrap_or("");
+    let opt = |name: &str| -> Option<String> {
+        args.iter()
+            .position(|a| a == name)
+            .and_then(|i| args.get(i + 1))
+            .cloned()
+    };
+
+    let Some(dict_path) = opt("--dict") else {
+        eprintln!("uzycie:");
+        eprintln!("  espdic index  --dict espdic.txt [--out kandydaci.tsv]");
+        eprintln!("  espdic report --dict espdic.txt --words lista.txt");
+        eprintln!("  espdic check  --dict espdic.txt --gold pary.tsv");
+        std::process::exit(2);
+    };
+    let text = match fs::read_to_string(&dict_path) {
+        Ok(t) => t,
+        Err(e) => {
+            eprintln!("FAIL: {dict_path}: {e}");
+            std::process::exit(1);
+        }
+    };
+    let (index, stats) = invert(&text);
+    println!("ESPDIC: {} hasel esperanckich", stats.roots);
+    println!("odwrocony: {} hasel angielskich", index.len());
+    println!(
+        "  jednowyrazowych {} | wielowyrazowych {} | pominietych pustych {}",
+        stats.single, stats.phrases, stats.empty
+    );
+
+    let code = match mode {
+        "index" => {
+            if let Some(out) = opt("--out") {
+                write_index(&index, &out)
+            } else {
+                println!("\n(bez --out nic nie zapisuje)");
+                0
+            }
+        }
+        "report" => match opt("--words") {
+            Some(w) => report(&index, &w),
+            None => {
+                eprintln!("FAIL: --words jest wymagane");
+                2
+            }
+        },
+        "check" => match opt("--gold") {
+            Some(g) => check(&index, &g),
+            None => {
+                eprintln!("FAIL: --gold jest wymagane");
+                2
+            }
+        },
+        "sense" => match opt("--cases") {
+            Some(c) => sense(&index, &c),
+            None => {
+                eprintln!("FAIL: --cases jest wymagane");
+                eprintln!("format: zapytanie<TAB>slowo-do-slownika<TAB>oczekiwany-rdzen");
+                2
+            }
+        },
+        _ => {
+            eprintln!("FAIL: tryb to 'index', 'report' albo 'check'");
+            2
+        }
+    };
+    std::process::exit(code);
+}
+
+#[derive(Default)]
+struct Stats {
+    roots: usize,
+    single: usize,
+    phrases: usize,
+    empty: usize,
+}
+
+/// Odwraca slownik, ZACHOWUJAC wszystkie znaczenia.
+///
+/// Rdzen wymieniajacy dane haslo trafia na liste zawsze - nawet jesli haslo stoi u niego
+/// na ostatnim miejscu wsrod dziesieciu. Odrzucenie takiego wpisu byloby cichym wyborem,
+/// a wybor nalezy do osobnego stopnia, ktorego jeszcze nie ma.
+fn invert(text: &str) -> (HashMap<String, Vec<Candidate>>, Stats) {
+    let mut index: HashMap<String, Vec<Candidate>> = HashMap::new();
+    let mut stats = Stats::default();
+    let mut single_keys = std::collections::HashSet::new();
+    let mut phrase_keys = std::collections::HashSet::new();
+
+    for line in text.lines() {
+        // Naglowek i komentarze zaczynaja sie krzyzykiem; BOM na poczatku pliku tez tu wpada.
+        let line = line.trim_start_matches('\u{feff}');
+        if line.starts_with('#') || line.trim().is_empty() {
+            continue;
+        }
+        let Some((root, defs)) = line.split_once(" : ") else {
+            continue;
+        };
+        let root = root.trim();
+        if root.is_empty() {
+            continue;
+        }
+        stats.roots += 1;
+
+        let parts: Vec<&str> = defs.split(',').map(str::trim).collect();
+        let total = parts.len();
+        for (i, def) in parts.iter().enumerate() {
+            // Nawias na POCZATKU znaczy, ze cala pozycja jest objasnieniem, a nie
+            // tlumaczeniem: "(adjective ending)" nie jest angielskim haslem. Sprawdzamy to
+            // PRZED zdejmowaniem nawiasow - odwrotna kolejnosc zdejmuje nawiasy, po czym
+            // pyta o nawias, ktorego juz nie ma, i objasnienia wchodza do slownika jako hasla.
+            let def = def.trim();
+            if def.starts_with('(') {
+                stats.empty += 1;
+                continue;
+            }
+            // Nawias na koncu doprecyzowuje haslo - "memory (computer)". Haslem jest to,
+            // co przed nawiasem; doprecyzowanie zostawiamy, bo nie jest slowem do szukania.
+            let key = match def.split_once('(') {
+                Some((head, _)) => head.trim(),
+                None => def,
+            }
+            .trim_end_matches('.')
+            .trim();
+            if key.is_empty() {
+                stats.empty += 1;
+                continue;
+            }
+            let key = key.to_lowercase();
+            if key.contains(' ') {
+                phrase_keys.insert(key.clone());
+            } else {
+                single_keys.insert(key.clone());
+            }
+            index.entry(key).or_default().push(Candidate {
+                root: root.to_string(),
+                position: i,
+                of_total: total,
+                gloss: defs.trim().to_string(),
+            });
+        }
+    }
+    stats.single = single_keys.len();
+    stats.phrases = phrase_keys.len();
+    (index, stats)
+}
+
+fn write_index(index: &HashMap<String, Vec<Candidate>>, out: &str) -> i32 {
+    let mut keys: Vec<&String> = index.keys().collect();
+    keys.sort();
+    let mut body = String::new();
+    for k in keys {
+        let roots: Vec<String> = index[k].iter().map(|c| c.root.clone()).collect();
+        body.push_str(k);
+        body.push('\t');
+        body.push_str(&roots.join("|"));
+        body.push('\n');
+    }
+    match fs::write(out, body) {
+        Ok(()) => {
+            println!("zapisano: {out}");
+            0
+        }
+        Err(e) => {
+            eprintln!("FAIL: zapis {out}: {e}");
+            1
+        }
+    }
+}
+
+/// Pokrycie i wieloznacznosc - dwie ROZNE liczby, podane osobno.
+///
+/// Pokrycie mowi, ile slow slownik w ogole zna. Wieloznacznosc mowi, dla ilu z nich zna
+/// wiecej niz jedna odpowiedz, czyli ile bedzie wymagalo stopnia wyboru. Zlanie ich w jedna
+/// liczbe ukrywaloby caly problem: slownik moze znac wszystko i nadal nie dawac odpowiedzi.
+fn report(index: &HashMap<String, Vec<Candidate>>, words_path: &str) -> i32 {
+    let text = match fs::read_to_string(words_path) {
+        Ok(t) => t,
+        Err(e) => {
+            eprintln!("FAIL: {words_path}: {e}");
+            return 1;
+        }
+    };
+    let mut total = 0usize;
+    let mut known = 0usize;
+    let mut histogram: HashMap<usize, usize> = HashMap::new();
+    let mut ambiguous = 0usize;
+    let mut sum_candidates = 0usize;
+
+    for w in text.lines().map(str::trim).filter(|w| !w.is_empty()) {
+        total += 1;
+        let Some(cands) = index.get(&w.to_lowercase()) else {
+            *histogram.entry(0).or_default() += 1;
+            continue;
+        };
+        known += 1;
+        let n = cands.len();
+        sum_candidates += n;
+        if n > 1 {
+            ambiguous += 1;
+        }
+        *histogram.entry(n.min(6)).or_default() += 1;
+    }
+
+    println!("\n=== POKRYCIE ===");
+    println!("slow na liscie      : {total}");
+    println!(
+        "zna slownik         : {known}  ({}%)",
+        (known * 100).checked_div(total).unwrap_or(0)
+    );
+    println!(
+        "nie zna             : {}  ({}%)",
+        total - known,
+        ((total - known) * 100).checked_div(total).unwrap_or(0)
+    );
+
+    println!("\n=== WIELOZNACZNOSC (tylko wsrod znanych) ===");
+    println!(
+        "jednoznacznych      : {}  ({}%)",
+        known - ambiguous,
+        ((known - ambiguous) * 100).checked_div(known).unwrap_or(0)
+    );
+    println!(
+        "wymaga wyboru       : {ambiguous}  ({}%)",
+        (ambiguous * 100).checked_div(known).unwrap_or(0)
+    );
+    if known > 0 {
+        println!(
+            "srednio kandydatow  : {:.2}",
+            sum_candidates as f64 / known as f64
+        );
+    }
+    println!("\nrozklad liczby kandydatow:");
+    for n in 0..=6 {
+        let c = histogram.get(&n).copied().unwrap_or(0);
+        let label = match n {
+            0 => "brak w slowniku".to_string(),
+            6 => "6 lub wiecej".to_string(),
+            k => format!("{k} kandydat(ow)"),
+        };
+        println!("  {label:<18} {c:>6}");
+    }
+    0
+}
+
+/// Poprawnosc na sprawdzonych przykladach.
+///
+/// Pytanie brzmi "czy poprawny rdzen JEST wsrod kandydatow", a nie "czy jest pierwszy" -
+/// bo zachowujemy wszystkie znaczenia i niczego jeszcze nie wybieramy. Pozycja jest podana
+/// osobno, zeby bylo widac, ile pracy zostaje dla stopnia wyboru.
+fn check(index: &HashMap<String, Vec<Candidate>>, gold_path: &str) -> i32 {
+    let text = match fs::read_to_string(gold_path) {
+        Ok(t) => t,
+        Err(e) => {
+            eprintln!("FAIL: {gold_path}: {e}");
+            return 1;
+        }
+    };
+    let mut total = 0usize;
+    let mut present = 0usize;
+    let mut first = 0usize;
+    let mut missing = Vec::new();
+
+    println!("\n=== POPRAWNOSC NA SPRAWDZONYCH PRZYKLADACH ===");
+    println!("angielskie      kand pozycja  oczekiwany / lista");
+    for line in text.lines() {
+        let Some((en, expected)) = line.split_once('\t') else {
+            continue;
+        };
+        let (en, expected) = (en.trim().to_lowercase(), expected.trim());
+        if en.is_empty() || expected.is_empty() {
+            continue;
+        }
+        total += 1;
+        let cands = index.get(&en).cloned().unwrap_or_default();
+        let roots: Vec<&str> = cands.iter().map(|c| c.root.as_str()).collect();
+        match roots.iter().position(|r| *r == expected) {
+            Some(0) => {
+                present += 1;
+                first += 1;
+                let n = roots.len();
+                println!("{en:<14} {n:>5} {:>6}  {expected}  <- pierwszy", 1usize);
+            }
+            Some(p) => {
+                present += 1;
+                println!(
+                    "{en:<14} {:>5} {:>6}  {expected}  (przed nim: {})",
+                    roots.len(),
+                    p + 1,
+                    roots[..p].join(", ")
+                );
+            }
+            None => {
+                missing.push(en.clone());
+                println!(
+                    "{en:<14} {:>5} {:>6}  BRAK {expected}  (jest: {})",
+                    roots.len(),
+                    0,
+                    if roots.is_empty() { "nic".to_string() } else { roots.join(", ") }
+                );
+            }
+        }
+    }
+    println!("\nsprawdzonych        : {total}");
+    println!(
+        "poprawny JEST wsrod kandydatow : {present}  ({}%)",
+        (present * 100).checked_div(total).unwrap_or(0)
+    );
+    println!(
+        "poprawny jest PIERWSZY         : {first}  ({}%)   <- tyle dalby wybor pierwszego",
+        (first * 100).checked_div(total).unwrap_or(0)
+    );
+    if !missing.is_empty() {
+        println!("brak poprawnego rdzenia dla: {}", missing.join(", "));
+    }
+    0
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const SAMPLE: &str = "\
+# naglowek
+memoro : memory, recollection, storage
+memorilo : storage, memory
+eraro : aberration, error, mistake
+kodo : code
+ĉifro : cipher, code
+-a : (adjective ending)
+";
+
+    #[test]
+    fn zachowuje_wszystkie_znaczenia() {
+        let (idx, _) = invert(SAMPLE);
+        let mut roots: Vec<&str> = idx["memory"].iter().map(|c| c.root.as_str()).collect();
+        roots.sort();
+        assert_eq!(roots, vec!["memorilo", "memoro"], "oba musza zostac");
+    }
+
+    /// Rdzen, u ktorego haslo stoi na ostatnim miejscu, tez jest kandydatem. Odrzucenie go
+    /// byloby cichym wyborem.
+    #[test]
+    fn dalekie_znaczenie_tez_jest_kandydatem() {
+        let (idx, _) = invert(SAMPLE);
+        let roots: Vec<&str> = idx["storage"].iter().map(|c| c.root.as_str()).collect();
+        assert!(roots.contains(&"memoro"), "storage jest u memoro na 3. miejscu");
+        assert!(roots.contains(&"memorilo"));
+    }
+
+    #[test]
+    fn zapisuje_pozycje_i_dlugosc_listy() {
+        let (idx, _) = invert(SAMPLE);
+        let c = idx["error"].iter().find(|c| c.root == "eraro").unwrap();
+        assert_eq!(c.position, 1, "error jest drugie u eraro");
+        assert_eq!(c.of_total, 3);
+    }
+
+    #[test]
+    fn objasnienie_w_nawiasie_nie_jest_haslem() {
+        let (idx, _) = invert(SAMPLE);
+        assert!(!idx.contains_key("adjective ending"));
+        assert!(!idx.keys().any(|k| k.starts_with('(')));
+    }
+
+    /// Naglowek nie jest hasłem, ale `-a : (adjective ending)` juz tak - to prawidlowy wpis
+    /// slownika, tylko jego definicja jest objasnieniem i nie tworzy klucza angielskiego.
+    #[test]
+    fn naglowek_nie_jest_haslem() {
+        let (idx, s) = invert(SAMPLE);
+        assert_eq!(s.roots, 6, "szesc wpisow: piec slow plus koncowka -a");
+        assert!(!idx.values().flatten().any(|c| c.root == "# naglowek"));
+    }
+
+    /// Wieloznacznosc jest faktem zrodla, nie usterka: `code` ma dwa rdzenie i oba sa
+    /// prawdziwe. To jest dokladnie ten przypadek, dla ktorego stopien wyboru musi istniec.
+    #[test]
+    fn code_ma_dwoch_kandydatow() {
+        let (idx, _) = invert(SAMPLE);
+        assert_eq!(idx["code"].len(), 2);
+    }
+}

@@ -1,0 +1,438 @@
+// darkstar-header-v1
+// po co: spine.rs
+// nie wolno: hotspot, ruszac wlp2s0, wracac do 10.44, gasic DARKSTAR-WiFi, haslo w gicie
+// autor: Marcin
+// powstal: 2026-09-05
+//! Rdzen kregowy: dostaje zadanie, PODEJMUJE DECYZJE i zapisuje ja, zeby sie na niej nauczyc.
+//!
+//! THIS IS VERY IMPORTANT!!!
+//! ==========================================
+//! AUTHOR: M. SZUL
+//! AI MODEL: Claude Sonnet 5
+//! TIMESTAMP: 2026-09-05 21:45:00
+//! REASON FOR CREATION: Marcin postawil to tak: bach wektor, bach narzedzie, bach funkcja
+//! w kodzie, bach porownanie z blokiem pamieci - i juz widac, co sie rozni. Duzy model
+//! dostaje od rdzenia gotowa DECYZJE, tak jak ja dostaje wynik od podagenta.
+//! I zaraz potem postawil granice, ktora ten plik musi trzymac:
+//! "NASZ NOWORODEK BEDZIE INTELIGENTNYM RDZENIEM NIE RAGIEM".
+//!
+//! Trzy rzeczy odrozniaja to od zwyklego wyszukiwania w magazynie:
+//!  1. ROZSTRZYGA. Nie oddaje piatki wynikow do przejrzenia. Albo wskazuje jeden blok
+//!     ("odruch"), albo oddaje sprawe mozgowi ("nie znam"). Podstawa jest ODSTEP miedzy
+//!     pierwszym a drugim trafieniem - zmierzony, nie wymyslony. Patrz REFLEX_MARGIN.
+//!  2. ZAPISUJE KAZDA DECYZJE do dziennika obserwacji. Dziennik jest materialem, z ktorego
+//!     dopisujemy wagi. To jest DROGA POWROTNA, ktorej zwykle wyszukiwanie nie ma w ogole:
+//!     po tysiacu zapytan wie dokladnie tyle samo, co przed pierwszym.
+//!  3. CELUJE WE WLASNA GLOWE. Magazyn jest zrodlem materialu, nie czescia dzialania.
+//!     Wszczep przepisuje znaczenia z magazynu DO WAG (`implant`), a `--core` kaze liczyc
+//!     z glowy rdzenia. Magazyn jest rusztowaniem na czas nauki, nie fundamentem.
+//! MECHANICS: Opis zadania idzie raz przez silnik osadzen. Powstaly wektor odpytuje kilka
+//! kolekcji naraz - jedno liczenie, wiele porownan, stad szybkosc. Potem `decide` patrzy na
+//! odstep i albo oglasza odruch, albo przyznaje sie do niewiedzy. Wynik idzie do dziennika
+//! ze stanem `Unknown`, bo w chwili decyzji nikt jeszcze nie wie, czy byla trafna - to
+//! dopisuje pozniej ten, kto blok uruchomil.
+//! SYSTEM PART: Darkstar / rdzen kregowy.
+//! ARCHITECTURE FUNCTION: Mozg (Qwen 30B albo agent) - RDZEN (ten program) - CIALO (AIONS,
+//! Darkstar). Rdzen ma byc szybki i przewidywalny, nie wymowny: ten sam bodziec ma dawac ten
+//! sam odruch. Rozmowa nalezy do mozgu.
+//! DEPENDENCIES/LINKS: darkstar-embed (silniki), darkstar-recall (magazyn),
+//! darkstar-shadow (dziennik obserwacji - droga powrotna).
+//! TECH STACK: Rust 2024.
+//! LOCAL WORKSPACE: D:\codex-fresh-2026-08-28\worktrees\polip-agi-darkstar-plan
+//! GIT COMMIT: PENDING
+//! GITHUB METADATA: jpytka666-jpg/polip-agi, branch docs/darkstar-headscale-hotspot-plan
+//! ==========================================
+//!
+//! Uzycie:
+//! ```text
+//! spine "<opis zadania>" [--lane <nazwa>:<kolekcja>]... [--core] [--json] [--no-journal]
+//! ```
+
+use std::time::{Instant, SystemTime, UNIX_EPOCH};
+
+use darkstar_embed::MiniLmEmbedder;
+use darkstar_embed::noworodek::NoworodekEmbedder;
+use darkstar_recall::{HttpClient, read_env_value};
+use darkstar_shadow::{
+    ActionOutcome, EmbedError, Embedder, Observation, ShadowJournal, ShadowRecord,
+};
+use serde_json::{Value, json};
+
+const DEFAULT_RECALL: &str = "http://127.0.0.1:6333";
+const DEFAULT_ENV: &str = "/home/owner/polip-agi/deploy/.env";
+const DEFAULT_JOURNAL: &str = "/home/owner/polip-agi/var/spine-journal.jsonl";
+
+/// Najmniejszy odstep miedzy pierwszym a drugim trafieniem, przy ktorym rdzen oglasza odruch.
+///
+/// Nie jest zgadniety. Pomiar ze slownika odruchow z 2026-09-05:
+///   trafienie pewne  - `cosine similarity between two vectors` -> 0.4702 przy drugim 0.2265,
+///                      odstep **0.2437**, i wskazana funkcja byla faktycznie ta wlasciwa
+///   zgadywanie       - `zgodnosc kierunku dwoch wektorow`      -> 0.5997 przy drugim 0.5916,
+///                      odstep **0.0081**, i wskazana funkcja byla zla
+///
+/// Odstep rozniacy te dwa przypadki jest trzydziestokrotny, wiec prog gdziekolwiek posrodku
+/// rozdziela je pewnie. 0.10 lezy blisko srodka w skali logarytmicznej i zostawia zapas z obu
+/// stron. Wartosc jest TYMCZASOWA - stoi na dwoch pomiarach, nie na rozkladzie - i nalezy ja
+/// przeliczyc, gdy dziennik uzbiera dosc decyzji z dopisanym prawdziwym wynikiem.
+const REFLEX_MARGIN: f64 = 0.10;
+
+/// Tory pytane domyslnie: kazdy to inna kolekcja, ale to samo pytanie i ten sam wektor.
+const DEFAULT_LANES: [(&str, &str); 2] = [
+    ("blok kodu", "reflex_minilm"),
+    ("wspomnienie", "session_claude_marcin_main"),
+];
+
+struct Hit {
+    lane: String,
+    score: f64,
+    label: String,
+    detail: String,
+}
+
+/// Co rdzen postanowil. Dwa stany, bo trzeci - "oto piec wynikow, wybierz sam" - jest
+/// dokladnie tym zachowaniem, ktorego ten program ma nie miec.
+enum Decision {
+    /// Odruch: jeden blok, wyraznie lepszy od nastepnego.
+    Reflex { pick: usize, margin: f64 },
+    /// Rdzen nie zna tego bodzca. Sprawa idzie do mozgu - i to jest poprawne zachowanie,
+    /// nie awaria. Odruch zgadniety jest gorszy niz brak odruchu, bo cialo go wykona.
+    Escalate { best: f64, margin: f64 },
+}
+
+fn main() {
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    let Some(task) = args.first().filter(|t| !t.trim().is_empty()) else {
+        eprintln!("uzycie: spine \"<opis zadania>\" [--lane <nazwa>:<kolekcja>]... [--core] [--json]");
+        eprintln!("\nDomyslne tory:");
+        for (name, coll) in DEFAULT_LANES {
+            eprintln!("  {name:<14} -> {coll}");
+        }
+        std::process::exit(2);
+    };
+
+    let opt = |name: &str, default: &str| -> String {
+        args.iter()
+            .position(|a| a == name)
+            .and_then(|i| args.get(i + 1))
+            .cloned()
+            .unwrap_or_else(|| default.to_string())
+    };
+    let recall_url = opt("--recall", DEFAULT_RECALL);
+    let env_file = opt("--env-file", DEFAULT_ENV);
+    let journal_path = opt("--journal", DEFAULT_JOURNAL);
+    let as_json = args.iter().any(|a| a == "--json");
+    let no_journal = args.iter().any(|a| a == "--no-journal");
+    let use_core = args.iter().any(|a| a == "--core");
+
+    let mut lanes: Vec<(String, String)> = args
+        .iter()
+        .enumerate()
+        .filter(|(_, a)| a.as_str() == "--lane")
+        .filter_map(|(i, _)| args.get(i + 1))
+        .filter_map(|spec| spec.split_once(':'))
+        .map(|(n, c)| (n.to_string(), c.to_string()))
+        .collect();
+    if lanes.is_empty() {
+        lanes = DEFAULT_LANES
+            .iter()
+            .map(|(n, c)| (n.to_string(), c.to_string()))
+            .collect();
+    }
+
+    let started = Instant::now();
+    let engine = match pick_engine(use_core) {
+        Ok(e) => e,
+        Err(e) => {
+            eprintln!("FAIL: silnik: {e}");
+            std::process::exit(1);
+        }
+    };
+    let vector = match engine.embed(task) {
+        Ok(v) => v,
+        Err(e) => {
+            eprintln!("FAIL: nie moge opisac zadania: {e}");
+            std::process::exit(1);
+        }
+    };
+    let embed_ms = started.elapsed().as_millis() as u64;
+
+    let Some(key) = read_env_value(&env_file, "DARKSTAR_RECALL_API_KEY") else {
+        eprintln!("FAIL: brak DARKSTAR_RECALL_API_KEY w {env_file}");
+        std::process::exit(1);
+    };
+    let store = HttpClient::new(&recall_url, Some(key));
+
+    // Tor, ktory nie odpowie, nie zatrzymuje reszty: brak bloku kodu nadal pozwala pokazac
+    // wspomnienie. Ale tor, ktory zawiodl, jest wypisywany - milczenie z powodu bledu wyglada
+    // tak samo jak milczenie z braku dopasowania, a to sa rozne rzeczy i mylenie ich
+    // konczy sie decyzja podjeta na niepelnych danych bez sladu, ze byla niepelna.
+    let mut hits: Vec<Hit> = Vec::new();
+    let mut failed: Vec<String> = Vec::new();
+    let query_started = Instant::now();
+    for (name, collection) in &lanes {
+        let body = json!({ "vector": vector, "limit": 5, "with_payload": true }).to_string();
+        match store.post(&format!("/collections/{collection}/points/search"), &body) {
+            Ok(text) => {
+                let parsed: Value = serde_json::from_str(&text).unwrap_or(Value::Null);
+                let empty = vec![];
+                for hit in parsed["result"].as_array().unwrap_or(&empty) {
+                    hits.push(Hit {
+                        lane: name.clone(),
+                        score: hit["score"].as_f64().unwrap_or(0.0),
+                        label: label_of(&hit["payload"]),
+                        detail: detail_of(&hit["payload"]),
+                    });
+                }
+            }
+            Err(e) => failed.push(format!("{name} ({collection}): {e}")),
+        }
+    }
+    let query_ms = query_started.elapsed().as_millis() as u64;
+
+    hits.sort_by(|a, b| b.score.total_cmp(&a.score));
+    let decision = decide(&hits);
+
+    // Droga powrotna. Decyzja idzie do dziennika ZAWSZE, takze ta o oddaniu sprawy mozgowi -
+    // "czego rdzen nie umial" jest materialem rownie cennym jak "co trafil". Stan `Unknown`,
+    // bo w tej chwili nikt jeszcze nie wie, czy decyzja byla trafna: to dopisuje ten, kto
+    // blok uruchomil. Zapis nieudany nie przerywa dzialania - odruch juz zostal wybrany,
+    // a odmowa odpowiedzi z powodu problemu z dziennikiem byla by gorsza od braku zapisu.
+    let mut journal_note = String::new();
+    if !no_journal {
+        journal_note = match record_decision(&journal_path, task, &engine, &hits, &decision) {
+            Ok(p) => format!("zapisano w dzienniku: {p}"),
+            Err(e) => format!("dziennik NIE zapisany: {e}"),
+        };
+    }
+
+    if as_json {
+        println!("{}", serde_json::to_string_pretty(&as_report(
+            task, &*engine, embed_ms, query_ms, &hits, &decision, &failed,
+        )).unwrap_or_default());
+        return;
+    }
+
+    println!("zadanie : {task}");
+    println!("silnik  : {} ({} liczb)", engine.name(), engine.dimensions());
+    println!("czas    : opis {embed_ms} ms + pytania {query_ms} ms");
+    println!();
+
+    match &decision {
+        Decision::Reflex { pick, margin } => {
+            let h = &hits[*pick];
+            println!("ODRUCH  : {} [{}]", h.label, h.lane);
+            println!("          ocena {:.4}, odstep {:.4} (prog {REFLEX_MARGIN:.2})", h.score, margin);
+            if !h.detail.is_empty() {
+                println!("          {}", h.detail.chars().take(100).collect::<String>());
+            }
+        }
+        Decision::Escalate { best, margin } => {
+            println!("NIE ZNAM: najlepsze {best:.4}, ale odstep {margin:.4} < {REFLEX_MARGIN:.2}");
+            println!("          rdzen nie rozstrzyga - sprawa idzie do mozgu");
+        }
+    }
+
+    // Reszta trafien jest pod decyzja, nie zamiast niej: mozg ma na czym pracowac, gdy
+    // rdzen sie wycofa, ale to nadal decyzja jest odpowiedzia, a lista tylko uzasadnieniem.
+    if hits.len() > 1 {
+        println!("\nprzeslanki:");
+        for h in hits.iter().take(4) {
+            println!("  {:.4}  [{}] {}", h.score, h.lane, h.label);
+        }
+    }
+    if !failed.is_empty() {
+        println!("\ntory bez odpowiedzi:");
+        for f in &failed {
+            println!("  {f}");
+        }
+    }
+    if !journal_note.is_empty() {
+        println!("\n{journal_note}");
+    }
+}
+
+/// Rozstrzyga albo sie wycofuje. Podstawa jest ODSTEP, nie sama ocena: wysoka ocena przy
+/// wszystkich wynikach rownie wysokich znaczy, ze silnik nie rozroznia znaczen, a nie ze
+/// trafil. Dokladnie to pokazal pomiar z 2026-09-05 - 0.5997 wygladalo lepiej niz 0.4702,
+/// a bylo zgadywaniem, bo drugi wynik siedzial 0.008 nizej.
+fn decide(hits: &[Hit]) -> Decision {
+    let Some(best) = hits.first() else {
+        return Decision::Escalate { best: 0.0, margin: 0.0 };
+    };
+    // Porownujemy z nastepnym z TEGO SAMEGO toru. Blok kodu i wspomnienie to rozne rodzaje
+    // odpowiedzi; ich oceny nie leza na wspolnej skali i odejmowanie ich od siebie dalo by
+    // odstep bez znaczenia.
+    let runner_up = hits
+        .iter()
+        .skip(1)
+        .find(|h| h.lane == best.lane)
+        .map(|h| h.score)
+        .unwrap_or(0.0);
+    let margin = best.score - runner_up;
+    if margin >= REFLEX_MARGIN {
+        Decision::Reflex { pick: 0, margin }
+    } else {
+        Decision::Escalate { best: best.score, margin }
+    }
+}
+
+fn record_decision(
+    path: &str,
+    task: &str,
+    engine: &dyn Embedder,
+    hits: &[Hit],
+    decision: &Decision,
+) -> Result<String, String> {
+    let journal = ShadowJournal::open(path).map_err(|e| e.to_string())?;
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_millis() as i64)
+        .unwrap_or(0);
+
+    let (tool, summary, input) = match decision {
+        Decision::Reflex { pick, margin } => {
+            let h = &hits[*pick];
+            (
+                Some(h.label.clone()),
+                format!("odruch: {} (tor {})", h.label, h.lane),
+                json!({ "engine": engine.name(), "score": h.score, "margin": margin }),
+            )
+        }
+        Decision::Escalate { best, margin } => (
+            None,
+            "brak odruchu - sprawa oddana mozgowi".to_string(),
+            json!({ "engine": engine.name(), "best": best, "margin": margin }),
+        ),
+    };
+
+    let record = ShadowRecord::new(
+        now,
+        Some("spine".to_string()),
+        Observation::Action {
+            actor: "spine".to_string(),
+            task: task.to_string(),
+            tool,
+            input,
+            outcome: ActionOutcome::Unknown,
+            summary,
+        },
+    );
+    if journal.append(&record) {
+        Ok(journal.path().display().to_string())
+    } else {
+        Err("zapis odrzucony".to_string())
+    }
+}
+
+fn as_report(
+    task: &str,
+    engine: &dyn Embedder,
+    embed_ms: u64,
+    query_ms: u64,
+    hits: &[Hit],
+    decision: &Decision,
+    failed: &[String],
+) -> Value {
+    let verdict = match decision {
+        Decision::Reflex { pick, margin } => json!({
+            "kind": "reflex",
+            "pick": hits[*pick].label,
+            "lane": hits[*pick].lane,
+            "score": hits[*pick].score,
+            "margin": margin,
+        }),
+        Decision::Escalate { best, margin } => json!({
+            "kind": "escalate", "best": best, "margin": margin,
+        }),
+    };
+    json!({
+        "task": task,
+        "engine": engine.name(),
+        "dimensions": engine.dimensions(),
+        "embed_ms": embed_ms,
+        "query_ms": query_ms,
+        "threshold": REFLEX_MARGIN,
+        "decision": verdict,
+        "evidence": hits.iter().take(4).map(|h| json!({
+            "lane": h.lane, "score": h.score, "label": h.label
+        })).collect::<Vec<_>>(),
+        "lanes_failed": failed,
+    })
+}
+
+fn pick_engine(use_core: bool) -> Result<Box<dyn Embedder>, EmbedError> {
+    if use_core {
+        Ok(Box::new(NoworodekEmbedder::from_env()?))
+    } else {
+        Ok(Box::new(MiniLmEmbedder::from_env()?))
+    }
+}
+
+/// Nazwa trafienia. Kazdy tor trzyma co innego, wiec bierzemy pierwsze pole niosace nazwe -
+/// inaczej trzeba by osobnego programu na kazda kolekcje.
+fn label_of(payload: &Value) -> String {
+    for field in ["name", "title", "collection"] {
+        if let Some(v) = payload.get(field).and_then(Value::as_str) {
+            let file = payload.get("file").and_then(Value::as_str).unwrap_or("");
+            return if file.is_empty() {
+                v.to_string()
+            } else {
+                format!("{v} ({file})")
+            };
+        }
+    }
+    "(bez nazwy)".to_string()
+}
+
+fn detail_of(payload: &Value) -> String {
+    for field in ["doc", "document", "summary"] {
+        if let Some(v) = payload.get(field).and_then(Value::as_str) {
+            return v.replace('\n', " ");
+        }
+    }
+    String::new()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn hit(lane: &str, score: f64) -> Hit {
+        Hit { lane: lane.into(), score, label: format!("f{score}"), detail: String::new() }
+    }
+
+    /// Przypadek zmierzony 2026-09-05: pytanie po angielsku, trafienie bylo wlasciwe.
+    #[test]
+    fn wyrazny_odstep_daje_odruch() {
+        let hits = vec![hit("blok kodu", 0.4702), hit("blok kodu", 0.2265)];
+        match decide(&hits) {
+            Decision::Reflex { pick, margin } => {
+                assert_eq!(pick, 0);
+                assert!((margin - 0.2437).abs() < 1e-9, "odstep {margin}");
+            }
+            Decision::Escalate { .. } => panic!("powinien byc odruch"),
+        }
+    }
+
+    /// Ten sam pomiar, pytanie po polsku: wyzsza ocena, a mimo to zgadywanie.
+    /// Test pilnuje, zeby prog patrzyl na odstep, a nie na sama ocene.
+    #[test]
+    fn wysoka_ocena_bez_odstepu_to_nie_odruch() {
+        let hits = vec![hit("blok kodu", 0.5997), hit("blok kodu", 0.5916)];
+        assert!(matches!(decide(&hits), Decision::Escalate { .. }));
+    }
+
+    /// Blok kodu i wspomnienie nie leza na wspolnej skali, wiec drugi tor nie moze
+    /// sluzyc za punkt odniesienia - inaczej pojedynczy blok "wygrywalby" z byle czym.
+    #[test]
+    fn odstep_liczony_w_obrebie_toru() {
+        let hits = vec![hit("blok kodu", 0.50), hit("wspomnienie", 0.49), hit("blok kodu", 0.48)];
+        // 0.50 - 0.48 = 0.02 < prog, mimo ze roznica wzgledem wspomnienia to tylko 0.01.
+        assert!(matches!(decide(&hits), Decision::Escalate { .. }));
+    }
+
+    #[test]
+    fn brak_trafien_to_sprawa_dla_mozgu() {
+        assert!(matches!(decide(&[]), Decision::Escalate { best, .. } if best == 0.0));
+    }
+}
