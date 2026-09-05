@@ -54,3 +54,8 @@ path = "src/bin/spine.rs"
 [[bin]]
 name = "spine-loop"
 path = "src/bin/spine_loop.rs"
+
+# Obrabiarka: dowolny jezyk -> czysta forma esperancka. Stopien PRZED ksiega i rdzeniem.
+[[bin]]
+name = "lathe"
+path = "src/bin/lathe.rs"
