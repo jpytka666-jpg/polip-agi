@@ -73,6 +73,66 @@ fn main() {
     let env_file = opt("--env-file", DEFAULT_ENV);
     let dry_run = args.iter().any(|a| a == "--dry-run");
 
+    // Tryb szukania: pierwszy argument jest wtedy OPISEM ZADANIA, nie sciezka do pliku.
+    // To jest wlasciwa miara tego narzedzia - nie ile blokow zapisano, tylko czy na opis
+    // zadania wraca ten blok, ktory czlowiek by wybral.
+    if args.iter().any(|a| a == "--find") {
+        let core = match NoworodekEmbedder::from_env() {
+            Ok(e) => e,
+            Err(e) => {
+                eprintln!("FAIL: nie moge wczytac rdzenia: {e}");
+                std::process::exit(1);
+            }
+        };
+        let vector = match core.embed(path) {
+            Ok(v) => v,
+            Err(e) => {
+                eprintln!("FAIL: nie moge opisac zadania: {e}");
+                std::process::exit(1);
+            }
+        };
+        let Some(key) = read_env_value(&env_file, "DARKSTAR_RECALL_API_KEY") else {
+            eprintln!("FAIL: brak DARKSTAR_RECALL_API_KEY w {env_file}");
+            std::process::exit(1);
+        };
+        let store = HttpClient::new(&recall_url, Some(key));
+        let limit: usize = args
+            .iter()
+            .position(|a| a == "--limit")
+            .and_then(|i| args.get(i + 1))
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(5);
+        let query = json!({ "vector": vector, "limit": limit, "with_payload": true }).to_string();
+
+        match store.post(&format!("/collections/{collection}/points/search"), &query) {
+            Ok(body) => {
+                let parsed: Value = serde_json::from_str(&body).unwrap_or(Value::Null);
+                let empty = vec![];
+                let hits = parsed["result"].as_array().unwrap_or(&empty);
+                println!("zadanie: {path}\nodruchow znalezionych: {}\n", hits.len());
+                for (i, hit) in hits.iter().enumerate() {
+                    let score = hit["score"].as_f64().unwrap_or(0.0);
+                    let p = &hit["payload"];
+                    println!(
+                        "{}. [{score:.4}] {} ({})",
+                        i + 1,
+                        p["name"].as_str().unwrap_or("?"),
+                        p["file"].as_str().unwrap_or("?")
+                    );
+                    let doc = p["doc"].as_str().unwrap_or("");
+                    if !doc.is_empty() {
+                        println!("   {}", doc.chars().take(100).collect::<String>());
+                    }
+                }
+            }
+            Err(e) => {
+                eprintln!("FAIL: magazyn nie odpowiedzial: {e}");
+                std::process::exit(1);
+            }
+        }
+        return;
+    }
+
     let raw = match std::fs::read_to_string(path) {
         Ok(t) => t,
         Err(e) => {
