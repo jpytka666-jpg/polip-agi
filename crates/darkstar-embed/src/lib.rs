@@ -32,6 +32,8 @@
 //! GITHUB METADATA: jpytka666-jpg/polip-agi, branch docs/darkstar-headscale-hotspot-plan
 //! ==========================================
 
+pub mod noworodek;
+
 use std::{
     path::{Path, PathBuf},
     sync::Mutex,
