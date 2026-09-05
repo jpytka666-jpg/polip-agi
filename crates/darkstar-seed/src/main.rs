@@ -135,6 +135,59 @@ fn main() {
             }
         }
 
+        // Dokladanie warstw. Musi isc PRZED zasiewem uwagi, zeby nowe warstwy tez zostaly
+        // objete, i przed zapisem - inaczej model dostanie warstwy, o ktorych nie wie.
+        if let Some(pos) = args.iter().position(|a| a == "--layers") {
+            let target: usize = args
+                .get(pos + 1)
+                .and_then(|v| v.parse().ok())
+                .filter(|n: &usize| *n > 0 && *n <= 32)
+                .unwrap_or(0);
+            if target == 0 {
+                eprintln!("FAIL: --layers wymaga liczby od 1 do 32");
+                std::process::exit(2);
+            }
+            let hidden = tensors
+                .iter()
+                .find(|t| t.name == NORM_NAME)
+                .map(|t| t.values.len())
+                .filter(|len| *len > 0);
+            let inter = tensors
+                .iter()
+                .find(|t| t.name == "model.layers.00.mlp.up_proj.weight")
+                .and_then(|t| hidden.map(|h| t.values.len() / h));
+            match (hidden, inter) {
+                (Some(h), Some(i)) if i > 0 => {
+                    add_transparent_layers(&mut tensors, target, h, i);
+                }
+                _ => {
+                    eprintln!("FAIL: nie ustale wymiarow warstwy - brak wzorca w wagach");
+                    std::process::exit(1);
+                }
+            }
+        }
+
+        // Przenoszaca czesc uwagi na tozsamosc - neutralny start zamiast losowego.
+        if args.iter().any(|a| a == "--attention") {
+            match tensors
+                .iter()
+                .find(|t| t.name == NORM_NAME)
+                .map(|t| t.values.len())
+                .filter(|len| *len > 0)
+            {
+                Some(hidden) => {
+                    if seed_attention_identity(&mut tensors, hidden) == 0 {
+                        eprintln!("FAIL: nie znalazlem warstw uwagi o rozmiarze {hidden}x{hidden}");
+                        std::process::exit(1);
+                    }
+                }
+                None => {
+                    eprintln!("FAIL: brak {NORM_NAME} - nie ustale wymiaru bez zgadywania");
+                    std::process::exit(1);
+                }
+            }
+        }
+
         // Zmysl kolejnosci. Tablica pozycji nie istnieje w wagach sprzed tej zmiany, wiec
         // trzeba ja zalozyc; wymiar bierzemy z warstwy, ktora go okresla jednoznacznie.
         if args.iter().any(|a| a == "--positions") {
@@ -394,6 +447,123 @@ fn seed_positions(tensors: &mut [Tensor], hidden: usize, symbol_len: f32) -> boo
         100.0 * got_len / symbol_len.max(f32::EPSILON)
     );
     true
+}
+
+/// Ustawia przenoszace czesci uwagi na przeksztalcenie tozsamosciowe.
+///
+/// Uwaga sklada sie z czterech przeksztalcen. `q` i `k` decyduja GDZIE patrzec, `v` i `o`
+/// przenosza TRESC. Te dwa ostatnie startowaly z losowych liczb, co znaczy, ze model na
+/// poczatku miesza tresc przypadkowo i musi sie dopiero nauczyc jej nie psuc.
+///
+/// Tozsamosc - jedynki na przekatnej - znaczy "przekaz bez zmian". Uwaga staje sie wtedy
+/// srednia wazona poprzednich znakow, czyli od razu robi cos sensownego, zamiast uczyc sie
+/// najpierw nie szkodzic. To znana technika (identity / skip initialisation) i nie moze
+/// zaszkodzic: najgorsze, co sie stanie, to ze nauka to nadpisze.
+///
+/// `q` i `k` zostawiamy nietkniete. Tozsamosc w nich znaczylaby "patrz na znaki podobne do
+/// siebie", co po zasiewie par jest twierdzeniem o danych, a nie neutralnym startem - a
+/// twierdzen o danych nie wpisujemy bez pomiaru.
+fn seed_attention_identity(tensors: &mut [Tensor], hidden: usize) -> usize {
+    let mut touched = 0;
+    for name in [
+        "model.layers.00.attention.v_proj.weight",
+        "model.layers.00.attention.o_proj.weight",
+    ] {
+        let Some(tensor) = tensors.iter_mut().find(|t| t.name == name) else {
+            continue;
+        };
+        if tensor.values.len() != hidden * hidden {
+            continue;
+        }
+        for (index, value) in tensor.values.iter_mut().enumerate() {
+            *value = if index / hidden == index % hidden { 1.0 } else { 0.0 };
+        }
+        touched += 1;
+    }
+    if touched > 0 {
+        println!("\nprzenoszaca czesc uwagi: {touched} warstwy ustawione na tozsamosc");
+        println!("znaczenie           : uwaga zaczyna od 'przekaz bez zmian'");
+    }
+    touched
+}
+
+/// Doklada warstwy, ktorych model nie mial - jako PRZEZROCZYSTE.
+///
+/// Noworodek chodzi na jednej warstwie. Typowe modele maja ich kilkanascie, a nasz wlasny
+/// pomiar pokazal, ze wiecej warstw dalo najwiecej ze wszystkiego, co probowalismy: model
+/// o dwoch warstwach osiagnal 7.0127 tam, gdzie jednowarstwowy stanal na 8.5487 - i to na
+/// CHUDSZYM materiale.
+///
+/// Nowa warstwa z losowymi liczbami psuje to, co model juz umie: wtraca szum w srodek
+/// dzialajacego przetwarzania. Dlatego dokladamy ja PRZEZROCZYSTA - `o_proj` i `down_proj`
+/// wyzerowane, wiec ani uwaga, ani czesc mieszajaca nic nie dodaja, a wejscie przechodzi
+/// przez polaczenie rezydualne bez zmiany. Model rosnie o warstwe, a wynik zostaje ten sam
+/// CO DO BITU; nauka dostaje nowe miejsce do wypelnienia, zamiast najpierw sprzatac po szumie.
+///
+/// Pozostale czesci nowej warstwy dostaja wartosci neutralne: normy jedynki, `v_proj`
+/// tozsamosc, `q`/`k`/`up`/`gate` male liczby zalezne od pozycji, zeby warstwa nie byla
+/// doskonale symetryczna - inaczej wszystkie jej wymiary uczylyby sie tego samego.
+fn add_transparent_layers(tensors: &mut Vec<Tensor>, target: usize, hidden: usize, inter: usize) -> usize {
+    let existing = (0..64)
+        .filter(|i| {
+            let name = format!("model.layers.{i:02}.attention.q_proj.weight");
+            tensors.iter().any(|t| t.name == name)
+        })
+        .count();
+
+    if target <= existing {
+        println!("\nwarstw juz jest {existing}, nie dokladam");
+        return 0;
+    }
+
+    for layer in existing..target {
+        let p = |what: &str| format!("model.layers.{layer:02}.{what}");
+        let mut push = |name: String, values: Vec<f32>| {
+            tensors.push(Tensor { name, values });
+        };
+
+        push(p("attention.q_proj.weight"), small_matrix(hidden, hidden, layer, 1));
+        push(p("attention.k_proj.weight"), small_matrix(hidden, hidden, layer, 2));
+        push(p("attention.v_proj.weight"), identity(hidden));
+        // Zero: uwaga tej warstwy nic nie dodaje, wiec warstwa jest przezroczysta.
+        push(p("attention.o_proj.weight"), vec![0.0; hidden * hidden]);
+
+        push(p("mlp.up_proj.weight"), small_matrix(hidden, inter, layer, 3));
+        push(p("mlp.gate_proj.weight"), small_matrix(hidden, inter, layer, 4));
+        // Zero z tego samego powodu co wyzej.
+        push(p("mlp.down_proj.weight"), vec![0.0; inter * hidden]);
+
+        push(p("attention_norm.weight"), vec![1.0; hidden]);
+        push(p("mlp_norm.weight"), vec![1.0; hidden]);
+    }
+
+    let added = target - existing;
+    println!("\nwarstwy             : bylo {existing}, jest {target} (+{added})");
+    println!("nowe warstwy        : PRZEZROCZYSTE - wynik na starcie bez zmian");
+    added
+}
+
+fn identity(n: usize) -> Vec<f32> {
+    let mut v = vec![0.0; n * n];
+    for i in 0..n {
+        v[i * n + i] = 1.0;
+    }
+    v
+}
+
+/// Male, powtarzalne liczby - zeby warstwa nie byla doskonale symetryczna.
+///
+/// Gdyby wszystkie wagi byly rowne, kazdy wymiar dostawalby ten sam gradient i uczyl sie
+/// tego samego; warstwa zachowywalaby sie jak pojedyncza liczba niezaleznie od rozmiaru.
+/// Wartosci sa liczone z pozycji, wiec zasiew pozostaje powtarzalny co do bitu.
+fn small_matrix(rows: usize, cols: usize, layer: usize, salt: usize) -> Vec<f32> {
+    let scale = 1.0 / (rows as f32).sqrt();
+    (0..rows * cols)
+        .map(|index| {
+            let d = direction(index + layer * 7919 + salt * 104_729, salt);
+            d * scale * 0.1
+        })
+        .collect()
 }
 
 /// Staly, powtarzalny kierunek dla symbolu w danym wymiarze: +1 albo -1.
