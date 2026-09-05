@@ -90,6 +90,10 @@ fn main() {
             Some(t) => szukaj(t, args.get(2).map(String::as_str).unwrap_or(".")),
             None => uzycie(),
         },
+        "wypchnij" => wypchnij(
+            args.get(1).map(String::as_str).unwrap_or("."),
+            args.iter().any(|a| a == "--na-sucho"),
+        ),
         _ => uzycie(),
     };
     std::process::exit(code);
@@ -101,8 +105,179 @@ fn uzycie() -> i32 {
     eprintln!("  historia <plik> [katalog]          os czasu jednego pliku");
     eprintln!("  roznica  <plik> <a> <b> [katalog]  co sie zmienilo miedzy wersja a i b");
     eprintln!("  szukaj   <tekst> [katalog]         w ktorej wersji tekst wszedl i znikl");
-    eprintln!("\nNiczego nie kasuje i niczego nie zapisuje.");
+    eprintln!("  wypchnij [katalog] [--na-sucho]    odloz kopie na GitHub, osobna galaz");
+    eprintln!("\nTryby czytajace niczego nie kasuja i nie zapisuja.");
+    eprintln!("`wypchnij` NIE dotyka twojej biezacej pracy - patrz opis w pliku.");
     2
+}
+
+// ---------------------------------------------------------------------------
+// wypchniecie na GitHub — osobna galaz, bez dotykania biezacej pracy
+// ---------------------------------------------------------------------------
+
+/// Nazwa galezi z kopiami. Bez wspolnej historii z projektem - kopie nigdy nie pojawia sie
+/// w galezi roboczej, nie wchodza w drogi przy laczeniu zmian i nie zasmiecaja projektu.
+const GALAZ: &str = "bak-pak";
+
+/// Odklada kopie na GitHub.
+///
+/// Marcin: "TE KOPIE NIECH TWOJ AUTOMAT Z AUTOMATU WYPYCHA NA GH". Powod jest realny:
+/// kopie leza w JEDNYM miejscu, wiec maja przetrwac miesiac na jednym dysku.
+///
+/// Dwie rzeczy, o ktore trzeba tu zadbac, i obie sa zrobione celowo:
+///
+/// Po pierwsze, to NIE MOZE dotknac biezacej pracy. Zwykle `git add` wpisuje sie do tego
+/// samego miejsca, w ktorym siedzi to, co wlasnie przygotowujesz do zapisu - a ten program
+/// ma chodzic sam z siebie, takze w polowie twojej edycji. Dlatego buduje wlasny, tymczasowy
+/// spis plikow (`GIT_INDEX_FILE`) i pisze prosto do magazynu wersji. Galaz robocza, spis
+/// biezacy i pliki na dysku zostaja nietkniete.
+///
+/// Po drugie, ma nie robic pustych zapisow. Jesli od ostatniego razu nic nie przybylo,
+/// konczy bez zapisu - inaczej po tygodniu galaz mialaby setki identycznych wpisow i nie
+/// dalo by sie w niej niczego znalezc.
+fn wypchnij(root: &str, na_sucho: bool) -> i32 {
+    let grupy = zbierz(root);
+    let kopie: Vec<&Version> = grupy
+        .values()
+        .flatten()
+        .filter(|v| v.stamp.is_some())
+        .collect();
+    if kopie.is_empty() {
+        println!("Nie ma czego odkladac — zadnych kopii pod: {root}");
+        return 0;
+    }
+    let bajtow: u64 = kopie.iter().map(|v| v.bytes).sum();
+    println!("kopii do odlozenia: {}  ({} KB)", kopie.len(), bajtow / 1024);
+
+    if na_sucho {
+        println!("\n--na-sucho: nic nie zapisuje. Poszlyby te pliki:");
+        for v in kopie.iter().take(30) {
+            println!("  {}", v.path.display());
+        }
+        if kopie.len() > 30 {
+            println!("  ... i jeszcze {}", kopie.len() - 30);
+        }
+        return 0;
+    }
+
+    let korzen = match git(&["rev-parse", "--show-toplevel"], None) {
+        Ok(s) => s.trim().to_string(),
+        Err(e) => {
+            eprintln!("FAIL: to nie jest kopia robocza projektu: {e}");
+            return 1;
+        }
+    };
+
+    // Wlasny, tymczasowy spis plikow. To jest cala sztuczka: dzieki niemu `git add` nie
+    // dotyka tego, co masz przygotowane do zapisu w swojej biezacej pracy.
+    let spis = std::env::temp_dir().join(format!("bak-pak-spis-{}", std::process::id()));
+    let _ = fs::remove_file(&spis);
+    let env = Some(("GIT_INDEX_FILE", spis.to_string_lossy().to_string()));
+
+    // Jesli galaz juz jest, zaczynamy od jej zawartosci - kopie maja sie GROMADZIC,
+    // a nie zastepowac poprzednie.
+    let rodzic = git(&["rev-parse", "--verify", &format!("refs/heads/{GALAZ}")], None)
+        .ok()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty());
+    if let Some(r) = &rodzic
+        && let Err(e) = git(&["read-tree", r], env.clone())
+    {
+        eprintln!("FAIL: nie moge odczytac poprzedniej zawartosci galezi: {e}");
+        let _ = fs::remove_file(&spis);
+        return 1;
+    }
+
+    let mut dodanych = 0usize;
+    for v in &kopie {
+        let wzgledna = v
+            .path
+            .strip_prefix(&korzen)
+            .unwrap_or(&v.path)
+            .to_string_lossy()
+            .replace('\\', "/");
+        // `--force`, bo kopie moga byc wykluczone z projektu regula pomijania - a tutaj
+        // wlasnie o nie chodzi.
+        match git(&["add", "--force", &wzgledna], env.clone()) {
+            Ok(_) => dodanych += 1,
+            Err(e) => eprintln!("  pomijam {wzgledna}: {e}"),
+        }
+    }
+    if dodanych == 0 {
+        eprintln!("FAIL: nie udalo sie dodac ani jednej kopii");
+        let _ = fs::remove_file(&spis);
+        return 1;
+    }
+
+    let drzewo = match git(&["write-tree"], env.clone()) {
+        Ok(s) => s.trim().to_string(),
+        Err(e) => {
+            eprintln!("FAIL: {e}");
+            let _ = fs::remove_file(&spis);
+            return 1;
+        }
+    };
+    let _ = fs::remove_file(&spis);
+
+    // Nic nie przybylo - konczymy bez zapisu.
+    if let Some(r) = &rodzic
+        && let Ok(poprzednie) = git(&["rev-parse", &format!("{r}^{{tree}}")], None)
+        && poprzednie.trim() == drzewo
+    {
+        println!("Bez zmian od ostatniego razu — nic nie zapisuje.");
+        return 0;
+    }
+
+    let opis = format!(
+        "bak-pak: {} kopii, {} KB\n\nOdlozone automatycznie. Ta galaz nie ma wspolnej historii\nz projektem - trzyma wylacznie kopie zapasowe plikow roboczych.",
+        kopie.len(),
+        bajtow / 1024
+    );
+    let mut arg = vec!["commit-tree", &drzewo, "-m", &opis];
+    if let Some(r) = &rodzic {
+        arg.push("-p");
+        arg.push(r);
+    }
+    let zapis = match git(&arg, None) {
+        Ok(s) => s.trim().to_string(),
+        Err(e) => {
+            eprintln!("FAIL: {e}");
+            return 1;
+        }
+    };
+    if let Err(e) = git(&["update-ref", &format!("refs/heads/{GALAZ}"), &zapis], None) {
+        eprintln!("FAIL: {e}");
+        return 1;
+    }
+    println!("zapisane lokalnie: {} na galezi {GALAZ}", &zapis[..8.min(zapis.len())]);
+
+    match git(&["push", "-q", "origin", &format!("{GALAZ}:{GALAZ}")], None) {
+        Ok(_) => {
+            println!("wyslane na GitHub: galaz {GALAZ}");
+            0
+        }
+        Err(e) => {
+            // Brak sieci nie jest utrata danych - kopie sa juz w magazynie wersji lokalnie
+            // i pojda przy nastepnym uruchomieniu. Ale trzeba to powiedziec, a nie przemilczec.
+            eprintln!("UWAGA: nie wyslane na GitHub ({e})");
+            eprintln!("Kopie sa zapisane lokalnie na galezi {GALAZ} i pojda nastepnym razem.");
+            0
+        }
+    }
+}
+
+fn git(args: &[&str], env: Option<(&str, String)>) -> Result<String, String> {
+    let mut cmd = std::process::Command::new("git");
+    cmd.args(args);
+    if let Some((k, v)) = env {
+        cmd.env(k, v);
+    }
+    let out = cmd.output().map_err(|e| format!("git nie ruszyl: {e}"))?;
+    if out.status.success() {
+        Ok(String::from_utf8_lossy(&out.stdout).to_string())
+    } else {
+        Err(String::from_utf8_lossy(&out.stderr).trim().to_string())
+    }
 }
 
 // ---------------------------------------------------------------------------
