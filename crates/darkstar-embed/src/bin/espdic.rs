@@ -42,6 +42,10 @@
 use std::collections::HashMap;
 use std::fs;
 
+// `embed` i `name` naleza do cechy Embedder, nie do samego MiniLmEmbedder - bez tego
+// wciagniecia sa niewidoczne, choc typ je ma.
+use darkstar_shadow::Embedder;
+
 /// Jedno wystapienie: ktory rdzen, na ktorej pozycji definicji, przy jak dlugiej liscie.
 ///
 /// Pozycja i dlugosc sa zapisywane, bo przyszly stopien wyboru bedzie ich potrzebowal.
@@ -52,6 +56,10 @@ struct Candidate {
     root: String,
     position: usize,
     of_total: usize,
+    /// Cala angielska definicja rdzenia, taka jak w slowniku. To jest jedyny opis znaczenia,
+    /// jakim dysponujemy - `kodo : code` i `ĉifro : cipher, code` roznia sie wlasnie tym,
+    /// a nie samym rdzeniem.
+    gloss: String,
 }
 
 fn main() {
@@ -106,6 +114,14 @@ fn main() {
             Some(g) => check(&index, &g),
             None => {
                 eprintln!("FAIL: --gold jest wymagane");
+                2
+            }
+        },
+        "sense" => match opt("--cases") {
+            Some(c) => sense(&index, &c),
+            None => {
+                eprintln!("FAIL: --cases jest wymagane");
+                eprintln!("format: zapytanie<TAB>slowo-do-slownika<TAB>oczekiwany-rdzen");
                 2
             }
         },
@@ -185,6 +201,7 @@ fn invert(text: &str) -> (HashMap<String, Vec<Candidate>>, Stats) {
                 root: root.to_string(),
                 position: i,
                 of_total: total,
+                gloss: defs.trim().to_string(),
             });
         }
     }
@@ -362,6 +379,105 @@ fn check(index: &HashMap<String, Vec<Candidate>>, gold_path: &str) -> i32 {
         println!("brak poprawnego rdzenia dla: {}", missing.join(", "));
     }
     0
+}
+
+/// Pomiar wyboru znaczenia istniejacym MiniLM. Zbior przypadkow jest ZEWNETRZNY i zostal
+/// zapisany w repozytorium przed uruchomieniem tego trybu (commit 563fcf4).
+///
+/// Zapytanie porownuje sie z ANGIELSKA DEFINICJA kazdego kandydata, nie z jego rdzeniem.
+/// Rdzen `kodo` i `ĉifro` sa dla modelu angielskiego rownie obce; roznia sie dopiero
+/// definicje `code` i `cipher, code`. Model wybiera wsrod kandydatow PRAWDZIWYCH - nie moze
+/// nic wymyslic, najwyzej wybrac gorzej.
+///
+/// Raportowane sa DWIE osobne liczby: czy poprawny rdzen byl wsrod kandydatow (to mierzy
+/// slownik) i czy zostal wybrany (to mierzy model). Zlanie ich ukryloby, ktora czesc zawodzi.
+fn sense(index: &HashMap<String, Vec<Candidate>>, cases_path: &str) -> i32 {
+    let text = match fs::read_to_string(cases_path) {
+        Ok(t) => t,
+        Err(e) => {
+            eprintln!("FAIL: {cases_path}: {e}");
+            return 1;
+        }
+    };
+    let engine = match darkstar_embed::MiniLmEmbedder::from_env() {
+        Ok(e) => e,
+        Err(e) => {
+            eprintln!("FAIL: silnik osadzen: {e}");
+            return 1;
+        }
+    };
+    println!("\n=== WYBOR ZNACZENIA — {} ===", engine.name());
+    println!("zapytanie                                 wybrany     oczekiwany  ocena");
+
+    let (mut total, mut present, mut chosen) = (0usize, 0usize, 0usize);
+    for line in text.lines() {
+        let line = line.trim_end_matches('\r');
+        let parts: Vec<&str> = line.split('\t').collect();
+        if parts.len() < 3 || parts[0].starts_with('#') {
+            continue;
+        }
+        let (query, word, expected) = (parts[0].trim(), parts[1].trim().to_lowercase(), parts[2].trim());
+        if query.is_empty() || expected.is_empty() {
+            continue;
+        }
+        total += 1;
+        let cands = index.get(&word).cloned().unwrap_or_default();
+        let is_present = cands.iter().any(|c| c.root == expected);
+        if is_present {
+            present += 1;
+        }
+        if cands.is_empty() {
+            println!("{:<40}  {:<11} {:<11} brak kandydatow", short(query), "-", expected);
+            continue;
+        }
+        let Ok(qv) = engine.embed(query) else {
+            println!("{:<40}  {:<11} {:<11} blad osadzenia", short(query), "-", expected);
+            continue;
+        };
+        let mut best: Option<(&Candidate, f32)> = None;
+        for c in &cands {
+            let Ok(cv) = engine.embed(&c.gloss) else { continue };
+            let Some(s) = darkstar_shadow::cosine_similarity(&qv, &cv) else { continue };
+            if best.is_none_or(|(_, bs)| s > bs) {
+                best = Some((c, s));
+            }
+        }
+        match best {
+            Some((c, s)) => {
+                let hit = c.root == expected;
+                if hit {
+                    chosen += 1;
+                }
+                println!(
+                    "{:<40}  {:<11} {:<11} {s:.4} {}",
+                    short(query),
+                    short_root(&c.root),
+                    expected,
+                    if hit { "TRAFIONY" } else { "pudlo" }
+                );
+            }
+            None => println!("{:<40}  {:<11} {:<11} nic nie policzone", short(query), "-", expected),
+        }
+    }
+
+    println!("\nprzypadkow          : {total}");
+    println!(
+        "poprawny WSROD kandydatow : {present}  ({}%)   <- to mierzy slownik",
+        (present * 100).checked_div(total).unwrap_or(0)
+    );
+    println!(
+        "poprawny WYBRANY          : {chosen}  ({}%)   <- to mierzy model",
+        (chosen * 100).checked_div(total).unwrap_or(0)
+    );
+    0
+}
+
+fn short(s: &str) -> String {
+    s.chars().take(38).collect()
+}
+
+fn short_root(s: &str) -> String {
+    s.chars().take(11).collect()
 }
 
 #[cfg(test)]
