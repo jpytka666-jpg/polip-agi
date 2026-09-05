@@ -45,19 +45,44 @@ use darkstar_shadow::{Embedder, cosine_similarity};
 /// Ponizej tej zgodnosci roznica przestaje byc szumem zaokraglen i staje sie inna odpowiedzia.
 const THRESHOLD: f32 = 0.9999;
 
+/// Ustaw te zmienna tam, gdzie pominiecie testu zgodnosci ma byc bledem, a nie wyborem -
+/// czyli wszedzie, gdzie ktos moglby wziac zielone swiatlo za dowod zgodnosci.
+const REQUIRE: &str = "DARKSTAR_EMBED_REQUIRE_PARITY";
+
+/// Mowi, czy brakuje warunkow do uruchomienia testu - i pilnuje, zeby pominiecie nie udawalo
+/// sukcesu tam, gdzie ma go nie udawac.
+///
+/// Bez tego test na maszynie bez modelu konczy sie slowem PASSED, co czyta sie jak
+/// "zgodnosc potwierdzona", a znaczy "nic nie sprawdzono". To jest najgorszy rodzaj testu:
+/// taki, ktory daje pewnosc dokladnie tam, gdzie jej nie ma.
+fn missing(vars: &[&str]) -> bool {
+    let absent: Vec<&str> = vars
+        .iter()
+        .copied()
+        .filter(|v| std::env::var(v).is_err())
+        .collect();
+    if absent.is_empty() {
+        return false;
+    }
+    if std::env::var(REQUIRE).is_ok() {
+        panic!(
+            "{REQUIRE} jest ustawione, a brakuje: {}. Test zgodnosci MUSI sie tu wykonac.",
+            absent.join(", ")
+        );
+    }
+    eprintln!(
+        "POMINIETO: brak {} (ustaw {REQUIRE}, zeby brak byl bledem)",
+        absent.join(", ")
+    );
+    true
+}
+
 #[test]
 fn vectors_match_what_chroma_computed() {
-    // Bez wzorca test nie ma czego sprawdzac. Pomijamy go glosno zamiast przepuszczac po
-    // cichu: test, ktory zawsze przechodzi, jest gorszy niz brak testu, bo daje falszywa
-    // pewnosc dokladnie tam, gdzie pewnosc jest najwazniejsza.
-    let Ok(reference_path) = std::env::var("DARKSTAR_EMBED_REFERENCE") else {
-        eprintln!("POMINIETO: brak DARKSTAR_EMBED_REFERENCE - nie ma z czym porownac");
-        return;
-    };
-    if std::env::var("DARKSTAR_EMBED_MODEL_DIR").is_err() {
-        eprintln!("POMINIETO: brak DARKSTAR_EMBED_MODEL_DIR - nie ma czym policzyc");
+    if missing(&["DARKSTAR_EMBED_REFERENCE", "DARKSTAR_EMBED_MODEL_DIR"]) {
         return;
     }
+    let reference_path = std::env::var("DARKSTAR_EMBED_REFERENCE").expect("sprawdzone wyzej");
 
     let raw = std::fs::read_to_string(&reference_path)
         .unwrap_or_else(|e| panic!("nie moge odczytac wzorca {reference_path}: {e}"));
@@ -133,6 +158,39 @@ fn vectors_match_what_chroma_computed() {
     eprintln!("ZDANE: {checked} wpisow, najgorsza zgodnosc {worst:.9}");
 }
 
+/// Co silnik robi z tekstem pustym i z samymi bialymi znakami.
+///
+/// Przeglad zglosil to jako mozliwy rozjazd: gdyby Chroma zwracala dla pustego tekstu wektor,
+/// a my blad, wyniki rozjechalyby sie na wpisach bez tresci. Rozstrzygamy pomiarem zamiast
+/// rozwazaniem - tokenizer z `add_special_tokens = true` dokłada [CLS] i [SEP], wiec
+/// pytanie brzmi, czy ciag tokenow w ogole bywa pusty.
+#[test]
+fn empty_and_blank_text_behave_predictably() {
+    if missing(&["DARKSTAR_EMBED_MODEL_DIR"]) {
+        return;
+    }
+
+    let embedder = MiniLmEmbedder::from_env().expect("wczytanie modelu");
+
+    for (label, text) in [("pusty", ""), ("spacja", " "), ("biale znaki", "\t\n  ")] {
+        match embedder.embed(text) {
+            Ok(v) => {
+                eprintln!("{label}: wektor {} wymiarow", v.len());
+                assert_eq!(v.len(), 384, "{label}: zly rozmiar wektora");
+                assert!(
+                    v.iter().all(|x| x.is_finite()),
+                    "{label}: wektor zawiera wartosci nieliczbowe"
+                );
+            }
+            Err(e) => {
+                // Blad tez jest dopuszczalnym zachowaniem - ale musimy WIEDZIEC, ktore
+                // z dwoch zachodzi, bo od tego zalezy, czy pusty wpis da sie odnalezc.
+                eprintln!("{label}: blad -> {e}");
+            }
+        }
+    }
+}
+
 /// Silnik wpiety w gniazdo trybu cienia: czy pasuje i czy nadal daje ten sam wynik.
 ///
 /// To jest sprawdzian polaczenia dwoch czesci, ktore powstaly osobno. Kazda z nich dziala
@@ -140,19 +198,19 @@ fn vectors_match_what_chroma_computed() {
 /// zmienia w odpowiedzi, ktora dostaje system.
 #[test]
 fn the_engine_fits_the_shadow_socket() {
-    if std::env::var("DARKSTAR_EMBED_MODEL_DIR").is_err() {
-        eprintln!("POMINIETO: brak DARKSTAR_EMBED_MODEL_DIR");
+    if missing(&["DARKSTAR_EMBED_MODEL_DIR"]) {
         return;
     }
 
     use darkstar_shadow::ShadowedEmbedder;
 
-    let direct = MiniLmEmbedder::from_env().expect("silnik bezposrednio");
+    // JEDEN model, dwa liczenia. Wczytanie dwoch kopii zajmowaloby 2 x 86 MB naraz - a ten
+    // sam plik ostrzega, ze druga kopia nie miesci sie sensownie w pamieci tej maszyny.
+    // Najpierw wynik bezposrednio, potem ten sam silnik przeniesiony do gniazda.
+    let direct = MiniLmEmbedder::from_env().expect("wczytanie silnika");
     let expected = direct.embed("pamiec systemu").expect("liczenie bezposrednie");
 
-    let socketed = ShadowedEmbedder::new(Box::new(
-        MiniLmEmbedder::from_env().expect("silnik w gniezdzie"),
-    ));
+    let socketed = ShadowedEmbedder::new(Box::new(direct));
 
     assert_eq!(socketed.live_name(), "all-MiniLM-L6-v2");
     assert_eq!(socketed.dimensions(), 384);

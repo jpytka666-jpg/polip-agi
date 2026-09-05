@@ -150,7 +150,14 @@ impl ShadowedEmbedder {
         // Uczen jest modelem w trakcie treningu: ma prawo sie wywrocic, a wywrotka w Rust
         // bywa panika, nie bledem. `catch_unwind` jest tu uczciwe, bo po panice nie dotykamy
         // zadnego stanu ucznia - wynik jest odrzucany, a dziennik ma wlasna obsluge zatrutego
-        // zamka. Docelowo uczen pojdzie do osobnego procesu i ten straznik bedzie zbedny.
+        // zamka.
+        //
+        // CZEGO TO NIE OBEJMUJE, wprost: `catch_unwind` lapie panike i tylko panike. Uczen,
+        // ktory sie ZAWIESI albo zje cala pamiec, zatrzyma tez watek wolajacego - bo obserwacja
+        // jest tu synchroniczna. To znaczy, ze wpiecie ucznia o nieprzewidywalnym czasie
+        // dzialania jest dzis decyzja o ryzyku, nie darmowym dodatkiem. Domkniecie tej dziury
+        // wymaga osobnego procesu z wlasnym limitem czasu; do tego czasu wpinaj tylko ucznia,
+        // ktoremu ufasz co do czasu odpowiedzi.
         let outcome = catch_unwind(AssertUnwindSafe(|| shadow.embed(text)));
         let shadow_ms = started.elapsed().as_millis() as u64;
 

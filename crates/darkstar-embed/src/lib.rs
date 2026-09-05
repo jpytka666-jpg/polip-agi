@@ -177,6 +177,10 @@ impl Embedder for MiniLmEmbedder {
             .iter()
             .map(|&x| i64::from(x))
             .collect();
+        // Zabezpieczenie, ktore w praktyce nie zachodzi: tokenizer z `add_special_tokens`
+        // dokłada [CLS] i [SEP], wiec nawet pusty tekst daje dwa tokeny. ZMIERZONE - pusty
+        // tekst, spacja i biale znaki zwracaja poprawny wektor 384 liczb, nie blad. Warunek
+        // zostaje na wypadek podmiany tokenizera na taki, ktory znacznikow nie dokłada.
         if ids.is_empty() {
             return Err(EmbedError::Failed("pusty tekst po tokenizacji".into()));
         }
@@ -191,10 +195,18 @@ impl Embedder for MiniLmEmbedder {
         let types_t = ort::value::Value::from_array((shape, types))
             .map_err(|e| EmbedError::Failed(format!("wejscie token_type_ids: {e}")))?;
 
+        // Zatruty zamek odzyskujemy zamiast poddawac sie. Zatrucie znaczy, ze jakis watek
+        // panikowal, TRZYMAJAC ten zamek. Gdybysmy tu zwracali blad, jedna panika wylaczalaby
+        // silnik do konca zycia procesu - a osadzenia to sciezka, ktora ma dzialac zawsze.
+        //
+        // Odzyskanie jest tu uzasadnione: sesja ONNX nie przenosi stanu miedzy wywolaniami -
+        // kazde `run` dostaje komplet wejsc i zwraca komplet wyjsc, wiec nie ma niedokonczonej
+        // zmiany, ktora panika mogla zostawic w polowie. Ryzyko szczatkowe (panika w srodku
+        // kodu natywnego) jest mniejsze niz pewna strata silnika.
         let mut session = self
             .session
             .lock()
-            .map_err(|_| EmbedError::Failed("zamek sesji zatruty".into()))?;
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
 
         let outputs = session
             .run(ort::inputs![
