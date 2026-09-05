@@ -1,0 +1,14 @@
+# darkstar-header-v1
+# po co: Cargo.toml
+# nie wolno: hotspot, ruszac wlp2s0, wracac do 10.44, gasic DARKSTAR-WiFi, haslo w gicie
+# autor: Marcin
+# powstal: 2026-09-05
+[package]
+name = "darkstar-seed"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+# Zero zaleznosci: format NWRD to naglowek i ciag liczb, a Noworodek zyje w innym
+# repozytorium, ktorego nie wolno dotykac.
+[dependencies]

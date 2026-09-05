@@ -9,6 +9,7 @@ members = [
     "crates/darkstar-core",
     "crates/darkstar-embed",
     "crates/darkstar-recall",
+    "crates/darkstar-seed",
     "crates/darkstar-server",
     "crates/darkstar-shadow",
 ]
