@@ -108,8 +108,14 @@ fn main() {
 
     changes.sort_by(|x, y| y.l2.partial_cmp(&x.l2).unwrap_or(std::cmp::Ordering::Equal));
 
-    println!("\n{:<44} {:>9} {:>12} {:>12} {:>11}", "warstwa", "zmienione", "dlugosc", "sr.na liczbe", "najwieksza");
-    println!("{}", "-".repeat(92));
+    // Trzy miary obok siebie, bo kazda odpowiada na inne pytanie:
+    // dlugosc (l2) - jak duza byla zmiana jako calosc; suma (l1) - ile ruchu w sumie,
+    // niezaleznie od kierunku; srednia na liczbe - czy warstwa drgnela, czy sie przebudowala.
+    println!(
+        "\n{:<40} {:>9} {:>11} {:>11} {:>12} {:>10}",
+        "warstwa", "zmienione", "dlugosc", "suma", "sr.na liczbe", "najwieksza"
+    );
+    println!("{}", "-".repeat(98));
     for c in &changes {
         let percent = if c.total > 0 {
             100.0 * c.changed as f64 / c.total as f64
@@ -117,10 +123,11 @@ fn main() {
             0.0
         };
         println!(
-            "{:<44} {:>7.1}% {:>12.4} {:>12.6} {:>11.6}",
+            "{:<40} {:>7.1}% {:>11.4} {:>11.2} {:>12.6} {:>10.6}",
             short_name(&c.name),
             percent,
             c.l2,
+            c.l1,
             c.per_changed,
             c.max_abs
         );
