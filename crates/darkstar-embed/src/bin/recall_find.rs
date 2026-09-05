@@ -85,12 +85,13 @@ fn parse_args() -> Option<Args> {
                 }
             }
             "--limit" => {
-                if let Some(v) = args.next() {
-                    if let Ok(n) = v.parse::<usize>() {
-                        if n > 0 {
-                            limit = n;
-                        }
-                    }
+                // Zero i wartosc niebedaca liczba sa po cichu pomijane - zostaje domyslna.
+                // Zapytanie o zero wynikow nie jest bledem uzytkownika wartym przerwania,
+                // tylko prosba, ktora nie ma sensu.
+                if let Some(Ok(n)) = args.next().map(|v| v.parse::<usize>())
+                    && n > 0
+                {
+                    limit = n;
                 }
             }
             "--recall" => {

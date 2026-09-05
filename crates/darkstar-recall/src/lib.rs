@@ -161,13 +161,13 @@ impl HttpClient {
             .read_to_string(&mut body_out)
             .map_err(|e| RecallError::Malformed(e.to_string()))?;
 
-        if let Some(expected) = declared_len {
-            if body_out.len() < expected {
-                return Err(RecallError::Malformed(format!(
-                    "odpowiedz ucieta: {} z {expected} bajtow",
-                    body_out.len()
-                )));
-            }
+        if let Some(expected) = declared_len
+            && body_out.len() < expected
+        {
+            return Err(RecallError::Malformed(format!(
+                "odpowiedz ucieta: {} z {expected} bajtow",
+                body_out.len()
+            )));
         }
 
         if (200..300).contains(&code) {

@@ -125,10 +125,10 @@ fn main() {
     let mut failures = 0usize;
 
     for (id, name) in &collections {
-        if let Some(only) = &args.only {
-            if only != name {
-                continue;
-            }
+        if let Some(only) = &args.only
+            && only != name
+        {
+            continue;
         }
         match migrate_one(&src, &dst, id, name, args.apply) {
             Ok((read, written)) => {
