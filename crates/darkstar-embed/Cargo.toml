@@ -25,3 +25,7 @@ tokenizers = { version = "0.20", default-features = false, features = ["onig"] }
 [dev-dependencies]
 darkstar-shadow = { path = "../darkstar-shadow" }
 serde_json.workspace = true
+
+[[bin]]
+name = "recall-ask"
+path = "src/bin/recall_ask.rs"
