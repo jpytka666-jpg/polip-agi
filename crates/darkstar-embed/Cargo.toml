@@ -44,3 +44,8 @@ path = "src/bin/reflex_store.rs"
 [[bin]]
 name = "implant"
 path = "src/bin/implant.rs"
+
+# Rdzen kregowy: zadanie -> decyzja -> dziennik. Rozstrzyga albo oddaje sprawe mozgowi.
+[[bin]]
+name = "spine"
+path = "src/bin/spine.rs"
