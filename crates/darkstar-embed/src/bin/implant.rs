@@ -139,7 +139,7 @@ fn main() {
 
         vectors.push((index, project(&sum, hidden)));
         done += 1;
-        if done % 500 == 0 { println!("  ... {done} znakow"); }
+        if done.is_multiple_of(500) { println!("  ... {done} znakow"); }
     }
 
     println!("osadzonych znakow: {done}, w tym wielojezycznych: {multilingual}");
