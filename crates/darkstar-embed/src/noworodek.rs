@@ -159,6 +159,62 @@ impl NoworodekEmbedder {
             .count()
     }
 
+    /// ACTIVE: Darkstar `cbms ids` = zawsze LE u32, 4 B/ID.
+    /// Glosne bledy: pusty bufor, dlugosc niepodzielna przez 4.
+    pub fn parse_cbms_ids_u32(bytes: &[u8]) -> Result<Vec<usize>, EmbedError> {
+        if bytes.is_empty() {
+            return Err(EmbedError::Failed(
+                "cbms ids: pusty wynik - oczekiwano ID u32".into(),
+            ));
+        }
+        if !bytes.len().is_multiple_of(4) {
+            return Err(EmbedError::Failed(format!(
+                "cbms ids: dlugosc {} B nie jest wielokrotnoscia 4 (format u32 LE)",
+                bytes.len()
+            )));
+        }
+        let mut out = Vec::with_capacity(bytes.len() / 4);
+        for chunk in bytes.chunks_exact(4) {
+            let id = u32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]) as usize;
+            out.push(id);
+        }
+        Ok(out)
+    }
+
+    /// LEGACY: stara generacja PC zapisywala `cbms ids` jako LE u16 / 2 B/ID.
+    /// Nie uzywac w aktywnym torze Darkstar/Noworodek. Tylko testy.
+    #[cfg(test)]
+    fn parse_cbms_ids_u16_legacy(bytes: &[u8]) -> Result<Vec<usize>, EmbedError> {
+        if bytes.is_empty() {
+            return Err(EmbedError::Failed(
+                "cbms ids LEGACY u16: pusty wynik".into(),
+            ));
+        }
+        if !bytes.len().is_multiple_of(2) {
+            return Err(EmbedError::Failed(format!(
+                "cbms ids LEGACY u16: dlugosc {} B nie jest wielokrotnoscia 2",
+                bytes.len()
+            )));
+        }
+        let mut out = Vec::with_capacity(bytes.len() / 2);
+        for chunk in bytes.chunks_exact(2) {
+            let id = u16::from_le_bytes([chunk[0], chunk[1]]) as usize;
+            out.push(id);
+        }
+        Ok(out)
+    }
+
+    /// Bramka runtime: ID poza tabela embeddings -> Err (glosno).
+    fn assert_ids_fit_vocab(ids: &[usize], vocab: usize) -> Result<(), EmbedError> {
+        for &id in ids {
+            if id >= vocab {
+                return Err(EmbedError::Failed(format!(
+                    "ID {id} >= liczba wierszy embeddings ({vocab})"
+                )));
+            }
+        }
+        Ok(())
+    }
     /// Tekst -> znaki CBMS, przez zewnetrzny program.
     ///
     /// Pliki przejsciowe maja w nazwie numer procesu i licznik, bo gniazdo moze wolac ucznia
@@ -174,7 +230,7 @@ impl NoworodekEmbedder {
         );
 
         let in_path = self.config.work_dir.join(format!("nwd-{tag}.txt"));
-        let out_path = self.config.work_dir.join(format!("nwd-{tag}.u16"));
+        let out_path = self.config.work_dir.join(format!("nwd-{tag}.u32"));
 
         let write = |path: &Path| -> std::io::Result<()> {
             let mut f = File::create(path)?;
@@ -196,18 +252,18 @@ impl NoworodekEmbedder {
 
         let result = match status {
             Ok(out) if out.status.success() => std::fs::read(&out_path)
-                .map(|bytes| {
-                    bytes
-                        .chunks_exact(2)
-                        .map(|c| u16::from_le_bytes([c[0], c[1]]) as usize)
-                        .collect::<Vec<_>>()
-                })
-                .map_err(|e| EmbedError::Failed(format!("odczyt znakow: {e}"))),
+                .map_err(|e| EmbedError::Failed(format!("odczyt znakow: {e}")))
+                .and_then(|bytes| Self::parse_cbms_ids_u32(&bytes)),
             Ok(out) => Err(EmbedError::Failed(format!(
                 "cbms odmowil: {}",
-                String::from_utf8_lossy(&out.stderr).chars().take(200).collect::<String>()
+                String::from_utf8_lossy(&out.stderr)
+                    .chars()
+                    .take(200)
+                    .collect::<String>()
             ))),
-            Err(e) => Err(EmbedError::Unavailable(format!("nie moge uruchomic cbms: {e}"))),
+            Err(e) => Err(EmbedError::Unavailable(format!(
+                "nie moge uruchomic cbms: {e}"
+            ))),
         };
 
         let _ = std::fs::remove_file(&out_path);
@@ -226,6 +282,7 @@ impl Embedder for NoworodekEmbedder {
 
     fn embed(&self, text: &str) -> Result<Vec<f32>, EmbedError> {
         let symbols = self.to_symbols(text)?;
+        Self::assert_ids_fit_vocab(&symbols, self.vocab)?;
         let (vector, used) = fold_symbols(&self.table, &symbols, self.hidden, self.vocab);
         if used == 0 {
             return Err(EmbedError::Failed(
@@ -363,8 +420,54 @@ mod tests {
             Ok(_) => panic!("uczen bez czesci nie moze sie wczytac"),
             Err(e) => {
                 let msg = e.to_string();
-                assert!(msg.contains("wagi"), "komunikat ma mowic, czego brakuje: {msg}");
+                assert!(
+                    msg.contains("wagi"),
+                    "komunikat ma mowic, czego brakuje: {msg}"
+                );
             }
         }
+    }
+
+    fn le_u32(id: u32) -> [u8; 4] {
+        id.to_le_bytes()
+    }
+
+    #[test]
+    fn parse_cbms_ids_u32_roundtrips_including_above_u16() {
+        // Ta sama funkcja co aktywny runtime. 65536 obowiazkowe - u16 by je ucielo.
+        let ids: [u32; 4] = [1, 65535, 65536, 110353];
+        let mut bytes = Vec::new();
+        for id in ids {
+            bytes.extend_from_slice(&le_u32(id));
+        }
+        let got = NoworodekEmbedder::parse_cbms_ids_u32(&bytes).expect("parse u32");
+        assert_eq!(got, vec![1usize, 65535, 65536, 110353]);
+    }
+
+    #[test]
+    fn parse_cbms_ids_u32_rejects_odd_lengths() {
+        assert!(NoworodekEmbedder::parse_cbms_ids_u32(&[0, 1]).is_err());
+        assert!(NoworodekEmbedder::parse_cbms_ids_u32(&[0, 1, 2, 3, 4, 5]).is_err());
+    }
+
+    #[test]
+    fn parse_cbms_ids_u32_rejects_empty() {
+        assert!(NoworodekEmbedder::parse_cbms_ids_u32(&[]).is_err());
+    }
+
+    #[test]
+    fn embed_bounds_reject_id_at_or_above_vocab() {
+        // Ta sama bramka co embed() — nie parser u32.
+        assert!(NoworodekEmbedder::assert_ids_fit_vocab(&[0, 1], 2).is_ok());
+        let err = NoworodekEmbedder::assert_ids_fit_vocab(&[0, 2], 2).expect_err("2 >= 2");
+        let msg = err.to_string();
+        assert!(msg.contains(">= liczba wierszy embeddings"), "msg={msg}");
+        assert!(msg.contains('2') || msg.contains("2"), "msg={msg}");
+    }
+    #[test]
+    fn legacy_u16_parser_is_named_and_separate() {
+        let bytes = 7u16.to_le_bytes();
+        let got = NoworodekEmbedder::parse_cbms_ids_u16_legacy(&bytes).expect("legacy");
+        assert_eq!(got, vec![7usize]);
     }
 }
