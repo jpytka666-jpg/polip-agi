@@ -64,3 +64,8 @@ path = "src/bin/lathe.rs"
 [[bin]]
 name = "tokenize"
 path = "src/bin/tokenize.rs"
+
+# ESPDIC jako zrodlo kandydatow angielski -> esperanto. Bez wyboru znaczenia.
+[[bin]]
+name = "espdic"
+path = "src/bin/espdic.rs"
