@@ -96,6 +96,24 @@ fn vectors_match_what_chroma_computed() {
         .as_array()
         .expect("wzorzec bez pola embeddings");
     assert!(!documents.is_empty(), "wzorzec jest pusty");
+
+    // Wzorzec z samych krotkich tekstow jest niebezpieczny: teksty ponizej 128 tokenow
+    // zgadzaja sie IDEALNIE takze przy zle ustawionym obcinaniu. Wlasnie tak przeoczono
+    // rozjazd na dlugich tekstach - trzy zdania po 22-58 znakow dawaly 1.000000000, a wpis
+    // na 1117 znakow 0.918. Wzorzec bez dlugiego tekstu nie sprawdza tego, co obiecuje.
+    const LONG_ENOUGH_CHARS: usize = 600;
+    let longest = documents
+        .iter()
+        .filter_map(|d| d.as_str())
+        .map(str::len)
+        .max()
+        .unwrap_or(0);
+    assert!(
+        longest >= LONG_ENOUGH_CHARS,
+        "wzorzec ma najdluzszy tekst {longest} znakow - za malo, zeby przekroczyc limit \
+         obcinania. Taki wzorzec przejdzie takze przy zlym obcinaniu. Pobierz wpisy \
+         zawierajace tekst dluzszy niz {LONG_ENOUGH_CHARS} znakow."
+    );
     assert_eq!(
         documents.len(),
         embeddings.len(),

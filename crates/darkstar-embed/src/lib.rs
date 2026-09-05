@@ -46,6 +46,20 @@ pub const MINILM_DIMENSIONS: usize = 384;
 const MODEL_FILE: &str = "model.onnx";
 const TOKENIZER_FILE: &str = "tokenizer.json";
 
+/// Ile tokenow bierzemy pod uwage, zanim tekst zostanie obciety.
+///
+/// TA LICZBA MUSI WYNOSIC 256 I NIE WOLNO JEJ CZYTAC Z PLIKU. `tokenizer.json` deklaruje 128,
+/// ale Chroma jawnie to nadpisuje na 256 - z komentarzem, ze sentence-transformers uzywa 256
+/// wbrew konfiguracji z Hugging Face. Skoro Chroma liczyla nim wszystkie zapisane wspomnienia,
+/// 256 jest wartoscia prawdziwa, a 128 wartoscia zapisana.
+///
+/// Cena pomylki jest cicha i dlatego grozna: teksty krotsze niz 128 tokenow zgadzaja sie
+/// IDEALNIE przy obu ustawieniach, wiec blad nie wychodzi na krotkich probkach. Zmierzone:
+/// przy 128 tekst na 1117 znakow dawal zgodnosc 0.918 zamiast 1.000.
+///
+/// Zrodlo: chromadb/utils/embedding_functions/onnx_mini_lm_l6_v2.py, `enable_truncation(256)`.
+const CHROMA_MAX_TOKENS: usize = 256;
+
 /// Skad wziac pliki. Zadna sciezka nie jest wpisana w kod - inna maszyna, inne miejsce.
 #[derive(Debug, Clone)]
 pub struct MiniLmConfig {
@@ -106,9 +120,34 @@ impl MiniLmEmbedder {
         require_file(&model_path)?;
         require_file(&tokenizer_path)?;
 
-        let tokenizer = tokenizers::Tokenizer::from_file(&tokenizer_path).map_err(|e| {
+        let mut tokenizer = tokenizers::Tokenizer::from_file(&tokenizer_path).map_err(|e| {
             EmbedError::Unavailable(format!("tokenizer {}: {e}", tokenizer_path.display()))
         })?;
+
+        // Nadpisujemy ustawienia z pliku dokladnie tak, jak robi to Chroma - patrz
+        // CHROMA_MAX_TOKENS. Bez tego dluzsze teksty tna sie w innym miejscu niz przy
+        // zapisie i wektory sie rozjezdzaja.
+        tokenizer
+            .with_truncation(Some(tokenizers::TruncationParams {
+                max_length: CHROMA_MAX_TOKENS,
+                strategy: tokenizers::TruncationStrategy::LongestFirst,
+                direction: tokenizers::TruncationDirection::Right,
+                stride: 0,
+            }))
+            .map_err(|e| EmbedError::Unavailable(format!("ustawienie obcinania: {e}")))?;
+
+        // Wypelnianie do stalej dlugosci tez bierzemy z Chromy. Przy liczeniu pojedynczego
+        // tekstu nie powinno zmieniac wyniku - maska odsiewa wypelnienie zarowno w modelu,
+        // jak i przy usrednianiu - ale rownanie do tego samego, co robil zapisujacy, jest
+        // tansze niz dowodzenie, ze roznica nie ma znaczenia.
+        tokenizer.with_padding(Some(tokenizers::PaddingParams {
+            strategy: tokenizers::PaddingStrategy::Fixed(CHROMA_MAX_TOKENS),
+            direction: tokenizers::PaddingDirection::Right,
+            pad_to_multiple_of: None,
+            pad_id: 0,
+            pad_type_id: 0,
+            pad_token: "[PAD]".to_string(),
+        }));
 
         let session = ort::session::Session::builder()
             .map_err(|e| EmbedError::Unavailable(format!("budowanie sesji: {e}")))?
