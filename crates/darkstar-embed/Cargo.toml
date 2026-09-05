@@ -49,3 +49,8 @@ path = "src/bin/implant.rs"
 [[bin]]
 name = "spine"
 path = "src/bin/spine.rs"
+
+# Petla zwrotna: czym blok rozni sie od pamieci, czy decyzja byla trafna, co z tego do wag.
+[[bin]]
+name = "spine-loop"
+path = "src/bin/spine_loop.rs"

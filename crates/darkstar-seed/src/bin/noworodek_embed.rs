@@ -56,11 +56,15 @@ struct Tensor {
 }
 
 fn main() {
-    let args: Vec<String> = std::env::args().skip(1).collect();
+    let raw: Vec<String> = std::env::args().skip(1).collect();
+    let wide = raw.iter().any(|a| a == "--ids32");
+    let args: Vec<String> = raw.into_iter().filter(|a| a != "--ids32").collect();
     if args.len() < 2 {
-        eprintln!("uzycie: noworodek-embed <wagi.nwrd> <zdanie-a.u16> [zdanie-b.u16 ...]");
+        eprintln!("uzycie: noworodek-embed <wagi.nwrd> <zdanie-a.u16> [zdanie-b.u16 ...] [--ids32]");
         eprintln!();
         eprintln!("Pliki .u16 powstaja przez: cbms <ksiega> ids <plik-tekstowy> <wyjscie.u16>");
+        eprintln!("--ids32 dla ksiag powyzej 65536 wpisow - szerokosc musi byc podana, bo");
+        eprintln!("odczyt szerokich numerow jako waskie nie wywala sie, tylko klamie.");
         std::process::exit(2);
     }
 
@@ -87,7 +91,7 @@ fn main() {
 
     let mut vectors = Vec::new();
     for path in &args[1..] {
-        let ids = match read_ids(path) {
+        let ids = match read_ids(path, wide) {
             Ok(v) => v,
             Err(e) => {
                 eprintln!("FAIL: nie moge odczytac {path}: {e}");
@@ -204,12 +208,25 @@ fn cosine(a: &[f32], b: &[f32]) -> Option<f32> {
     Some((dot / (na.sqrt() * nb.sqrt())) as f32)
 }
 
-fn read_ids(path: &str) -> std::io::Result<Vec<usize>> {
+/// Czyta numery znakow, 16- albo 32-bitowe. Szerokosc jest PODAWANA, nie zgadywana.
+///
+/// Po podniesieniu sufitu ksiegi do 110354 wpisow numery przestaly miescic sie w 16 bitach.
+/// Odczyt 32-bitowego pliku jako 16-bitowy nie wywala sie - po cichu tnie kazdy numer i wstawia
+/// zera, wiec pomiar wychodzi, wyglada sensownie i jest nieprawdziwy. Zgadywanie szerokosci po
+/// rozmiarze pliku mialoby ten sam skutek przy plikach, ktore dziela sie przez oba.
+fn read_ids(path: &str, wide: bool) -> std::io::Result<Vec<usize>> {
     let bytes = std::fs::read(path)?;
-    Ok(bytes
-        .chunks_exact(2)
-        .map(|c| u16::from_le_bytes([c[0], c[1]]) as usize)
-        .collect())
+    Ok(if wide {
+        bytes
+            .chunks_exact(4)
+            .map(|c| u32::from_le_bytes([c[0], c[1], c[2], c[3]]) as usize)
+            .collect()
+    } else {
+        bytes
+            .chunks_exact(2)
+            .map(|c| u16::from_le_bytes([c[0], c[1]]) as usize)
+            .collect()
+    })
 }
 
 fn read_nwrd(path: &str) -> std::io::Result<Vec<Tensor>> {
