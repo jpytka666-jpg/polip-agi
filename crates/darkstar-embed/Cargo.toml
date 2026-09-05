@@ -11,6 +11,7 @@ license.workspace = true
 
 [dependencies]
 darkstar-shadow = { path = "../darkstar-shadow" }
+darkstar-recall = { path = "../darkstar-recall" }
 serde_json.workspace = true
 # load-dynamic zamiast linkowania statycznego: biblioteka wnioskujaca jest ladowana w czasie
 # dzialania ze sciezki w ORT_DYLIB_PATH. Dwa powody, oba wazne:
@@ -29,3 +30,7 @@ serde_json.workspace = true
 [[bin]]
 name = "recall-ask"
 path = "src/bin/recall_ask.rs"
+
+[[bin]]
+name = "recall-find"
+path = "src/bin/recall_find.rs"
