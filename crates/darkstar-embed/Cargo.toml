@@ -34,3 +34,8 @@ path = "src/bin/recall_ask.rs"
 [[bin]]
 name = "recall-find"
 path = "src/bin/recall_find.rs"
+
+# Slownik odruchow rdzenia: gotowe bloki kodu wyszukiwalne po opisie zadania.
+[[bin]]
+name = "reflex-store"
+path = "src/bin/reflex_store.rs"
