@@ -27,8 +27,8 @@
 //! TECH STACK: Rust 2024. Zalezy od darkstar-recall dla HTTP bez dodatkowych bibliotek,
 //! od darkstar-embed dla embedding.
 //! LOCAL WORKSPACE: D:\codex-fresh-2026-08-28\worktrees\polip-agi-darkstar-plan
-//! GIT COMMIT: PENDING
-//! GITHUB METADATA: jpytka666-jpg/polip-agi, branch docs/darkstar-headscale-hotspot-plan
+//! GIT COMMIT: 9a4cff7
+//! GITHUB METADATA: jpytka666-jpg/polip-agi, branch docs/darkstar-headscale-hotspot-plan, commit 9a4cff7
 //! ==========================================
 //!
 //! Uzycie:
