@@ -39,10 +39,36 @@
 //! ```
 //! Bez `--dry-run` zapisuje do magazynu. Z nim tylko liczy i pokazuje, co by zapisal.
 
+use darkstar_embed::MiniLmEmbedder;
 use darkstar_embed::noworodek::NoworodekEmbedder;
 use darkstar_recall::{HttpClient, read_env_value};
-use darkstar_shadow::Embedder;
+use darkstar_shadow::{EmbedError, Embedder};
 use serde_json::{Value, json};
+
+/// Wybiera silnik opisujacy bloki.
+///
+/// DLACZEGO DOMYSLNIE NIE RDZEN, MIMO ZE TO JEGO SLOWNIK: zmierzone. Osadzenia Noworodka
+/// nie rozrozniaja znaczen na tyle, zeby wyszukiwanie mialo sens - zapytanie "policz
+/// podobienstwo dwoch wektorow" zwracalo walidacje nazwy jednostki z ocena 0.945, a
+/// zapytanie o zapis do magazynu zwracalo funkcje liczaca podobienstwo. Wszystkie oceny
+/// siedzialy miedzy 0.89 a 0.95, czyli wektory wskazuja niemal w tym samym kierunku
+/// niezaleznie od tresci.
+///
+/// Przyczyna lezy w sposobie zasiewu, nie w modelu: wektory znakow powstaja z LOSOWEGO
+/// RZUTU sasiedztwa, a przy 128 wymiarach i 33 tysiacach znakow ten rzut jest za ciasny -
+/// srednia kilku takich wektorow zbiega do sredniej ogolnej.
+///
+/// all-MiniLM-L6-v2 rozroznia: zmierzone tego samego dnia, zdania o tym samym 0.8468,
+/// o czym innym 0.6925. Wiec slownik odruchow powstaje na nim, a rdzen wpina sie obok
+/// jako uczen - dokladnie tak, jak przewiduje gniazdo cienia. `--core` przelacza na rdzen,
+/// zeby dalo sie zmierzyc, kiedy dorosnie.
+fn pick_engine(use_core: bool) -> Result<Box<dyn Embedder>, EmbedError> {
+    if use_core {
+        Ok(Box::new(NoworodekEmbedder::from_env()?))
+    } else {
+        Ok(Box::new(MiniLmEmbedder::from_env()?))
+    }
+}
 
 const DEFAULT_COLLECTION: &str = "reflex_blocks";
 const DEFAULT_RECALL: &str = "http://127.0.0.1:6333";
@@ -77,10 +103,10 @@ fn main() {
     // To jest wlasciwa miara tego narzedzia - nie ile blokow zapisano, tylko czy na opis
     // zadania wraca ten blok, ktory czlowiek by wybral.
     if args.iter().any(|a| a == "--find") {
-        let core = match NoworodekEmbedder::from_env() {
+        let core = match pick_engine(args.iter().any(|a| a == "--core")) {
             Ok(e) => e,
             Err(e) => {
-                eprintln!("FAIL: nie moge wczytac rdzenia: {e}");
+                eprintln!("FAIL: nie moge wczytac silnika: {e}");
                 std::process::exit(1);
             }
         };
@@ -154,19 +180,14 @@ fn main() {
     };
     println!("blokow w pliku: {}", blocks.len());
 
-    let core = match NoworodekEmbedder::from_env() {
+    let core = match pick_engine(args.iter().any(|a| a == "--core")) {
         Ok(e) => e,
         Err(e) => {
-            eprintln!("FAIL: nie moge wczytac rdzenia: {e}");
+            eprintln!("FAIL: nie moge wczytac silnika: {e}");
             std::process::exit(1);
         }
     };
-    println!(
-        "rdzen: {} ({} liczb, zna {} znakow)",
-        core.name(),
-        core.dimensions(),
-        core.known_symbols()
-    );
+    println!("silnik: {} ({} liczb)", core.name(), core.dimensions());
 
     // Klucz wymagany dopiero przy zapisie: proba na sucho ma dzialac takze tam, gdzie
     // klucza nie ma - inaczej "zobacz co sie stanie" byloby trudniejsze niz "zrob to".
