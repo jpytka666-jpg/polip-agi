@@ -114,7 +114,7 @@ fn main() {
         // co jest czeste, a pary - co po czym idzie. Osobno kazda z nich jest polowa odpowiedzi.
         if let Some(pos) = args.iter().position(|a| a == "--pairs") {
             match args.get(pos + 1) {
-                Some(corpus_path) => match read_corpus(corpus_path) {
+                Some(corpus_path) => match read_corpus_sized(corpus_path, args.iter().any(|a| a == "--u32")) {
                     Ok(corpus) => {
                         println!("\nkorpus              : {} symboli", corpus.len());
                         let window = args.iter().position(|a| a == "--window").and_then(|p| args.get(p + 1)).and_then(|v| v.parse().ok()).filter(|w: &usize| *w > 0).unwrap_or(1);
@@ -622,12 +622,28 @@ fn write_rows(tensors: &mut [Tensor], name: &str, rows: &[f32], hidden: usize) {
     }
 }
 
-fn read_corpus(path: &str) -> std::io::Result<Vec<usize>> {
+/// Czyta plik identyfikatorow w jednej z dwoch szerokosci.
+///
+/// Stary format ma liczby 16-bitowe i tym samym ogranicza ksiege do 32768 wpisow - kazdy
+/// wpis zajmuje dwa identyfikatory, wersje ze spacja i bez. Ten sufit zostal osiagniety
+/// w praktyce, wiec doszedl format 32-bitowy, ktory go nie ma.
+///
+/// Szerokosc MOWI wywolujacy (`--u32`), nie zgadujemy jej: plik liczb 16-bitowych jest
+/// takze poprawnym plikiem liczb 32-bitowych, wiec w bajtach nie ma czego rozpoznac -
+/// a pomylka daje cicho przekrecony korpus, ktorego nikt dalej nie zauwazy.
+fn read_corpus_sized(path: &str, wide: bool) -> std::io::Result<Vec<usize>> {
     let bytes = std::fs::read(path)?;
-    Ok(bytes
-        .chunks_exact(2)
-        .map(|c| u16::from_le_bytes([c[0], c[1]]) as usize)
-        .collect())
+    if wide {
+        Ok(bytes
+            .chunks_exact(4)
+            .map(|c| u32::from_le_bytes([c[0], c[1], c[2], c[3]]) as usize)
+            .collect())
+    } else {
+        Ok(bytes
+            .chunks_exact(2)
+            .map(|c| u16::from_le_bytes([c[0], c[1]]) as usize)
+            .collect())
+    }
 }
 
 fn apply_row_scales(values: &mut [f32], scales: &[f32], hidden: usize) {
