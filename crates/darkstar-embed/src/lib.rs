@@ -32,9 +32,11 @@
 //! GITHUB METADATA: jpytka666-jpg/polip-agi, branch docs/darkstar-headscale-hotspot-plan
 //! ==========================================
 //! REVISION 2026-09-06: krawedz cbms_ids - EO tekst -> Vec<u32> przez wspoldzielone cbms-writing (bez glyph->id).
+//! REVISION 2026-09-06 (Codex): espdic_candidates udostepnia istniejacy generator bez wyboru znaczenia.
 //!
 
 pub mod cbms_ids;
+pub mod espdic_candidates;
 pub mod noworodek;
 
 pub use cbms_ids::{CbmsIdsError, frontend_to_cbms, frontend_to_cbms_path, load_cbms_book};

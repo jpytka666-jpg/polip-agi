@@ -32,6 +32,9 @@
 //! GITHUB METADATA: jpytka666-jpg/polip-agi, branch docs/darkstar-headscale-hotspot-plan
 //! ==========================================
 //!
+//! REVISION 2026-09-06 (Codex): Candidate/Stats/invert przeniesione do espdic_candidates;
+//! algorytm, metadane, testy i stopien sense pozostaja bez zmiany zachowania.
+//!
 //! Uzycie:
 //! ```text
 //! espdic index  --dict espdic.txt [--out kandydaci.tsv]
@@ -46,21 +49,7 @@ use std::fs;
 // wciagniecia sa niewidoczne, choc typ je ma.
 use darkstar_shadow::Embedder;
 
-/// Jedno wystapienie: ktory rdzen, na ktorej pozycji definicji, przy jak dlugiej liscie.
-///
-/// Pozycja i dlugosc sa zapisywane, bo przyszly stopien wyboru bedzie ich potrzebowal.
-/// NIE sa tu uzywane do wybierania - probowalem i zmierzylem, ze na tych dwoch liczbach
-/// wybor wychodzi gorzej niz bez nich (`error` spadalo z `eraro` na `prierara`).
-#[derive(Debug, Clone, PartialEq)]
-struct Candidate {
-    root: String,
-    position: usize,
-    of_total: usize,
-    /// Cala angielska definicja rdzenia, taka jak w slowniku. To jest jedyny opis znaczenia,
-    /// jakim dysponujemy - `kodo : code` i `ĉifro : cipher, code` roznia sie wlasnie tym,
-    /// a nie samym rdzeniem.
-    gloss: String,
-}
+use darkstar_embed::espdic_candidates::{Candidate, invert};
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -131,83 +120,6 @@ fn main() {
         }
     };
     std::process::exit(code);
-}
-
-#[derive(Default)]
-struct Stats {
-    roots: usize,
-    single: usize,
-    phrases: usize,
-    empty: usize,
-}
-
-/// Odwraca slownik, ZACHOWUJAC wszystkie znaczenia.
-///
-/// Rdzen wymieniajacy dane haslo trafia na liste zawsze - nawet jesli haslo stoi u niego
-/// na ostatnim miejscu wsrod dziesieciu. Odrzucenie takiego wpisu byloby cichym wyborem,
-/// a wybor nalezy do osobnego stopnia, ktorego jeszcze nie ma.
-fn invert(text: &str) -> (HashMap<String, Vec<Candidate>>, Stats) {
-    let mut index: HashMap<String, Vec<Candidate>> = HashMap::new();
-    let mut stats = Stats::default();
-    let mut single_keys = std::collections::HashSet::new();
-    let mut phrase_keys = std::collections::HashSet::new();
-
-    for line in text.lines() {
-        // Naglowek i komentarze zaczynaja sie krzyzykiem; BOM na poczatku pliku tez tu wpada.
-        let line = line.trim_start_matches('\u{feff}');
-        if line.starts_with('#') || line.trim().is_empty() {
-            continue;
-        }
-        let Some((root, defs)) = line.split_once(" : ") else {
-            continue;
-        };
-        let root = root.trim();
-        if root.is_empty() {
-            continue;
-        }
-        stats.roots += 1;
-
-        let parts: Vec<&str> = defs.split(',').map(str::trim).collect();
-        let total = parts.len();
-        for (i, def) in parts.iter().enumerate() {
-            // Nawias na POCZATKU znaczy, ze cala pozycja jest objasnieniem, a nie
-            // tlumaczeniem: "(adjective ending)" nie jest angielskim haslem. Sprawdzamy to
-            // PRZED zdejmowaniem nawiasow - odwrotna kolejnosc zdejmuje nawiasy, po czym
-            // pyta o nawias, ktorego juz nie ma, i objasnienia wchodza do slownika jako hasla.
-            let def = def.trim();
-            if def.starts_with('(') {
-                stats.empty += 1;
-                continue;
-            }
-            // Nawias na koncu doprecyzowuje haslo - "memory (computer)". Haslem jest to,
-            // co przed nawiasem; doprecyzowanie zostawiamy, bo nie jest slowem do szukania.
-            let key = match def.split_once('(') {
-                Some((head, _)) => head.trim(),
-                None => def,
-            }
-            .trim_end_matches('.')
-            .trim();
-            if key.is_empty() {
-                stats.empty += 1;
-                continue;
-            }
-            let key = key.to_lowercase();
-            if key.contains(' ') {
-                phrase_keys.insert(key.clone());
-            } else {
-                single_keys.insert(key.clone());
-            }
-            index.entry(key).or_default().push(Candidate {
-                root: root.to_string(),
-                position: i,
-                of_total: total,
-                gloss: defs.trim().to_string(),
-            });
-        }
-    }
-    stats.single = single_keys.len();
-    stats.phrases = phrase_keys.len();
-    (index, stats)
 }
 
 fn write_index(index: &HashMap<String, Vec<Candidate>>, out: &str) -> i32 {

@@ -39,6 +39,9 @@
 //! REVISION 2026-09-06 (Codex; dokladny model niedostepny): osobny tryb canonical
 //! przyjmuje gotowy EO i wypisuje Vec<u32> przez frontend_to_cbms_path -> frontend_to_cbms.
 //! Bez MiniLM/sieci; istniejace run/index zachowuja swoj kontrakt.
+//! REVISION 2026-09-06 (Codex): run --dict uzywa wspolnego invert ESPDIC dla calego
+//! hasla EN (trim/lowercase). Wszystkie EO i ich CBMS IDs to KANDYDACI, nie wybor.
+//! Bez --dict pozostaje legacy RAG/glif, jawnie niekanoniczny; canonical bez zmian.
 //!
 //!
 //! Uzycie:
@@ -46,6 +49,7 @@
 //! tokenize index --book ksiega.txt [--collection cbms_concepts] [--limit N]
 //! tokenize run   --book ksiega.txt --text "dowolne zdanie" [--threshold 0.55]
 //! tokenize canonical --book ksiega.txt --text "kanoniczny tekst EO"
+//! tokenize run --book ksiega.txt --dict espdic.txt --text "code"
 //! ```
 
 use std::collections::HashMap;
@@ -98,6 +102,14 @@ fn main() {
     if mode == "canonical" {
         std::process::exit(do_canonical(
             &book_path,
+            &opt("--text", ""),
+            &mut std::io::stdout().lock(),
+        ));
+    }
+    if mode == "run" && args.iter().any(|arg| arg == "--dict") {
+        std::process::exit(do_candidates(
+            &book_path,
+            &opt("--dict", ""),
             &opt("--text", ""),
             &mut std::io::stdout().lock(),
         ));
@@ -160,6 +172,61 @@ fn do_canonical(book_path: &str, text: &str, output: &mut impl std::io::Write) -
         },
         Err(e) => {
             eprintln!("FAIL: canonical: {e}");
+            1
+        }
+    }
+}
+
+/// Dokladne trafienie calego hasla EN; nie dzieli zdan ani nie wybiera znaczenia.
+fn candidate_report(dict: &str, text: &str, book: &cbms_writing::Book) -> Result<Value, String> {
+    let key = text.trim().to_lowercase();
+    let (index, _) = darkstar_embed::espdic_candidates::invert(dict);
+    let mut candidates = Vec::new();
+    for candidate in index.get(&key).into_iter().flatten() {
+        let ids =
+            darkstar_embed::frontend_to_cbms(book, &candidate.root).map_err(|e| e.to_string())?;
+        candidates.push(json!({
+            "eo": candidate.root,
+            "cbms_ids": ids,
+            "gloss": candidate.gloss,
+            "position": candidate.position,
+            "of_total": candidate.of_total,
+        }));
+    }
+    Ok(json!({
+        "input": text,
+        "lookup_language": "en",
+        "status": if candidates.is_empty() { "unknown" } else { "candidates_only" },
+        "selected_eo": Value::Null,
+        "candidates": candidates,
+    }))
+}
+
+fn do_candidates(
+    book_path: &str,
+    dict_path: &str,
+    text: &str,
+    output: &mut impl std::io::Write,
+) -> i32 {
+    if dict_path.is_empty() || text.trim().is_empty() {
+        eprintln!("FAIL: run --dict wymaga slownika ESPDIC i niepustego --text");
+        return 2;
+    }
+    let result = (|| -> Result<Value, String> {
+        let dict = fs::read_to_string(dict_path).map_err(|e| e.to_string())?;
+        let book = darkstar_embed::load_cbms_book(book_path).map_err(|e| e.to_string())?;
+        candidate_report(&dict, text, &book)
+    })();
+    match result {
+        Ok(report) => {
+            if let Err(e) = writeln!(output, "{report}") {
+                eprintln!("FAIL: zapis kandydatow: {e}");
+                return 1;
+            }
+            if report["status"] == "unknown" { 3 } else { 0 }
+        }
+        Err(e) => {
+            eprintln!("FAIL: kandydaci: {e}");
             1
         }
     }
@@ -311,7 +378,7 @@ fn do_run(
         println!("{r}");
     }
     println!("\nz ksiegi: {exact} | dobrane: {found} | nieznane: {unknown}");
-    println!("znaki CBMS: {symbols}");
+    println!("legacy glify (NIE kanoniczny EO ani CBMS u32): {symbols}");
     0
 }
 
@@ -356,6 +423,49 @@ fn nearest(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn raw_exact_candidates_preserve_meanings_and_match_cbms() {
+        // Ten sam format i hasla co istniejacy fixture testow ESPDIC; nie pelny slownik.
+        let dict = "kodo : code\nĉifro : cipher, code\nmemoro : memory, recollection, storage\nmemorilo : storage, memory\n";
+        let path = std::env::var("NOWORODEK_BOOK")
+            .or_else(|_| std::env::var("CBMS_BOOK"))
+            .expect("Ustaw NOWORODEK_BOOK lub CBMS_BOOK na ksiege baseline.");
+        let book = darkstar_embed::load_cbms_book(path).unwrap();
+        let mut reports = Vec::new();
+        for (input, expected) in [
+            ("code", vec!["kodo", "ĉifro"]),
+            ("cipher", vec!["ĉifro"]),
+            ("memory", vec!["memoro", "memorilo"]),
+        ] {
+            let report = candidate_report(dict, input, &book).unwrap();
+            assert_eq!(report["status"], "candidates_only");
+            assert!(report["selected_eo"].is_null());
+            let candidates = report["candidates"].as_array().unwrap();
+            let roots: Vec<&str> = candidates
+                .iter()
+                .map(|c| c["eo"].as_str().unwrap())
+                .collect();
+            assert_eq!(roots, expected);
+            for c in candidates {
+                let ids: Vec<u32> = serde_json::from_value(c["cbms_ids"].clone()).unwrap();
+                assert_eq!(
+                    ids,
+                    darkstar_embed::frontend_to_cbms(&book, c["eo"].as_str().unwrap()).unwrap()
+                );
+            }
+            println!("{report}");
+            reports.push(report);
+        }
+        assert_ne!(reports[0]["candidates"], reports[1]["candidates"]);
+        assert_eq!(
+            candidate_report(dict, " CODE ", &book).unwrap()["candidates"],
+            reports[0]["candidates"]
+        );
+        let unknown = candidate_report(dict, "nieznane zdanie", &book).unwrap();
+        assert_eq!(unknown["status"], "unknown");
+        assert_eq!(unknown["candidates"], json!([]));
+    }
 
     #[test]
     fn canonical_output_matches_frontend_u32() {
