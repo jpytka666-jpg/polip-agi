@@ -31,8 +31,13 @@
 //! GIT COMMIT: PENDING
 //! GITHUB METADATA: jpytka666-jpg/polip-agi, branch docs/darkstar-headscale-hotspot-plan
 //! ==========================================
+//! REVISION 2026-09-06: krawedz cbms_ids - EO tekst -> Vec<u32> przez wspoldzielone cbms-writing (bez glyph->id).
+//!
 
+pub mod cbms_ids;
 pub mod noworodek;
+
+pub use cbms_ids::{CbmsIdsError, frontend_to_cbms, frontend_to_cbms_path, load_cbms_book};
 
 use std::{
     path::{Path, PathBuf},
@@ -93,7 +98,8 @@ impl MiniLmConfig {
     pub fn from_env() -> Result<Self, EmbedError> {
         let dir = std::env::var("DARKSTAR_EMBED_MODEL_DIR").map_err(|_| {
             EmbedError::Unavailable(
-                "brak DARKSTAR_EMBED_MODEL_DIR - wskaz katalog z model.onnx i tokenizer.json".into(),
+                "brak DARKSTAR_EMBED_MODEL_DIR - wskaz katalog z model.onnx i tokenizer.json"
+                    .into(),
             )
         })?;
         let threads = std::env::var("DARKSTAR_EMBED_THREADS")

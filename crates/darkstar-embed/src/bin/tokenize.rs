@@ -34,6 +34,9 @@
 //! GIT COMMIT: PENDING
 //! GITHUB METADATA: jpytka666-jpg/polip-agi, branch docs/darkstar-headscale-hotspot-plan
 //! ==========================================
+//! REVISION 2026-09-06: kanoniczny EO dla Noworodka idzie przez darkstar_embed::frontend_to_cbms
+//! (cbms-writing Vocabulary), NIE przez glify ani most glyph->u32. Ten bin zostaje sciezka RAG/glif.
+//!
 //!
 //! Uzycie:
 //! ```text
@@ -164,7 +167,10 @@ fn do_index(
     })
     .to_string();
     match store.put(&format!("/collections/{collection}"), &create) {
-        Ok(_) => println!("kolekcja {collection} gotowa ({} liczb)", engine.dimensions()),
+        Ok(_) => println!(
+            "kolekcja {collection} gotowa ({} liczb)",
+            engine.dimensions()
+        ),
         Err(e) => println!("kolekcja {collection}: {e} (zakladam, ze juz jest)"),
     }
 

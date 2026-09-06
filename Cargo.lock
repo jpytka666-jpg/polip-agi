@@ -100,6 +100,11 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fc652a48c352aef3ea3aed32080501cf3ef6ed5da78602a020c991775b0aff04"
 
 [[package]]
+name = "cbms-writing"
+version = "0.1.0"
+source = "git+https://github.com/jpytka666-jpg/wpc-engine.git?rev=bad82f2e5f11973ceedf067d368f6983b093ea3d#bad82f2e5f11973ceedf067d368f6983b093ea3d"
+
+[[package]]
 name = "cc"
 version = "1.4.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -155,6 +160,7 @@ dependencies = [
 name = "darkstar-embed"
 version = "0.1.0"
 dependencies = [
+ "cbms-writing",
  "darkstar-recall",
  "darkstar-shadow",
  "ort",
