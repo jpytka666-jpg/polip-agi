@@ -76,6 +76,29 @@ pub fn frontend_to_cbms(book: &Book, selected_eo_text: &str) -> Result<Vec<u32>,
     Ok(vocab.encode(selected_eo_text))
 }
 
+/// Encode an already verified morpheme list as one plain CBMS id per unit.
+///
+/// This intentionally bypasses textual tokenisation: every unit must be an exact
+/// Book root and no fallback, case folding, or spaced-id conversion is permitted.
+pub fn morphemes_to_cbms(book: &Book, morphemes: &[&str]) -> Result<Vec<u32>, CbmsIdsError> {
+    let vocab = Vocabulary::new(book).ok_or_else(|| {
+        CbmsIdsError::Vocab(
+            "nie da sie zbudowac Vocabulary z tej ksiegi (brak MORPH-SEP albo przeplenienie id)"
+                .into(),
+        )
+    })?;
+    morphemes
+        .iter()
+        .map(|unit| {
+            vocab.plain_id_for_symbol(unit).map_err(|e| {
+                CbmsIdsError::Vocab(format!(
+                    "morfem {unit:?} nie jest dokladnym symbolem: {e:?}"
+                ))
+            })
+        })
+        .collect()
+}
+
 /// Jak `frontend_to_cbms`, ale ksiega ze sciezki - wygodne dla testow i cienkich CLI.
 pub fn frontend_to_cbms_path(
     book_path: impl AsRef<Path>,
@@ -126,6 +149,39 @@ mod tests {
             "EO TEXT: {text}\nCBMS AUTHORITATIVE RESULT: {baseline:?}\nfrontend_to_cbms RESULT: {frontend:?}\nMATCH: YES"
         );
         frontend
+    }
+
+    fn morph_book() -> Book {
+        let source = std::fs::read_to_string(baseline_book_path()).unwrap();
+        let grown = format!(
+            "{source}\nCBMS-Eo-v1.1-EXT\nil=U+E000\nmal=U+E001\nsan=U+E002\nul=U+E003\nĉifr=U+E004\n"
+        );
+        load_cbms_book_from_text(&grown)
+    }
+
+    fn load_cbms_book_from_text(text: &str) -> Book {
+        let (book, collisions) = Book::parse_lenient(text).unwrap();
+        assert!(collisions.is_empty(), "POC book collisions: {collisions:?}");
+        book
+    }
+
+    #[test]
+    fn verified_morpheme_vectors_use_plain_ids_in_order() {
+        let b = morph_book();
+        for (units, expected) in [
+            (&["memor", "o"][..], &[97362, 1584][..]),
+            (&["memor", "il", "o"][..], &[97362, 110354, 1584][..]),
+            (&["mal", "san", "a"][..], &[110356, 110358, 1570][..]),
+            (&["san", "ul", "o"][..], &[110358, 110360, 1584][..]),
+            (
+                &["mal", "san", "ul", "ej", "o"][..],
+                &[110356, 110358, 110360, 46084, 1584][..],
+            ),
+            (&["ĉifr", "o"][..], &[110362, 1584][..]),
+            (&["kod", "o"][..], &[1816, 1584][..]),
+        ] {
+            assert_eq!(morphemes_to_cbms(&b, units).unwrap(), expected);
+        }
     }
 
     #[test]

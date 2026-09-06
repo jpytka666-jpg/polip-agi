@@ -74,3 +74,11 @@ path = "src/bin/tokenize.rs"
 [[bin]]
 name = "espdic"
 path = "src/bin/espdic.rs"
+
+[[bin]]
+name = "morph-coverage"
+path = "src/bin/morph_coverage.rs"
+
+[[bin]]
+name = "eo-morph-conformance"
+path = "src/bin/eo_morph_conformance.rs"

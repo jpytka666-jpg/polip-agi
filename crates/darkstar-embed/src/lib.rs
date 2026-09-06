@@ -36,10 +36,11 @@
 //!
 
 pub mod cbms_ids;
+pub mod eo_morph;
 pub mod espdic_candidates;
 pub mod noworodek;
 
-pub use cbms_ids::{CbmsIdsError, frontend_to_cbms, frontend_to_cbms_path, load_cbms_book};
+pub use cbms_ids::{CbmsIdsError, frontend_to_cbms, frontend_to_cbms_path, load_cbms_book, morphemes_to_cbms};
 
 use std::{
     path::{Path, PathBuf},
