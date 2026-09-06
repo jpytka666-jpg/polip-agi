@@ -36,18 +36,22 @@
 //! ==========================================
 //! REVISION 2026-09-06: kanoniczny EO dla Noworodka idzie przez darkstar_embed::frontend_to_cbms
 //! (cbms-writing Vocabulary), NIE przez glify ani most glyph->u32. Ten bin zostaje sciezka RAG/glif.
+//! REVISION 2026-09-06 (Codex; dokladny model niedostepny): osobny tryb canonical
+//! przyjmuje gotowy EO i wypisuje Vec<u32> przez frontend_to_cbms_path -> frontend_to_cbms.
+//! Bez MiniLM/sieci; istniejace run/index zachowuja swoj kontrakt.
 //!
 //!
 //! Uzycie:
 //! ```text
 //! tokenize index --book ksiega.txt [--collection cbms_concepts] [--limit N]
 //! tokenize run   --book ksiega.txt --text "dowolne zdanie" [--threshold 0.55]
+//! tokenize canonical --book ksiega.txt --text "kanoniczny tekst EO"
 //! ```
 
 use std::collections::HashMap;
 use std::fs;
 
-use darkstar_embed::MiniLmEmbedder;
+use darkstar_embed::{MiniLmEmbedder, frontend_to_cbms_path};
 use darkstar_recall::{HttpClient, read_env_value};
 use darkstar_shadow::Embedder;
 use serde_json::{Value, json};
@@ -88,7 +92,15 @@ fn main() {
         eprintln!("uzycie:");
         eprintln!("  tokenize index --book ksiega.txt [--collection {DEFAULT_COLLECTION}]");
         eprintln!("  tokenize run   --book ksiega.txt --text \"zdanie\" [--threshold 0.55]");
+        eprintln!("  tokenize canonical --book ksiega.txt --text \"kanoniczny tekst EO\"");
         std::process::exit(2);
+    }
+    if mode == "canonical" {
+        std::process::exit(do_canonical(
+            &book_path,
+            &opt("--text", ""),
+            &mut std::io::stdout().lock(),
+        ));
     }
     let book = match load_book(&book_path) {
         Ok(b) => b,
@@ -125,11 +137,32 @@ fn main() {
             do_run(&store, &engine, &collection, &book, &text, threshold)
         }
         _ => {
-            eprintln!("FAIL: tryb to 'index' albo 'run'");
+            eprintln!("FAIL: tryb to 'index', 'run' albo 'canonical'");
             2
         }
     };
     std::process::exit(code);
+}
+
+/// Gotowy EO bez normalizacji lub wyboru znaczenia; stdout zawiera tylko liste u32.
+fn do_canonical(book_path: &str, text: &str, output: &mut impl std::io::Write) -> i32 {
+    if text.trim().is_empty() {
+        eprintln!("FAIL: --text jest puste");
+        return 2;
+    }
+    match frontend_to_cbms_path(book_path, text) {
+        Ok(ids) => match writeln!(output, "{ids:?}") {
+            Ok(()) => 0,
+            Err(e) => {
+                eprintln!("FAIL: zapis CBMS IDs: {e}");
+                1
+            }
+        },
+        Err(e) => {
+            eprintln!("FAIL: canonical: {e}");
+            1
+        }
+    }
 }
 
 /// Wczytuje ksiege: `slowo=znak` w kazdej linii, naglowek pomijany.
@@ -323,6 +356,39 @@ fn nearest(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn canonical_output_matches_frontend_u32() {
+        let path = std::env::var("NOWORODEK_BOOK")
+            .or_else(|_| std::env::var("CBMS_BOOK"))
+            .expect("Ustaw NOWORODEK_BOOK lub CBMS_BOOK na ksiege baseline.");
+        let book = darkstar_embed::load_cbms_book(&path).unwrap();
+        let mut results = Vec::new();
+        for text in ["kodo", "ĉifro", "memoro", "memorilo", "cifro"] {
+            let mut output = Vec::new();
+            assert_eq!(do_canonical(&path, text, &mut output), 0);
+            let ids: Vec<u32> = serde_json::from_slice(&output).unwrap();
+            assert_eq!(ids, darkstar_embed::frontend_to_cbms(&book, text).unwrap());
+            println!("canonical {text}: {ids:?}");
+            results.push(ids);
+        }
+        assert_ne!(results[1], results[4], "ĉifro != cifro");
+        assert!(results.iter().flatten().any(|id| *id > 65535));
+    }
+
+    #[test]
+    fn canonical_empty_text_rejected_before_book_load() {
+        let mut output = Vec::new();
+        assert_eq!(do_canonical("", " \t", &mut output), 2);
+        assert!(output.is_empty());
+    }
+
+    #[test]
+    fn canonical_book_error_does_not_emit_ids() {
+        let mut output = Vec::new();
+        assert_eq!(do_canonical("", "kodo", &mut output), 1);
+        assert!(output.is_empty());
+    }
 
     #[test]
     fn czyta_ksiege_pomijajac_naglowek() {
