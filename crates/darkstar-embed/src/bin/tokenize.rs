@@ -63,6 +63,7 @@ use darkstar_embed::{MiniLmEmbedder, frontend_to_cbms_path};
 use darkstar_recall::{HttpClient, read_env_value};
 use darkstar_shadow::Embedder;
 use serde_json::{Value, json};
+use wordnet_lemmatizer::{Lemmatizer, Pos};
 
 const DEFAULT_RECALL: &str = "http://127.0.0.1:6333";
 const DEFAULT_ENV: &str = "/home/owner/polip-agi/deploy/.env";
@@ -200,24 +201,57 @@ fn indexed_candidate_report(
 ) -> Result<Value, String> {
     let key = text.trim().to_lowercase();
     let mut candidates = Vec::new();
-    for candidate in index.get(&key).into_iter().flatten() {
-        let ids =
-            darkstar_embed::frontend_to_cbms(book, &candidate.root).map_err(|e| e.to_string())?;
-        candidates.push(json!({
-            "eo": candidate.root,
-            "cbms_ids": ids,
-            "gloss": candidate.gloss,
-            "position": candidate.position,
-            "of_total": candidate.of_total,
-        }));
+    let mut seen = std::collections::HashSet::new();
+    let mut lemmas = Vec::new();
+    for lemma in lemma_candidates(&key) {
+        if lemma != key && !lemmas.contains(&lemma) {
+            lemmas.push(lemma);
+        }
+    }
+    for (lookup, lemma) in std::iter::once((key.as_str(), None)).chain(
+        lemmas
+            .iter()
+            .map(|lemma| (lemma.as_str(), Some(lemma.as_str()))),
+    ) {
+        for candidate in index.get(lookup).into_iter().flatten() {
+            if !seen.insert(candidate.root.clone()) {
+                continue;
+            }
+            let ids = darkstar_embed::frontend_to_cbms(book, &candidate.root)
+                .map_err(|e| e.to_string())?;
+            candidates.push(json!({
+                "eo": candidate.root,
+                "cbms_ids": ids,
+                "gloss": candidate.gloss,
+                "position": candidate.position,
+                "of_total": candidate.of_total,
+                "lemma": lemma,
+            }));
+        }
     }
     Ok(json!({
         "input": text,
         "lookup_language": "en",
+        "normalized": key,
+        "lemmas": lemmas,
         "status": if candidates.is_empty() { "unknown" } else { "candidates_only" },
         "selected_eo": Value::Null,
         "candidates": candidates,
     }))
+}
+
+/// Morphy candidates in fixed POS order; no POS is guessed or selected.
+fn lemma_candidates(surface: &str) -> Vec<String> {
+    let lemmatizer = Lemmatizer::embedded();
+    let mut result = Vec::new();
+    for pos in [Pos::Noun, Pos::Verb, Pos::Adj, Pos::Adv, Pos::AdjSat] {
+        for lemma in lemmatizer.morphy_all(surface, pos) {
+            if !result.contains(&lemma) {
+                result.push(lemma);
+            }
+        }
+    }
+    result
 }
 
 fn sentence_report(dict: &str, text: &str, book: &cbms_writing::Book) -> Result<Value, String> {
@@ -576,6 +610,39 @@ mod tests {
         let unknown = candidate_report(dict, "nieznane zdanie", &book).unwrap();
         assert_eq!(unknown["status"], "unknown");
         assert_eq!(unknown["candidates"], json!([]));
+    }
+
+    #[test]
+    fn wordnet_morphy_lemmas_reach_exact_espdic() {
+        let dict = "code : code\nmemoro : memory\nkurado : running\ngo : go\nchild : child\n";
+        let path = std::env::var("NOWORODEK_BOOK")
+            .or_else(|_| std::env::var("CBMS_BOOK"))
+            .expect("Ustaw NOWORODEK_BOOK lub CBMS_BOOK na ksiege baseline.");
+        let book = darkstar_embed::load_cbms_book(path).unwrap();
+        for (surface, expected, lemma) in [
+            ("codes", "code", "code"),
+            ("memories", "memoro", "memory"),
+            ("running", "kurado", "run"),
+            ("went", "go", "go"),
+            ("children", "child", "child"),
+        ] {
+            let report = candidate_report(dict, surface, &book).unwrap();
+            assert!(
+                report["lemmas"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .any(|v| v == lemma)
+            );
+            let candidates = report["candidates"].as_array().unwrap();
+            assert!(candidates.iter().any(|c| c["eo"] == expected));
+            let selected = candidates.iter().find(|c| c["eo"] == expected).unwrap();
+            let ids: Vec<u32> = serde_json::from_value(selected["cbms_ids"].clone()).unwrap();
+            assert_eq!(
+                ids,
+                darkstar_embed::frontend_to_cbms(&book, expected).unwrap()
+            );
+        }
     }
 
     #[test]

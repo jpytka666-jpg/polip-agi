@@ -5,6 +5,7 @@
 # powstal: 2026-09-05
 # REVISION 2026-09-06: path dep cbms-writing - wspoldzielona Vocabulary/Book dla EO->Vec<u32> (bez lustra).
 # REVISION 2026-09-06 (Codex): kanoniczny writer z Git przypiety do u32 SHA; bez zaleznosci od lokalnego worktree.
+# REVISION 2026-09-06 (Codex): wbudowany WordNet Morphy do deterministycznych kandydatow lemma EN.
 [package]
 name = "darkstar-embed"
 version.workspace = true
@@ -15,6 +16,7 @@ license.workspace = true
 darkstar-shadow = { path = "../darkstar-shadow" }
 darkstar-recall = { path = "../darkstar-recall" }
 cbms-writing = { git = "https://github.com/jpytka666-jpg/wpc-engine.git", rev = "bad82f2e5f11973ceedf067d368f6983b093ea3d" }
+wordnet-lemmatizer = "0.1.0"
 serde_json.workspace = true
 # load-dynamic zamiast linkowania statycznego: biblioteka wnioskujaca jest ladowana w czasie
 # dzialania ze sciezki w ORT_DYLIB_PATH. Dwa powody, oba wazne:
