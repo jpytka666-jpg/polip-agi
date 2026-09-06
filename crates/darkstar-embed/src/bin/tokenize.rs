@@ -42,6 +42,9 @@
 //! REVISION 2026-09-06 (Codex): run --dict uzywa wspolnego invert ESPDIC dla calego
 //! hasla EN (trim/lowercase). Wszystkie EO i ich CBMS IDs to KANDYDACI, nie wybor.
 //! Bez --dict pozostaje legacy RAG/glif, jawnie niekanoniczny; canonical bez zmian.
+//! REVISION 2026-09-06 (Codex): opcjonalne run --dict --per-token dzieli na ciagi
+//! liter/cyfr Unicode, reszta (takze apostrof/lacznik) jest separatorem; lookup lowercase.
+//! Zachowuje kolejnosc wejscia i kandydatow slownika; OOV jawne, bez wyboru znaczenia.
 //!
 //!
 //! Uzycie:
@@ -50,6 +53,7 @@
 //! tokenize run   --book ksiega.txt --text "dowolne zdanie" [--threshold 0.55]
 //! tokenize canonical --book ksiega.txt --text "kanoniczny tekst EO"
 //! tokenize run --book ksiega.txt --dict espdic.txt --text "code"
+//! tokenize run --book ksiega.txt --dict espdic.txt --per-token --text "memory code"
 //! ```
 
 use std::collections::HashMap;
@@ -106,11 +110,17 @@ fn main() {
             &mut std::io::stdout().lock(),
         ));
     }
+    let per_token = args.iter().any(|arg| arg == "--per-token");
+    if mode == "run" && per_token && !args.iter().any(|arg| arg == "--dict") {
+        eprintln!("FAIL: --per-token wymaga --dict ESPDIC");
+        std::process::exit(2);
+    }
     if mode == "run" && args.iter().any(|arg| arg == "--dict") {
         std::process::exit(do_candidates(
             &book_path,
             &opt("--dict", ""),
             &opt("--text", ""),
+            per_token,
             &mut std::io::stdout().lock(),
         ));
     }
@@ -179,8 +189,16 @@ fn do_canonical(book_path: &str, text: &str, output: &mut impl std::io::Write) -
 
 /// Dokladne trafienie calego hasla EN; nie dzieli zdan ani nie wybiera znaczenia.
 fn candidate_report(dict: &str, text: &str, book: &cbms_writing::Book) -> Result<Value, String> {
-    let key = text.trim().to_lowercase();
     let (index, _) = darkstar_embed::espdic_candidates::invert(dict);
+    indexed_candidate_report(&index, text, book)
+}
+
+fn indexed_candidate_report(
+    index: &HashMap<String, Vec<darkstar_embed::espdic_candidates::Candidate>>,
+    text: &str,
+    book: &cbms_writing::Book,
+) -> Result<Value, String> {
+    let key = text.trim().to_lowercase();
     let mut candidates = Vec::new();
     for candidate in index.get(&key).into_iter().flatten() {
         let ids =
@@ -202,10 +220,36 @@ fn candidate_report(dict: &str, text: &str, book: &cbms_writing::Book) -> Result
     }))
 }
 
+fn sentence_report(dict: &str, text: &str, book: &cbms_writing::Book) -> Result<Value, String> {
+    let (index, _) = darkstar_embed::espdic_candidates::invert(dict);
+    let mut tokens = Vec::new();
+    let mut oov_count = 0usize;
+    for raw in text
+        .split(|c: char| !c.is_alphanumeric())
+        .filter(|s| !s.is_empty())
+    {
+        let mut token = indexed_candidate_report(&index, raw, book)?;
+        token["normalized"] = json!(raw.to_lowercase());
+        if token["status"] == "unknown" {
+            oov_count += 1;
+        }
+        tokens.push(token);
+    }
+    let status = if tokens.is_empty() || oov_count == tokens.len() {
+        "unknown"
+    } else if oov_count > 0 {
+        "partial_oov"
+    } else {
+        "candidates_only"
+    };
+    Ok(json!({"input": text, "status": status, "oov_count": oov_count, "tokens": tokens}))
+}
+
 fn do_candidates(
     book_path: &str,
     dict_path: &str,
     text: &str,
+    per_token: bool,
     output: &mut impl std::io::Write,
 ) -> i32 {
     if dict_path.is_empty() || text.trim().is_empty() {
@@ -215,7 +259,11 @@ fn do_candidates(
     let result = (|| -> Result<Value, String> {
         let dict = fs::read_to_string(dict_path).map_err(|e| e.to_string())?;
         let book = darkstar_embed::load_cbms_book(book_path).map_err(|e| e.to_string())?;
-        candidate_report(&dict, text, &book)
+        if per_token {
+            sentence_report(&dict, text, &book)
+        } else {
+            candidate_report(&dict, text, &book)
+        }
     })();
     match result {
         Ok(report) => {
@@ -223,7 +271,11 @@ fn do_candidates(
                 eprintln!("FAIL: zapis kandydatow: {e}");
                 return 1;
             }
-            if report["status"] == "unknown" { 3 } else { 0 }
+            if report["status"] == "unknown" || report["status"] == "partial_oov" {
+                3
+            } else {
+                0
+            }
         }
         Err(e) => {
             eprintln!("FAIL: kandydaci: {e}");
@@ -423,6 +475,65 @@ fn nearest(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn sentence_tokens_normalize_preserve_order_and_expose_oov() {
+        let dict = "memoro : memory\nmemorilo : memory\nkodo : code\nĉifro : code\n";
+        let path = std::env::var("NOWORODEK_BOOK")
+            .or_else(|_| std::env::var("CBMS_BOOK"))
+            .expect("Ustaw NOWORODEK_BOOK lub CBMS_BOOK na ksiege baseline.");
+        let book = darkstar_embed::load_cbms_book(path).unwrap();
+        let plain = sentence_report(dict, "memory code", &book).unwrap();
+        assert_eq!(plain["tokens"].as_array().unwrap().len(), 2);
+        assert_eq!(plain["status"], "candidates_only");
+        let report = sentence_report(dict, "MEMORY,Code! qzxunknown memory", &book).unwrap();
+        let tokens = report["tokens"].as_array().unwrap();
+        assert_eq!(
+            tokens
+                .iter()
+                .map(|t| t["normalized"].as_str().unwrap())
+                .collect::<Vec<_>>(),
+            vec!["memory", "code", "qzxunknown", "memory"]
+        );
+        assert_eq!(tokens[0]["input"], "MEMORY");
+        assert_eq!(tokens[0]["candidates"], plain["tokens"][0]["candidates"]);
+        assert_eq!(tokens[1]["candidates"], plain["tokens"][1]["candidates"]);
+        assert_eq!(tokens[0]["candidates"], tokens[3]["candidates"]);
+        assert_eq!(tokens[2]["status"], "unknown");
+        assert_eq!(tokens[2]["candidates"], json!([]));
+        assert_eq!(report["status"], "partial_oov");
+        assert_eq!(report["oov_count"], 1);
+        for (i, roots) in [(0, vec!["memoro", "memorilo"]), (1, vec!["kodo", "ĉifro"])] {
+            let candidates = tokens[i]["candidates"].as_array().unwrap();
+            assert_eq!(
+                candidates
+                    .iter()
+                    .map(|c| c["eo"].as_str().unwrap())
+                    .collect::<Vec<_>>(),
+                roots
+            );
+            for c in candidates {
+                let ids: Vec<u32> = serde_json::from_value(c["cbms_ids"].clone()).unwrap();
+                assert_eq!(
+                    ids,
+                    darkstar_embed::frontend_to_cbms(&book, c["eo"].as_str().unwrap()).unwrap()
+                );
+            }
+        }
+        assert_eq!(
+            report,
+            sentence_report(dict, "MEMORY,Code! qzxunknown memory", &book).unwrap()
+        );
+        assert_eq!(
+            sentence_report(dict, "...", &book).unwrap()["status"],
+            "unknown"
+        );
+        assert_eq!(
+            sentence_report(dict, "qzxunknown", &book).unwrap()["status"],
+            "unknown"
+        );
+        println!("{report}");
+    }
 
     #[test]
     fn raw_exact_candidates_preserve_meanings_and_match_cbms() {
