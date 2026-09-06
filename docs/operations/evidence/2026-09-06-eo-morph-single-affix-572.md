@@ -3,6 +3,7 @@ AUTHOR: M. SZUL
 AI MODEL: GPT-5.6 Sol
 TIMESTAMP: 2026-09-06 Europe/London
 PURPOSE: Record the verified Esperanto morphology single-affix milestone and the exact remaining gates. This file documents evidence only; it does not claim that local uncommitted morphology code was pushed by this commit.
+REVISION: 2026-09-06 — implementation published as 105b0c6 on docs/darkstar-headscale-hotspot-plan; evidence note updated.
 -->
 
 # Esperanto morphology — single-affix milestone 572/572
@@ -11,11 +12,10 @@ PURPOSE: Record the verified Esperanto morphology single-affix milestone and the
 
 The active development branch is `docs/darkstar-headscale-hotspot-plan`.
 
-At the time this evidence note was created, that remote branch still pointed to:
-
-`e41e66bd90066fcc5827aa74ae507dc1366fbcb8` — `feat(darkstar-embed): lemmatize English before ESPDIC lookup`.
-
-The morphology implementation and harness changes summarized below were reported from the active local worktree and still required a local commit and push. This documentation commit therefore records the verified work state without pretending that the implementation was already present on the remote branch.
+The implementation and harness changes are published in implementation commit
+`105b0c6` (`feat(darkstar-embed): complete single-affix Esperanto morphology conformance`).
+The documentation record was imported from `1cac9c54f7d6e723af47f08135054e878f6de96a` and is
+being updated in a separate documentation commit.
 
 ## Proven single-affix gate
 
@@ -33,6 +33,10 @@ Verification reported with that result:
 - `cargo test -p darkstar-embed eo_morph` — 5 passed
 - `cargo clippy -p darkstar-embed --bin eo-morph-conformance -- -D warnings` — passed
 - `git diff --check` — passed
+
+The validation used the existing temporary local `cbms-writing` override only during execution;
+the tracked dependency remains pinned to
+`bad82f2e5f11973ceedf067d368f6983b093ea3d` and no local path dependency was retained.
 
 This closes the single-affix conformance milestone only. It is not yet a declaration that the complete morphology rule engine is finished.
 
