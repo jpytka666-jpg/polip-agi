@@ -1,8 +1,21 @@
 //! Round Table participant contracts for human and agent collaboration.
 //!
+//! THIS IS VERY IMPORTANT!!!
+//! ==========================================
+//! AUTHOR: M. SZUL
+//! AI MODEL: GPT-5.6 Luna
+//! TIMESTAMP: 2026-08-27 23:29:00
+//! REASON FOR CREATION: Give Darkstar one shared session model for humans, Claude CLI and other agents participating in a coordinated decision.
+//! MECHANICS: Participants have explicit identities and capability scopes. Messages belong to a table session; this contract carries collaboration state but does not execute tools.
 //! SYSTEM PART: Darkstar Core / Agent Round Table
-//! ARCHITECTURE FUNCTION: Shared typed identity for browser, CLI and agent participants.
-//! TECH STACK: Rust 2024 + serde + uuid.
+//! ARCHITECTURE FUNCTION: Provide the common language between the browser control deck and remote agent clients before policy-gated execution. Shared typed identity for browser, CLI and agent participants.
+//! DEPENDENCIES/LINKS: session, capability contracts, event bus, future persistence and agent adapters. Design is specified in DARKSTAR_LAYER_03_AGENT_ROUND_TABLE.md.
+//! TECH STACK: Rust 2024 + serde + uuid; selected for typed identity and JSON interoperability.
+//! LOCAL WORKSPACE: N/A - GitHub-first workspace.
+//! GIT COMMIT: PENDING
+//! GITHUB METADATA: jpytka666-jpg/polip-agi, branch integration/2026-09-16-salvage
+//! REVISION 2026-09-16 (Claude Opus 5, on Marcin instruction): memo block restored. It was written on feat/darkstar-control-deck and reduced to three lines when this file reached the headscale/hotspot line, against AGENTS.md section 2. Code is unchanged; the generalised test names from the working branch are kept.
+//! ==========================================
 
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
