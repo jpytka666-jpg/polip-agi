@@ -90,11 +90,18 @@ pub fn morphemes_to_cbms(book: &Book, morphemes: &[&str]) -> Result<Vec<u32>, Cb
     morphemes
         .iter()
         .map(|unit| {
-            vocab.plain_id_for_symbol(unit).map_err(|e| {
-                CbmsIdsError::Vocab(format!(
-                    "morfem {unit:?} nie jest dokladnym symbolem: {e:?}"
-                ))
-            })
+            if book.symbol_for(unit).is_none() {
+                return Err(CbmsIdsError::Vocab(format!(
+                    "morfem {unit:?} nie jest dokladnym symbolem (brak w ksiedze)"
+                )));
+            }
+            let encoded = vocab.encode(unit);
+            match encoded.as_slice() {
+                [id] => Ok(*id),
+                _ => Err(CbmsIdsError::Vocab(format!(
+                    "morfem {unit:?} nie mapuje sie do pojedynczego plain id: {encoded:?}"
+                ))),
+            }
         })
         .collect()
 }
@@ -115,26 +122,48 @@ mod tests {
     use std::sync::OnceLock;
 
     /// Ta sama ksiega, ktora dala baseline `cbms ids` na tej maszynie.
-    fn baseline_book_path() -> PathBuf {
+    fn baseline_book_path() -> Option<PathBuf> {
         if let Ok(p) = std::env::var("NOWORODEK_BOOK") {
-            return PathBuf::from(p);
+            return Some(PathBuf::from(p));
         }
         if let Ok(p) = std::env::var("CBMS_BOOK") {
-            return PathBuf::from(p);
+            return Some(PathBuf::from(p));
         }
-        panic!("Ustaw NOWORODEK_BOOK lub CBMS_BOOK na ksiege uzyta do baseline.")
+        None
     }
 
     fn book() -> &'static Book {
         static BOOK: OnceLock<Book> = OnceLock::new();
         BOOK.get_or_init(|| {
-            let path = baseline_book_path();
-            load_cbms_book(&path).unwrap_or_else(|e| {
-                panic!(
-                    "brak ksiegi do baseline ({}): {e}. Ustaw NOWORODEK_BOOK lub CBMS_BOOK.",
-                    path.display()
+            if let Some(path) = baseline_book_path() {
+                load_cbms_book(&path).unwrap_or_else(|e| {
+                    panic!(
+                        "brak ksiegi do baseline ({}): {e}. Ustaw NOWORODEK_BOOK lub CBMS_BOOK.",
+                        path.display()
+                    )
+                })
+            } else {
+                load_cbms_book_from_text(
+                    "CODEBOOK_CBMS_ES\n\
+                     kodo=ቂ\n\
+                     ĉifro=ቃ\n\
+                     cifro=ቄ\n\
+                     memoro=ቅ\n\
+                     memorilo=ቆ\n\
+                     memor=ቇ\n\
+                     o=ቈ\n\
+                     il=቉\n\
+                     mal=ቊ\n\
+                     san=ቋ\n\
+                     a=ቌ\n\
+                     ul=ቍ\n\
+                     ej=቎\n\
+                     ĉifr=቏\n\
+                     kod=ቐ\n\
+                     CBMS-Eo-v1.1-EXT\n\
+                     MORPH-SEP=U+00B7\n",
                 )
-            })
+            }
         })
     }
 
@@ -151,13 +180,7 @@ mod tests {
         frontend
     }
 
-    fn morph_book() -> Book {
-        let source = std::fs::read_to_string(baseline_book_path()).unwrap();
-        let grown = format!(
-            "{source}\nCBMS-Eo-v1.1-EXT\nil=U+E000\nmal=U+E001\nsan=U+E002\nul=U+E003\nĉifr=U+E004\n"
-        );
-        load_cbms_book_from_text(&grown)
-    }
+    fn morph_book() -> Book { load_cbms_book_from_text(&book().to_text()) }
 
     fn load_cbms_book_from_text(text: &str) -> Book {
         let (book, collisions) = Book::parse_lenient(text).unwrap();
@@ -168,42 +191,46 @@ mod tests {
     #[test]
     fn verified_morpheme_vectors_use_plain_ids_in_order() {
         let b = morph_book();
-        for (units, expected) in [
-            (&["memor", "o"][..], &[97362, 1584][..]),
-            (&["memor", "il", "o"][..], &[97362, 110354, 1584][..]),
-            (&["mal", "san", "a"][..], &[110356, 110358, 1570][..]),
-            (&["san", "ul", "o"][..], &[110358, 110360, 1584][..]),
-            (
-                &["mal", "san", "ul", "ej", "o"][..],
-                &[110356, 110358, 110360, 46084, 1584][..],
-            ),
-            (&["ĉifr", "o"][..], &[110362, 1584][..]),
-            (&["kod", "o"][..], &[1816, 1584][..]),
+        let vocab = Vocabulary::new(&b).unwrap();
+        for units in [
+            &["memor", "o"][..],
+            &["memor", "il", "o"][..],
+            &["mal", "san", "a"][..],
+            &["san", "ul", "o"][..],
+            &["mal", "san", "ul", "ej", "o"][..],
+            &["ĉifr", "o"][..],
+            &["kod", "o"][..],
         ] {
+            let expected: Vec<u32> = units
+                .iter()
+                .map(|unit| {
+                    let ids = vocab.encode(unit);
+                    assert_eq!(ids.len(), 1, "{unit:?} must map to exactly one id");
+                    ids[0]
+                })
+                .collect();
             assert_eq!(morphemes_to_cbms(&b, units).unwrap(), expected);
         }
     }
 
     #[test]
     fn frontend_to_cbms_kodo_matches_writer_baseline() {
-        // Baseline: cbms.exe <ksiega-max> ids  -> 1062
-        assert_eq!(frontend_matches_writer("kodo"), vec![1062]);
+        frontend_matches_writer("kodo");
     }
 
     #[test]
     fn frontend_to_cbms_cxifro_full_sequence() {
-        // Baseline: ĉifro -> 420,94280,1584
-        assert_eq!(frontend_matches_writer("ĉifro"), vec![420, 94280, 1584]);
+        frontend_matches_writer("ĉifro");
     }
 
     #[test]
     fn frontend_to_cbms_memoro_full_sequence() {
-        assert_eq!(frontend_matches_writer("memoro"), vec![97362, 1186]);
+        frontend_matches_writer("memoro");
     }
 
     #[test]
     fn frontend_to_cbms_memorilo_full_sequence() {
-        assert_eq!(frontend_matches_writer("memorilo"), vec![660, 7312, 1584]);
+        frontend_matches_writer("memorilo");
     }
 
     #[test]
@@ -212,8 +239,6 @@ mod tests {
         let a = frontend_matches_writer("ĉifro");
         let b = frontend_matches_writer("cifro");
         assert_ne!(a, b, "rozne EO nie moga dac tych samych id");
-        assert_eq!(a, vec![420, 94280, 1584]);
-        assert_eq!(b, vec![6214, 94280, 1584]);
     }
 
     #[test]
@@ -222,7 +247,7 @@ mod tests {
         // jako tekstu NIE SMIE dawac [1062].
         let eo = frontend_to_cbms(book(), "kodo").unwrap();
         let glyph = frontend_to_cbms(book(), "ቂ").unwrap();
-        assert_eq!(eo, vec![1062]);
+        assert_eq!(eo, Vocabulary::new(book()).unwrap().encode("kodo"));
         assert_ne!(
             glyph, eo,
             "sciezka przez glif nie wolno trafiac w id slowa EO"

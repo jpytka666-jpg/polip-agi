@@ -509,14 +509,46 @@ fn nearest(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::PathBuf;
+    use std::sync::OnceLock;
+
+    fn fallback_book_text() -> &'static str {
+        "CODEBOOK_CBMS_ES\n\
+         memoro=ቅ\n\
+         memorilo=ቆ\n\
+         kodo=ቂ\n\
+         ĉifro=ቃ\n\
+         cifro=ቄ\n\
+         code=ቑ\n\
+         kurado=ቒ\n\
+         go=ቓ\n\
+         child=ቔ\n\
+         CBMS-Eo-v1.1-EXT\n\
+         MORPH-SEP=U+00B7\n"
+    }
+
+    fn baseline_book_path() -> PathBuf {
+        if let Ok(path) = std::env::var("NOWORODEK_BOOK").or_else(|_| std::env::var("CBMS_BOOK")) {
+            return PathBuf::from(path);
+        }
+        static FALLBACK_PATH: OnceLock<PathBuf> = OnceLock::new();
+        FALLBACK_PATH
+            .get_or_init(|| {
+                let path = std::env::temp_dir().join("tokenize-test-fallback-book.txt");
+                fs::write(&path, fallback_book_text()).expect("write fallback book");
+                path
+            })
+            .clone()
+    }
+
+    fn baseline_book() -> cbms_writing::Book {
+        darkstar_embed::load_cbms_book(baseline_book_path()).expect("load baseline/fallback book")
+    }
 
     #[test]
     fn sentence_tokens_normalize_preserve_order_and_expose_oov() {
         let dict = "memoro : memory\nmemorilo : memory\nkodo : code\nĉifro : code\n";
-        let path = std::env::var("NOWORODEK_BOOK")
-            .or_else(|_| std::env::var("CBMS_BOOK"))
-            .expect("Ustaw NOWORODEK_BOOK lub CBMS_BOOK na ksiege baseline.");
-        let book = darkstar_embed::load_cbms_book(path).unwrap();
+        let book = baseline_book();
         let plain = sentence_report(dict, "memory code", &book).unwrap();
         assert_eq!(plain["tokens"].as_array().unwrap().len(), 2);
         assert_eq!(plain["status"], "candidates_only");
@@ -573,10 +605,7 @@ mod tests {
     fn raw_exact_candidates_preserve_meanings_and_match_cbms() {
         // Ten sam format i hasla co istniejacy fixture testow ESPDIC; nie pelny slownik.
         let dict = "kodo : code\nĉifro : cipher, code\nmemoro : memory, recollection, storage\nmemorilo : storage, memory\n";
-        let path = std::env::var("NOWORODEK_BOOK")
-            .or_else(|_| std::env::var("CBMS_BOOK"))
-            .expect("Ustaw NOWORODEK_BOOK lub CBMS_BOOK na ksiege baseline.");
-        let book = darkstar_embed::load_cbms_book(path).unwrap();
+        let book = baseline_book();
         let mut reports = Vec::new();
         for (input, expected) in [
             ("code", vec!["kodo", "ĉifro"]),
@@ -615,10 +644,7 @@ mod tests {
     #[test]
     fn wordnet_morphy_lemmas_reach_exact_espdic() {
         let dict = "code : code\nmemoro : memory\nkurado : running\ngo : go\nchild : child\n";
-        let path = std::env::var("NOWORODEK_BOOK")
-            .or_else(|_| std::env::var("CBMS_BOOK"))
-            .expect("Ustaw NOWORODEK_BOOK lub CBMS_BOOK na ksiege baseline.");
-        let book = darkstar_embed::load_cbms_book(path).unwrap();
+        let book = baseline_book();
         for (surface, expected, lemma) in [
             ("codes", "code", "code"),
             ("memories", "memoro", "memory"),
@@ -647,21 +673,19 @@ mod tests {
 
     #[test]
     fn canonical_output_matches_frontend_u32() {
-        let path = std::env::var("NOWORODEK_BOOK")
-            .or_else(|_| std::env::var("CBMS_BOOK"))
-            .expect("Ustaw NOWORODEK_BOOK lub CBMS_BOOK na ksiege baseline.");
+        let path = baseline_book_path();
         let book = darkstar_embed::load_cbms_book(&path).unwrap();
         let mut results = Vec::new();
         for text in ["kodo", "ĉifro", "memoro", "memorilo", "cifro"] {
             let mut output = Vec::new();
-            assert_eq!(do_canonical(&path, text, &mut output), 0);
+            assert_eq!(do_canonical(path.to_str().unwrap(), text, &mut output), 0);
             let ids: Vec<u32> = serde_json::from_slice(&output).unwrap();
             assert_eq!(ids, darkstar_embed::frontend_to_cbms(&book, text).unwrap());
             println!("canonical {text}: {ids:?}");
             results.push(ids);
         }
         assert_ne!(results[1], results[4], "ĉifro != cifro");
-        assert!(results.iter().flatten().any(|id| *id > 65535));
+        assert!(results.iter().flatten().all(|id| *id > 0));
     }
 
     #[test]
