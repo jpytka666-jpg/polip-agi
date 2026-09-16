@@ -1,0 +1,34 @@
+# THIS IS VERY IMPORTANT!!!
+# ==========================================
+# AUTHOR: M. SZUL
+# AI MODEL: GPT-5.6 Sol
+# TIMESTAMP: 2026-08-29 03:15:00 Europe/London
+# REASON FOR CREATION: Keep the Darkstar Ubuntu management SSH path available without manually starting a terminal tunnel.
+# MECHANICS: systemd maintains the existing Serveo private TCP reverse tunnel and restarts it on transient failure with bounded retry behavior.
+# SYSTEM PART: Darkstar management access
+# ARCHITECTURE FUNCTION: Emergency/administrative access only; this service is NOT the Windows/iOnis Internet gateway.
+# DEPENDENCIES/LINKS: OpenSSH client, local sshd on localhost:22, serveo.net, alias ds-cbms-8248.
+# TECH STACK: systemd + OpenSSH; selected to reuse the already-proven Serveo access pattern with no extra agent/model in the loop.
+# LOCAL WORKSPACE: /home/owner/polip-agi
+# GIT COMMIT: PENDING
+# GITHUB METADATA: jpytka666-jpg/polip-agi / feat/darkstar-gateway
+# ==========================================
+
+[Unit]
+Description=Darkstar persistent Serveo SSH management tunnel
+After=network-online.target ssh.service sshd.service
+Wants=network-online.target
+StartLimitIntervalSec=300
+StartLimitBurst=8
+
+[Service]
+Type=simple
+User=owner
+Environment=HOME=/home/owner
+ExecStart=/usr/bin/ssh -NT -o ExitOnForwardFailure=yes -o StrictHostKeyChecking=accept-new -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -R ds-cbms-8248:22:localhost:22 serveo.net
+Restart=on-failure
+RestartSec=15
+TimeoutStopSec=15
+
+[Install]
+WantedBy=multi-user.target
