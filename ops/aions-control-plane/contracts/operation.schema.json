@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AIONS Control Plane Operation",
+  "type": "object",
+  "required": [
+    "request_id",
+    "action",
+    "module_id",
+    "principal_id",
+    "repo",
+    "branch",
+    "reason",
+    "started_at"
+  ],
+  "properties": {
+    "request_id": { "type": "string", "format": "uuid" },
+    "run_id": { "type": "string" },
+    "action": {
+      "type": "string",
+      "enum": ["start", "stop", "restart", "status"]
+    },
+    "module_id": { "type": "string", "minLength": 1 },
+    "principal_id": { "type": "string", "minLength": 1 },
+    "repo": { "type": "string", "minLength": 1 },
+    "branch": { "type": "string", "minLength": 1 },
+    "commit_sha": { "type": "string" },
+    "provider": { "type": "string" },
+    "reason": { "type": "string", "minLength": 1 },
+    "started_at": { "type": "string", "format": "date-time" },
+    "finished_at": { "type": "string", "format": "date-time" },
+    "result": { "type": "string" }
+  },
+  "additionalProperties": false
+}

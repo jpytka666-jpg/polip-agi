@@ -4,7 +4,7 @@ THIS IS VERY IMPORTANT!!!
 AUTHOR: M. SZUL
 AI MODEL: GPT-5 Codex
 TIMESTAMP: 2026-08-29 11:19:11 Europe/London
-REASON FOR CREATION: Utrwalenie zatwierdzonej architektury natywnej bramy Darkstar, prywatnej sieci Headscale/Headplane oraz migracji Warlock do Warlock.
+REASON FOR CREATION: Utrwalenie zatwierdzonej architektury natywnej bramy Darkstar, prywatnej sieci Headscale/Headplane oraz migracji Sheriff do Warlock.
 ==========================================
 -->
 
@@ -28,7 +28,7 @@ Internet
   -> AIONS
 ~~~
 
-Po dołączeniu kolejnej maszyny zewnętrzna warstwa otrzymuje nazwę Warlock, zastępując wcześniejszą nazwę Warlock:
+Po dołączeniu kolejnej maszyny zewnętrzna warstwa otrzymuje nazwę Warlock, zastępując wcześniejszą nazwę Sheriff:
 
 ~~~text
 Internet
@@ -38,7 +38,7 @@ Internet
   -> AIONS
 ~~~
 
-Nazwa Warlock pozostaje wyłącznie terminem historycznym do czasu kontrolowanej migracji identyfikatorów w kodzie i danych.
+Nazwa Sheriff pozostaje wyłącznie terminem historycznym do czasu kontrolowanej migracji identyfikatorów w kodzie i danych.
 
 ## 2. Potwierdzony stan początkowy
 
@@ -252,7 +252,7 @@ Test persistence musi:
 
 Samo wykonanie helpera, ponowne połączenie SSH albo status enabled nie jest dowodem restartu.
 
-## 9. Migracja Warlock do Warlock
+## 9. Migracja Sheriff do Warlock
 
 Nowa nazwa kanoniczna to Warlock Bridge.
 

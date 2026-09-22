@@ -1,0 +1,41 @@
+#!/usr/sbin/nft -f
+# THIS IS VERY IMPORTANT!!!
+# ==========================================
+# AUTHOR: M. SZUL
+# AI MODEL: GPT-5.6 Sol
+# TIMESTAMP: 2026-08-29 03:29:00 Europe/London
+# REASON FOR CREATION: Provide isolated nftables forwarding/NAT rules for the protected WireGuard subnet without replacing Docker-managed host networking.
+# MECHANICS: Allows established return traffic, permits 10.77.0.0/24 from darkstar-wg to the configured WAN, rejects other forwarding arriving from darkstar-wg, and masquerades protected egress.
+# SYSTEM PART: Darkstar kernel gateway
+# ARCHITECTURE FUNCTION: Enforce Darkstar as the egress router for Windows/iOnis full-tunnel traffic.
+# DEPENDENCIES/LINKS: nftables, WireGuard interface darkstar-wg, deploy/gateway/README.md.
+# TECH STACK: Linux nftables.
+# LOCAL WORKSPACE: /home/owner/polip-agi
+# GIT COMMIT: PENDING
+# GITHUB METADATA: jpytka666-jpg/polip-agi / feat/darkstar-gateway
+# ==========================================
+
+# TEMPLATE ONLY.
+# Replace REPLACE_WAN_IF with the real uplink interface discovered using `ip route`.
+# Validate a rendered copy with `sudo nft -c -f <file>` BEFORE loading it.
+
+define WAN_IF = "REPLACE_WAN_IF"
+define WG_IF = "darkstar-wg"
+define WG_NET = 10.77.0.0/24
+
+table inet darkstar_gateway_filter {
+    chain forward_guard {
+        type filter hook forward priority 5; policy accept;
+
+        ct state established,related iifname $WAN_IF oifname $WG_IF accept
+        iifname $WG_IF oifname $WAN_IF ip saddr $WG_NET accept
+        iifname $WG_IF reject with icmpx type admin-prohibited
+    }
+}
+
+table ip darkstar_gateway_nat {
+    chain postrouting {
+        type nat hook postrouting priority srcnat; policy accept;
+        ip saddr $WG_NET oifname $WAN_IF masquerade
+    }
+}
