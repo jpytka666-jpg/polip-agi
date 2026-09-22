@@ -73,8 +73,8 @@ Warlock Bridge is the first perimeter gateway. It is intended to provide the
 outer network boundary, VPN/firewall/routing controls and the first trust
 transition into the security environment.
 
-Warlock replaces the earlier project name Warlock. At checkpoint fd8099e the
-typed Rust topology still uses Warlock identifiers. They remain a legacy input
+Warlock replaces the earlier project name Sheriff. At checkpoint fd8099e the
+typed Rust topology still uses Sheriff identifiers. They remain a legacy input
 only until the backward-compatible migration in the implementation plan.
 
 ### Kali Bridge
