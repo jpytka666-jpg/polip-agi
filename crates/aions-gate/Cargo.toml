@@ -1,0 +1,25 @@
+# ================================================================================
+# AIONS ARCHITECTURE - PROVENANCE / READ-ONLY CONTEXT HEADER
+# ================================================================================
+# AUTHOR:              Claude Code agent, working for Marcin (jpytka666-jpg)
+# AI MODEL:            Anthropic Claude via Claude Code remote session (exact model id WITHHELD by harness policy)
+# TIMESTAMP:           2026-09-25T23:14:45Z
+# REASON FOR CREATION: Package manifest for aions-gate (AIONS protocol deliverables 3, 4, 5).
+# MECHANICS:           Builds the aions-gate library and binary. Zero external dependencies, so the enforcement path stays auditable and builds offline.
+# SYSTEM PART:         polip-agi / aions-gate
+# ARCHITECTURE FUNC:   Enforcement plane of the AIONS workspace harness.
+# DEPENDENCIES/LINKS:  src/lib.rs, src/main.rs, tests/
+# TECH STACK:          Cargo, Rust 2024, std only
+# LOCAL WORKSPACE:     polip-agi/crates/aions-gate
+# GIT COMMIT:          PENDING
+# GITHUB METADATA:     jpytka666-jpg/polip-agi, branch claude/autonomous-automation-agent-ocxwke
+# ================================================================================
+
+[package]
+name = "aions-gate"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+description = "Deterministic workspace gates and provenance validation for AIONS"
+
+[dependencies]

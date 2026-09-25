@@ -1,0 +1,25 @@
+#!/bin/sh
+# ================================================================================
+# AIONS ARCHITECTURE - PROVENANCE / READ-ONLY CONTEXT HEADER
+# ================================================================================
+# AUTHOR:              Claude Code agent, working for Marcin (jpytka666-jpg)
+# AI MODEL:            Anthropic Claude via Claude Code remote session (exact model id WITHHELD by harness policy)
+# TIMESTAMP:           2026-09-25T23:14:45Z
+# REASON FOR CREATION: The provenance rule must be enforced at commit time, not remembered by the model.
+# MECHANICS:           Git pre-commit hook. It checks staged new files and staged edits to files that carry provenance, using the index content, and blocks the commit on FAIL or UNKNOWN.
+# SYSTEM PART:         polip-agi / git hooks
+# ARCHITECTURE FUNC:   Enforcement plane at the version-control boundary.
+# DEPENDENCIES/LINKS:  crates/aions-gate (provenance --staged); scripts/bootstrap.sh sets core.hooksPath
+# TECH STACK:          POSIX sh, git hooks
+# LOCAL WORKSPACE:     polip-agi/hooks
+# GIT COMMIT:          PENDING
+# GITHUB METADATA:     jpytka666-jpg/polip-agi, branch claude/autonomous-automation-agent-ocxwke
+# ================================================================================
+
+set -eu
+root=$(git rev-parse --show-toplevel)
+bin="$root/target/debug/aions-gate"
+if [ ! -x "$bin" ]; then
+  cargo build -q -p aions-gate --manifest-path "$root/Cargo.toml"
+fi
+exec "$bin" provenance --staged

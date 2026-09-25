@@ -1,0 +1,39 @@
+# ================================================================================
+# AIONS ARCHITECTURE - PROVENANCE / READ-ONLY CONTEXT HEADER
+# ================================================================================
+# AUTHOR:              Claude Code agent, working for Marcin (jpytka666-jpg)
+# AI MODEL:            Anthropic Claude via Claude Code remote session (exact model id WITHHELD by harness policy)
+# TIMESTAMP:           2026-09-25T23:14:45Z
+# REASON FOR CREATION: Enforcement must not depend on a local hook the agent could skip. CI re-checks independently (verification plane).
+# MECHANICS:           On pull requests: build, test, rustfmt check and provenance check of files added or changed against the base branch.
+# SYSTEM PART:         polip-agi / CI
+# ARCHITECTURE FUNC:   Verification plane on GitHub.
+# DEPENDENCIES/LINKS:  Cargo.toml, crates/aions-gate, aions-gates.conf
+# TECH STACK:          GitHub Actions, Rust stable
+# LOCAL WORKSPACE:     polip-agi/.github/workflows
+# GIT COMMIT:          PENDING
+# GITHUB METADATA:     jpytka666-jpg/polip-agi, branch claude/autonomous-automation-agent-ocxwke
+# ================================================================================
+
+name: aions-gate
+on:
+  pull_request:
+  push:
+    branches: [main]
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - run: rustup component add rustfmt
+      - name: build
+        run: cargo build --workspace --locked
+      - name: tests
+        run: cargo test --workspace --locked
+      - name: fmt
+        run: cargo fmt --all --check
+      - name: provenance (files added/changed vs base)
+        if: github.event_name == 'pull_request'
+        run: cargo run -q -p aions-gate -- provenance --since "origin/${{ github.base_ref }}"
