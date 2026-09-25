@@ -1,0 +1,24 @@
+# ================================================================================
+# AIONS ARCHITECTURE - PROVENANCE / READ-ONLY CONTEXT HEADER
+# ================================================================================
+# AUTHOR:              Claude Code agent, working for Marcin (jpytka666-jpg)
+# AI MODEL:            Anthropic Claude via Claude Code remote session (exact model id WITHHELD by harness policy)
+# TIMESTAMP:           2026-09-25T23:14:45Z
+# REASON FOR CREATION: polip-agi had no Cargo manifest, so nothing in it could be built or tested.
+# MECHANICS:           Cargo workspace. It lists only crates that actually build. crates/darkstar-core is NOT a member: it has no Cargo.toml and references a missing crate::capability_index (observed 2026-09-25).
+# SYSTEM PART:         polip-agi / build root
+# ARCHITECTURE FUNC:   Single build and test entry point for CI and the gate config.
+# DEPENDENCIES/LINKS:  crates/aions-gate/Cargo.toml
+# TECH STACK:          Cargo, Rust 2024
+# LOCAL WORKSPACE:     polip-agi/
+# GIT COMMIT:          PENDING
+# GITHUB METADATA:     jpytka666-jpg/polip-agi, branch claude/autonomous-automation-agent-ocxwke
+# ================================================================================
+
+[workspace]
+resolver = "3"
+members = ["crates/aions-gate"]
+
+[workspace.package]
+edition = "2024"
+license = "MIT"
